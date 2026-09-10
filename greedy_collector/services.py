@@ -2,6 +2,7 @@ import csv
 from datetime import datetime, timezone
 from io import StringIO
 
+from fastapi.encoders import jsonable_encoder
 from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
@@ -66,6 +67,8 @@ class GreedyCollectorService:
         risk = self.risk_engine.evaluate(
             request.address, transactions, labels, exposure_paths
         )
+        # Encode nested evidence once for both the JSON column and API response.
+        risk["findings"] = jsonable_encoder(risk["findings"])
 
         address = db.scalar(
             select(Address).where(
