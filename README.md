@@ -326,9 +326,9 @@ First observation of a wallet establishes a stable baseline silently (no alerts)
 ### Graph Edges
 Greedy Collector stores transaction graph edges (sender → recipient) for local traversal. Optional Neo4j mirror provides optimized queries without affecting SQLite integrity.
 
-## Known existing limitation
+## Alchemy balance fallback
 
-The Alchemy balance fallback is implemented but currently fails in the shared HTTP transport: `_alchemy()` passes a JSON body to `_get()`, which calls `httpx.AsyncClient.get()`. Local verification raises `TypeError: AsyncClient.get() got an unexpected keyword argument 'json'` before a request is sent. The same defect exists in the Epic Archer reference; mocked fallback tests do not exercise this transport. It was preserved during extraction verification. Live provider availability was not tested.
+Alchemy JSON-RPC uses HTTP POST with a JSON body. Offline transport tests verify the endpoint, request encoding, balance normalization, and conversion of HTTP, timeout, and malformed-JSON failures to `ChainDataError`. Live provider availability was not tested.
 
 ## Troubleshooting
 

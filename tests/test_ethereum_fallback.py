@@ -10,6 +10,9 @@ These tests verify that:
 
 import pytest
 import asyncio
+import json
+import traceback
+import httpx
 from decimal import Decimal
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -139,7 +142,7 @@ class TestEthereumEtherscanFailureAlchemySuccess:
         with patch.object(ethereum_adapter, "_etherscan", new_callable=AsyncMock) as mock_eth:
             mock_eth.side_effect = ChainDataError("Etherscan API quota exceeded")
             
-            with patch.object(ethereum_adapter, "_get", new_callable=AsyncMock) as mock_get:
+            with patch.object(ethereum_adapter, "_post", new_callable=AsyncMock) as mock_get:
                 mock_get.return_value = alchemy_response_1_eth
                 
                 result = await ethereum_adapter.lookup_address(valid_address)
@@ -160,7 +163,7 @@ class TestEthereumEtherscanFailureAlchemySuccess:
         with patch.object(ethereum_adapter, "_etherscan", new_callable=AsyncMock) as mock_eth:
             mock_eth.side_effect = ChainDataError("ethereum source request failed: HTTP 429")
             
-            with patch.object(ethereum_adapter, "_get", new_callable=AsyncMock) as mock_get:
+            with patch.object(ethereum_adapter, "_post", new_callable=AsyncMock) as mock_get:
                 mock_get.return_value = alchemy_response_1_eth
                 
                 result = await ethereum_adapter.lookup_address(valid_address)
@@ -175,7 +178,7 @@ class TestEthereumEtherscanFailureAlchemySuccess:
         with patch.object(ethereum_adapter, "_etherscan", new_callable=AsyncMock) as mock_eth:
             mock_eth.side_effect = ChainDataError("ethereum source request failed: TimeoutException")
             
-            with patch.object(ethereum_adapter, "_get", new_callable=AsyncMock) as mock_get:
+            with patch.object(ethereum_adapter, "_post", new_callable=AsyncMock) as mock_get:
                 mock_get.return_value = alchemy_response_1_eth
                 
                 result = await ethereum_adapter.lookup_address(valid_address)
@@ -189,7 +192,7 @@ class TestEthereumEtherscanFailureAlchemySuccess:
         with patch.object(ethereum_adapter, "_etherscan", new_callable=AsyncMock) as mock_eth:
             mock_eth.side_effect = ChainDataError("ethereum source request failed: HTTP 503")
             
-            with patch.object(ethereum_adapter, "_get", new_callable=AsyncMock) as mock_get:
+            with patch.object(ethereum_adapter, "_post", new_callable=AsyncMock) as mock_get:
                 mock_get.return_value = alchemy_response_1_eth
                 
                 result = await ethereum_adapter.lookup_address(valid_address)
@@ -268,7 +271,7 @@ class TestAlchemyInvalidResponse:
         with patch.object(ethereum_adapter, "_etherscan", new_callable=AsyncMock) as mock_eth:
             mock_eth.side_effect = ChainDataError("Etherscan failed")
             
-            with patch.object(ethereum_adapter, "_get", new_callable=AsyncMock) as mock_get:
+            with patch.object(ethereum_adapter, "_post", new_callable=AsyncMock) as mock_get:
                 mock_get.return_value = {
                     "jsonrpc": "2.0",
                     "id": 1,
@@ -289,7 +292,7 @@ class TestAlchemyInvalidResponse:
         with patch.object(ethereum_adapter, "_etherscan", new_callable=AsyncMock) as mock_eth:
             mock_eth.side_effect = ChainDataError("Etherscan failed")
             
-            with patch.object(ethereum_adapter, "_get", new_callable=AsyncMock) as mock_get:
+            with patch.object(ethereum_adapter, "_post", new_callable=AsyncMock) as mock_get:
                 mock_get.return_value = {
                     "jsonrpc": "2.0",
                     "id": 1,
@@ -306,7 +309,7 @@ class TestAlchemyInvalidResponse:
         with patch.object(ethereum_adapter, "_etherscan", new_callable=AsyncMock) as mock_eth:
             mock_eth.side_effect = ChainDataError("Etherscan failed")
             
-            with patch.object(ethereum_adapter, "_get", new_callable=AsyncMock) as mock_get:
+            with patch.object(ethereum_adapter, "_post", new_callable=AsyncMock) as mock_get:
                 mock_get.return_value = {
                     "jsonrpc": "2.0",
                     "id": 1,
@@ -323,7 +326,7 @@ class TestAlchemyInvalidResponse:
         with patch.object(ethereum_adapter, "_etherscan", new_callable=AsyncMock) as mock_eth:
             mock_eth.side_effect = ChainDataError("Etherscan failed")
             
-            with patch.object(ethereum_adapter, "_get", new_callable=AsyncMock) as mock_get:
+            with patch.object(ethereum_adapter, "_post", new_callable=AsyncMock) as mock_get:
                 mock_get.return_value = {
                     "jsonrpc": "2.0",
                     "id": 1,
@@ -454,3 +457,66 @@ class TestLookupTransactionUnchanged:
                 
                 assert result.source_api == "etherscan"
                 mock_alchemy.assert_not_called()
+
+
+@pytest.fixture
+def alchemy_transport(monkeypatch):
+    """Keep real httpx request building, replacing only network transport."""
+    client_type = httpx.AsyncClient
+
+    def install(handler):
+        monkeypatch.setattr(
+            "greedy_collector.chains.base.httpx.AsyncClient",
+            lambda **kwargs: client_type(transport=httpx.MockTransport(handler), **kwargs),
+        )
+
+    return install
+
+
+@pytest.mark.parametrize("hex_result,expected", [("0xde0b6b3a7640000", "1"), ("0x0", "0")])
+async def test_alchemy_transport_post_balance(
+    ethereum_adapter, valid_address, alchemy_transport, hex_result, expected
+):
+    requests = []
+
+    def handler(request):
+        requests.append(request)
+        if request.url.host == "api.etherscan.io":
+            assert request.method == "GET"
+            assert request.url.params["action"] == "balance"
+            return httpx.Response(429)
+        assert request.method == "POST"
+        assert str(request.url) == "https://eth-mainnet.g.alchemy.com/v2/test_alchemy_key"
+        assert request.headers["Content-Type"] == "application/json"
+        assert json.loads(request.content) == {
+            "jsonrpc": "2.0", "id": 1, "method": "eth_getBalance",
+            "params": [valid_address, "latest"],
+        }
+        return httpx.Response(200, json={"jsonrpc": "2.0", "id": 1, "result": hex_result})
+
+    alchemy_transport(handler)
+    result = await ethereum_adapter.lookup_address(valid_address)
+    assert result["balance_native"] == expected
+    assert result["source_api"] == "alchemy"
+    assert len(requests) == 2
+
+
+@pytest.mark.parametrize("failure", [429, 500, "timeout", "malformed_json"])
+async def test_alchemy_transport_failure(
+    ethereum_adapter, valid_address, alchemy_transport, failure
+):
+    def handler(request):
+        assert request.method == "POST"
+        if failure == "timeout":
+            raise httpx.ReadTimeout(f"Timeout at {request.url}", request=request)
+        if failure == "malformed_json":
+            return httpx.Response(200, content=b"not json")
+        return httpx.Response(failure)
+
+    alchemy_transport(handler)
+    with pytest.raises(ChainDataError, match="Alchemy request failed") as error:
+        await ethereum_adapter._lookup_address_alchemy(valid_address)
+    assert "test_alchemy_key" not in str(error.value)
+    assert "test_alchemy_key" not in "".join(traceback.format_exception(error.value))
+    if isinstance(failure, int):
+        assert str(failure) in str(error.value)

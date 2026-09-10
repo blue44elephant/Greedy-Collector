@@ -37,6 +37,27 @@ class ChainAdapter(ABC):
         except (httpx.HTTPError, ValueError) as exc:
             raise ChainDataError(f"{self.chain} source request failed: {exc}") from exc
 
+    async def _post(self, url: str, **kwargs):
+        """Send JSON-RPC requests without exposing credential-bearing URLs in errors."""
+        headers = kwargs.pop("headers", {})
+        headers.setdefault("User-Agent", "Greedy-Collector/0.1 (+Greedy Collector)")
+        try:
+            async with httpx.AsyncClient(
+                timeout=self.settings.request_timeout, follow_redirects=True
+            ) as client:
+                response = await client.post(url, headers=headers, **kwargs)
+                response.raise_for_status()
+                return response.json()
+        except httpx.HTTPStatusError as exc:
+            raise ChainDataError(
+                f"{self.chain} source request failed: HTTP {exc.response.status_code}"
+            ) from None
+        except (httpx.HTTPError, ValueError) as exc:
+            # httpx exception text can contain the API key in the request URL.
+            raise ChainDataError(
+                f"{self.chain} source request failed: {type(exc).__name__}"
+            ) from None
+
     @abstractmethod
     async def lookup_address(self, address: str) -> dict:
         raise NotImplementedError

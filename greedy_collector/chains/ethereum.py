@@ -64,7 +64,7 @@ class EthereumAdapter(ChainAdapter):
         }
         
         try:
-            data = await self._get(url, json=payload)
+            data = await self._post(url, json=payload)
         except ChainDataError as exc:
             raise ChainDataError(f"Alchemy request failed: {exc}") from exc
         
