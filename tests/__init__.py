@@ -1,0 +1,1 @@
+"""Greedy Collector tests."""

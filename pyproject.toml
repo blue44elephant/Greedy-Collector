@@ -1,0 +1,66 @@
+[build-system]
+requires = ["setuptools>=65.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "greedy-collector"
+version = "0.1.0"
+description = "Public-blockchain risk assessment, wallet monitoring, and transaction graph analysis"
+readme = "README.md"
+requires-python = ">=3.12"
+keywords = ["blockchain", "bitcoin", "ethereum", "risk", "kyc", "monitoring"]
+authors = [
+    { name = "Greedy Collector Contributors" },
+]
+
+dependencies = [
+    "fastapi>=0.104.0",
+    "uvicorn[standard]>=0.24.0",
+    "python-dotenv>=1.0.0",
+    "requests>=2.31.0",
+    "httpx>=0.25.0",
+    "pydantic>=2.0.0",
+    "python-multipart>=0.0.9",
+    "SQLAlchemy>=2.0,<3.0",
+    "alembic>=1.13,<2.0",
+    "APScheduler>=3.10,<4.0",
+    "reportlab>=4.0,<5.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=9.0.0",
+    "pytest-asyncio>=0.24.0",
+    "black>=24.0.0",
+    "flake8>=7.0.0",
+]
+scale = [
+    "celery>=5.3,<6.0",
+    "redis>=5.0,<6.0",
+    "neo4j>=5.0,<6.0",
+]
+
+[project.urls]
+Homepage = "https://github.com/yourusername/greedy-collector"
+Documentation = "https://github.com/yourusername/greedy-collector#readme"
+Issues = "https://github.com/yourusername/greedy-collector/issues"
+
+[tool.setuptools]
+packages = ["greedy_collector"]
+
+[tool.setuptools.package-data]
+greedy_collector = ["*.py"]
+
+[tool.black]
+line-length = 100
+target-version = ["py312"]
+include = '\.pyi?$'
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+asyncio_mode = "auto"
+
+[tool.coverage.run]
+source = ["greedy_collector"]
+omit = ["*/tests/*", "*/__pycache__/*"]

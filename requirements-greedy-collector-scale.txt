@@ -1,0 +1,20 @@
+# Optional scale tier dependencies for Greedy Collector
+# 
+# Install with:
+#   pip install -r requirements-greedy-collector-scale.txt
+#
+# Then configure:
+#   GREEDY_COLLECTOR_MONITORING_BACKEND=celery
+#   GREEDY_COLLECTOR_REDIS_URL=redis://redis-host:6379/0
+#
+# Run distributed tasks:
+#   celery -A greedy_collector.celery_tasks.celery_app worker --loglevel=INFO
+#   celery -A greedy_collector.celery_tasks.celery_app beat --loglevel=INFO
+
+-r requirements.txt
+
+celery>=5.3,<6.0
+redis>=5.0,<6.0
+
+# Optional Neo4j graph mirror
+neo4j>=5.0,<6.0

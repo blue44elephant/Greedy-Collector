@@ -1,0 +1,9 @@
+-r requirements.txt
+
+# Testing
+pytest>=9.0.0,<10.0
+pytest-asyncio>=0.24.0,<1.0.0
+
+# Code quality (optional)
+black>=24.0.0
+flake8>=7.0.0
