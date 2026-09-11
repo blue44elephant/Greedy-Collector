@@ -2,7 +2,7 @@
 
 Greedy Collector is a standalone application for inspecting public Bitcoin and Ethereum
 wallet activity. It retrieves records from configured providers, stores normalized results
-in SQLite, applies deterministic risk rules, and provides Wallet and Graph workspaces.
+in SQLite, applies deterministic risk rules, and provides Wallet, Graph, and Monitoring workspaces.
 Other existing backend workflows remain accessible through Swagger at `/docs`; they are
 not exposed in this frontend increment.
 
@@ -21,6 +21,7 @@ python -m venv .venv
 pip install -r requirements.txt
 pip install -r requirements-dev.txt
 Copy-Item .env.example .env
+# Edit .env with your server-side configuration before proceeding.
 alembic upgrade head
 uvicorn main:app --reload
 ```
@@ -29,11 +30,20 @@ Open **http://127.0.0.1:8000/** for the application.
 API documentation remains at **http://127.0.0.1:8000/docs**.
 Health information is available at `/health` and `/api/greedy-collector/status`.
 
-The application reads process environment variables. To load credentials from `.env`,
-run `uvicorn main:app --reload --env-file .env` instead. For migrations using `.env`:
+Greedy Collector automatically reads `.env` beside `main.py` before configuration
+is initialized, including when imported by Uvicorn's reload worker or Alembic.
+The file is optional. It is resolved from the application location, not the caller's
+working directory; unrelated parent directories are never searched.
+
+After `Copy-Item .env.example .env`, edit `.env` with your server-side configuration
+before starting the application. **Never commit `.env`**; it is ignored by Git.
+Existing process environment variables override `.env` values, including explicitly
+empty variables. Normal startup remains `uvicorn main:app --reload`; no `--env-file`
+argument is required. Restart the server after changing configuration, since settings
+are initialized and cached on import. Migrations use the same configuration loader:
 
 ```powershell
-python -c "from dotenv import load_dotenv; load_dotenv(); from alembic.config import main; main(argv=['upgrade', 'head'])"
+alembic upgrade head
 ```
 
 Use public wallet addresses only. Never enter a private key or recovery phrase.
@@ -84,6 +94,35 @@ are also listed below the graph. A deeper hop request does not fetch counterpart
 guarantee complete blockchain coverage. SQLite is authoritative; optional Neo4j mirrors
 can be configured using the `GREEDY_COLLECTOR_NEO4J_*` settings.
 
+### Monitoring
+
+Add a public Bitcoin or Ethereum address without first looking it up. Edit its label,
+notes, priority, enabled state, or optional existing case ID. Duplicate addresses return
+the existing watch. **Disable watch** preserves its baseline, runs, and alerts;
+re-enabling continues from that retained boundary. The UI does not hard-delete watches.
+
+The Scheduler section displays the API's actual configured intervals and local scheduler
+state. **Check now** uses the existing server monitoring cycle for the selected enabled
+watch; scheduled checks use the same logic. UI state refreshes after actions or through
+**Refresh monitoring**. It does not promise continuous updates or verified Celery activity.
+Use one application process: the overlap guard is process-local.
+
+The first observation establishes a silent baseline and does not alert historical activity.
+Bitcoin uses a confirmed transaction for that initial boundary; empty or mempool-only
+history may leave it unset. If a previous boundary disappears from bounded provider history,
+the run reports **Continuity loss**, preserves the boundary, and suppresses ambiguous alerts.
+Provider failures are displayed separately with sanitized messages.
+
+Run history loads 25 records at a time, newest first. Manual results show actual run fields
+and a labelled comparison of pre-check and returned boundaries. The API does not provide
+per-run generated-alert counts or historical boundary snapshots. **Wallet alerts** lists
+actual stored alerts filtered by the selected address and chain; risk-only alerts may have
+no transaction hash. The existing alerts endpoint has no wallet filter or pagination.
+
+Bitcoin requires no API key. Ethereum monitoring requires `ETHERSCAN_API_KEY`;
+`ALCHEMY_API_KEY` is only an optional balance fallback and does not replace Etherscan history.
+No fake watches, provider results, or alerts are substituted when requests fail.
+
 ## Storage and interpretation limits
 
 The default database is `sqlite:///./data/greedy_collector.db`, configured with
@@ -120,7 +159,7 @@ and Node without a frontend build or third-party browser-testing package:
 node tests/browser_smoke.cjs
 ```
 
-This starts a temporary local test server, uses test-only provider fixtures, checks Wallet/Graph
+This starts a temporary local test server, uses test-only provider fixtures, checks Wallet/Graph/Monitoring
 browser interactions, stored state, explicit investigation, and empty/error states, and shuts down its processes. It does not contact public providers.
 
 ## Source structure

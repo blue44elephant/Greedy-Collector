@@ -1,7 +1,14 @@
 from functools import lru_cache
 import os
+from pathlib import Path
 
+from dotenv import load_dotenv
 from pydantic import BaseModel
+
+
+# Load before class defaults and cached settings are evaluated. Never search the
+# caller's directory or override values supplied by the process environment.
+load_dotenv(Path(__file__).resolve().parents[1] / ".env", override=False)
 
 
 class GreedyCollectorSettings(BaseModel):
