@@ -44,6 +44,14 @@ class WatchlistCreate(BaseModel):
     priority: Literal["low", "normal", "high", "critical"] = "normal"
 
 
+class WatchlistUpdate(BaseModel):
+    enabled: bool | None = None
+    priority: Literal["low", "normal", "high", "critical"] | None = None
+    label: str | None = Field(default=None, max_length=255)
+    notes: str | None = None
+    case_id: str | None = None
+
+
 class AlertUpdate(BaseModel):
     status: Literal["New", "Reviewed", "Dismissed", "Escalated"] | None = None
     notes: str | None = None

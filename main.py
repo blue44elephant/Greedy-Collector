@@ -7,8 +7,12 @@ Or for production:
     uvicorn main:app --host 0.0.0.0 --port 8000
 """
 
+from pathlib import Path
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
 
 from greedy_collector import router as greedy_collector_router
 from greedy_collector.config import get_settings
@@ -36,6 +40,9 @@ app.add_middleware(
 # Register Greedy Collector router
 app.include_router(greedy_collector_router)
 
+STATIC_DIR = Path(__file__).resolve().parent / "static"
+app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
+
 
 @app.on_event("startup")
 async def startup_event():
@@ -49,16 +56,10 @@ async def shutdown_event():
     stop_monitoring()
 
 
-@app.get("/")
+@app.get("/", include_in_schema=False)
 def root():
-    """Root endpoint - redirects to API documentation."""
-    return {
-        "application": "Greedy Collector",
-        "version": "0.1.0",
-        "status": "running",
-        "docs": "/docs",
-        "health": "/api/greedy-collector/status",
-    }
+    """Serve the standalone Greedy Collector application."""
+    return FileResponse(STATIC_DIR / "index.html")
 
 
 @app.get("/health")

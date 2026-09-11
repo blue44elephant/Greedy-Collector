@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Greedy Collector</title>
+  <link rel="stylesheet" href="/static/app.css">
+  <script type="module" src="/static/js/app.js"></script>
+</head>
+<body>
+  <header class="site-header">
+    <a class="brand" href="/">Greedy Collector</a>
+    <span class="header-label">Public wallet research</span>
+    <a href="/docs">API docs ↗</a>
+  </header>
+  <nav id="navigation" aria-label="Workspaces">
+    <button type="button" data-workspace="wallet" aria-current="true">Wallet</button>
+    <button type="button" data-workspace="graph" aria-current="false">Graph</button>
+  </nav>
+  <main>
+    <div id="wallet-workspace" class="workspace">
+    <section class="lookup-panel" aria-labelledby="page-title">
+      <p class="eyebrow">Wallet lookup</p>
+      <h1 id="page-title">Wallet investigation</h1>
+      <p class="intro">Enter a public Bitcoin or Ethereum address to retrieve available public blockchain records.</p>
+      <form id="lookup-form" novalidate>
+        <fieldset id="lookup-fields">
+          <div class="chain-field">
+            <label for="chain">Chain</label>
+            <select id="chain" name="chain">
+              <option value="bitcoin">Bitcoin</option>
+              <option value="ethereum">Ethereum</option>
+            </select>
+          </div>
+          <div class="address-field">
+            <label for="wallet-address">Public wallet address</label>
+            <input id="wallet-address" name="address" type="text" autocomplete="off" autocapitalize="none" spellcheck="false" placeholder="Enter a public wallet address" aria-describedby="input-note">
+          </div>
+          <button id="lookup-button" type="submit">Lookup</button>
+          <button id="stored-button" type="button" class="secondary">View stored</button>
+        </fieldset>
+      </form>
+      <p id="input-note" class="input-note">Use public wallet addresses only. Never enter a private key or recovery phrase.</p>
+      <p class="muted small">Bitcoin needs no API key. Ethereum requires Etherscan configured on the server.</p>
+      
+    </section>
+
+    <div id="results" hidden>
+      <section class="panel" aria-labelledby="overview-heading">
+        <div class="section-heading"><h2 id="overview-heading" tabindex="-1">Overview</h2><span id="data-mode" class="badge"></span><span id="result-chain" class="badge"></span></div>
+        <p id="result-address" class="full-address"></p>
+        <dl class="metrics">
+          <div><dt>Balance</dt><dd id="balance"></dd></div>
+          <div><dt>Risk score</dt><dd id="risk-score"></dd></div>
+          <div><dt>Risk level</dt><dd id="risk-level"></dd></div>
+          <div><dt>Records returned</dt><dd id="record-count"></dd></div>
+        </dl>
+        <dl class="metadata">
+          <div><dt>First activity in collected history</dt><dd id="first-seen"></dd></div>
+          <div><dt>Last activity</dt><dd id="last-activity"></dd></div>
+          <div><dt>Balance provider</dt><dd id="provider"></dd></div>
+          <div><dt id="retrieval-label">Retrieved</dt><dd id="retrieved-at"></dd></div>
+        </dl>
+        <p id="stored-note" class="bounded-note" hidden>Stored profile, transactions, and risk are local snapshots, not live provider data. Existing transaction rows are not updated: confirmation state may be stale, and direction reflects the lookup that first inserted the row. Address matching may be case-sensitive.</p>
+        <p id="provider-count" class="muted small" hidden></p>
+        <p class="bounded-note">History is bounded by the configured providers. These records are not guaranteed to cover the wallet’s lifetime.</p>
+      </section>
+
+      <section class="panel" aria-labelledby="transactions-heading">
+        <div class="section-heading"><h2 id="transactions-heading">Transactions</h2><span id="transactions-mode" class="muted small"></span></div>
+        <p id="transactions-empty" class="empty" hidden>No transactions were returned for this address.</p>
+        <div id="transactions-table" class="table-scroll" role="region" aria-label="Transactions table" tabindex="0">
+          <table>
+            <thead><tr><th scope="col">Transaction hash</th><th scope="col">Direction</th><th scope="col">From</th><th scope="col">To</th><th scope="col" class="numeric">Amount</th><th scope="col">Token</th><th scope="col">Timestamp (UTC)</th><th scope="col">Block</th></tr></thead>
+            <tbody id="transaction-rows"></tbody>
+          </table>
+        </div>
+        <p class="muted small">Hover over or focus a shortened hash or address to see its full value. Amounts use the listed token; confirmation counts are not provided.</p>
+      </section>
+
+      <section class="panel" aria-labelledby="risk-heading">
+        <div class="section-heading"><h2 id="risk-heading">Risk findings</h2><span class="badge">Deterministic rules</span></div>
+        <p id="risk-time" class="muted small" hidden></p>
+        <p>Risk findings are rule-based indicators and are not proof of wrongdoing.</p>
+        <p id="risk-empty" class="empty" hidden>No risk findings were produced for the returned activity.</p>
+        <div id="risk-findings" class="findings"></div>
+        <p id="risk-disclaimer" class="bounded-note"></p>
+      </section>
+
+      <section class="panel" aria-labelledby="counterparties-heading">
+        <div class="section-heading"><h2 id="counterparties-heading">Counterparties</h2><span class="muted small">In the returned activity</span></div>
+        <p id="counterparties-empty" class="empty" hidden>No counterparties were returned.</p>
+        <ul id="counterparties" class="counterparties"></ul>
+      </section>
+    </div>
+    </div>
+    <section id="graph-workspace" class="workspace" hidden></section>
+    <footer>Greedy Collector · Public blockchain records, stored locally.</footer>
+    <noscript><p class="error">Enable JavaScript to use wallet lookup. The API is also available through <a href="/docs">Swagger</a>.</p></noscript>
+  </main>
+</body>
+</html>

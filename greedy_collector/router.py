@@ -6,11 +6,12 @@ import re
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, Response, UploadFile
 from sqlalchemy.orm import Session
+from sqlalchemy import func, select
 
 from .chains.base import ChainDataError
 from .database import get_db
 from .kyc import SOURCE_CATALOG
-from .models import AnalystNote, Case, CaseEntity, KycMatch, Label
+from .models import AnalystNote, Case, CaseEntity, KycMatch, Label, MonitoringRun, WatchlistWallet
 from .schemas import (
     AlertUpdate,
     AnalystNoteCreate,
@@ -22,12 +23,19 @@ from .schemas import (
     ManualLabelCreate,
     TransactionLookupRequest,
     WatchlistCreate,
+    WatchlistUpdate,
 )
 from .services import GreedyCollectorService, row_dict
 
 
 router = APIRouter(prefix="/api/greedy-collector", tags=["Greedy Collector"])
 service = GreedyCollectorService()
+
+
+def _provider_error(exc: ChainDataError) -> str:
+    if "ETHERSCAN_API_KEY" in str(exc) or "ALCHEMY_API_KEY" in str(exc):
+        return "Ethereum provider configuration is unavailable."
+    return "Blockchain provider request failed. Try again later."
 
 
 @router.get("/status")
@@ -63,7 +71,7 @@ async def lookup_address(payload: LookupRequest, db: Session = Depends(get_db)):
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     except ChainDataError as exc:
-        raise HTTPException(status_code=502, detail=str(exc)) from exc
+        raise HTTPException(status_code=502, detail=_provider_error(exc)) from exc
 
 
 @router.post("/lookup/tx")
@@ -73,7 +81,7 @@ async def lookup_tx(payload: TransactionLookupRequest):
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     except ChainDataError as exc:
-        raise HTTPException(status_code=502, detail=str(exc)) from exc
+        raise HTTPException(status_code=502, detail=_provider_error(exc)) from exc
 
 
 @router.get("/address/{chain}/{address}")
@@ -109,12 +117,79 @@ def risk(chain: str, address: str, db: Session = Depends(get_db)):
 
 @router.post("/watchlist")
 def add_watchlist(payload: WatchlistCreate, db: Session = Depends(get_db)):
-    return service.add_watchlist(db, payload)
+    if payload.case_id and not db.get(Case, payload.case_id):
+        raise HTTPException(status_code=404, detail="Case not found")
+    try:
+        return service.add_watchlist(db, payload)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail="Invalid public wallet address") from exc
 
 
 @router.get("/watchlist")
 def watchlist(db: Session = Depends(get_db)):
     return {"wallets": service.watchlist(db)}
+
+
+@router.patch("/watchlist/{wallet_id}")
+def update_watchlist(wallet_id: str, payload: WatchlistUpdate, db: Session = Depends(get_db)):
+    row = db.get(WatchlistWallet, wallet_id)
+    if not row:
+        raise HTTPException(status_code=404, detail="Watchlist wallet not found")
+    data = payload.model_dump(exclude_unset=True)
+    if any(value is None for key, value in data.items() if key != "case_id"):
+        raise HTTPException(status_code=422, detail="Only case_id may be null")
+    if data.get("case_id") is not None and not db.get(Case, data["case_id"]):
+        raise HTTPException(status_code=404, detail="Case not found")
+    for key, value in data.items():
+        setattr(row, key, value)
+    db.commit()
+    return row_dict(row)
+
+
+def _run_response(row: MonitoringRun) -> dict:
+    data = row_dict(row)
+    # Persisted provider exceptions can contain credential-bearing URLs.
+    if row.status == "failed":
+        data["error"] = "Monitoring check failed. Verify server provider configuration and try again."
+    elif row.status == "continuity_loss":
+        data["error"] = "The previous transaction boundary is missing from the fetched history. Boundary preserved; ambiguous activity was not alerted."
+    else:
+        data["error"] = None
+    return data
+
+
+@router.get("/watchlist/{wallet_id}/runs")
+def watchlist_runs(wallet_id: str, limit: int = Query(50, ge=1, le=200),
+                   offset: int = Query(0, ge=0), db: Session = Depends(get_db)):
+    if not db.get(WatchlistWallet, wallet_id):
+        raise HTTPException(status_code=404, detail="Watchlist wallet not found")
+    rows = db.scalars(select(MonitoringRun).where(MonitoringRun.wallet_id == wallet_id)
+                      .order_by(MonitoringRun.started_at.desc(), MonitoringRun.id.desc())
+                      .offset(offset).limit(limit)).all()
+    total = db.scalar(select(func.count(MonitoringRun.id)).where(MonitoringRun.wallet_id == wallet_id))
+    return {"runs": [_run_response(row) for row in rows], "total": total}
+
+
+@router.post("/watchlist/{wallet_id}/check")
+async def check_watchlist(wallet_id: str, db: Session = Depends(get_db)):
+    from .monitoring import monitor_chain
+
+    row = db.get(WatchlistWallet, wallet_id)
+    if not row:
+        raise HTTPException(status_code=404, detail="Watchlist wallet not found")
+    if not row.enabled:
+        raise HTTPException(status_code=409, detail="Enable the watch before checking it")
+    chain = row.chain
+    # Release the read transaction before monitoring opens its own session.
+    db.rollback()
+    result = await monitor_chain(chain, wallet_id=wallet_id)
+    if result.get("busy"):
+        raise HTTPException(status_code=409, detail="A check for this chain is already running")
+    if not result.get("run_ids"):
+        raise HTTPException(status_code=409, detail="Watch is no longer enabled")
+    db.expire_all()
+    run = db.get(MonitoringRun, result["run_ids"][0])
+    return {"wallet": row_dict(db.get(WatchlistWallet, wallet_id)), "run": _run_response(run)}
 
 
 @router.delete("/watchlist/{wallet_id}")
@@ -124,6 +199,8 @@ def delete_watchlist(wallet_id: str, db: Session = Depends(get_db)):
     row = db.get(WatchlistWallet, wallet_id)
     if not row:
         raise HTTPException(status_code=404, detail="Watchlist wallet not found")
+    if db.scalar(select(MonitoringRun.id).where(MonitoringRun.wallet_id == wallet_id).limit(1)):
+        raise HTTPException(status_code=409, detail="Watch has monitoring history; disable it to preserve history")
     db.delete(row)
     db.commit()
     return {"deleted": wallet_id}
@@ -309,7 +386,14 @@ def kyc_sources():
 
 @router.post("/kyc/screen")
 async def kyc_screen(payload: KycQuery, db: Session = Depends(get_db)):
-    return await service.kyc_screen(db, payload)
+    result = await service.kyc_screen(db, payload)
+    result["unavailable_sources"] = [
+        {"id": row["id"], "reason": "Optional API_KEY is not configured"
+         if "API_KEY is not configured" in row.get("reason", "")
+         else "Source unavailable. Check server configuration or try again later."}
+        for row in result["unavailable_sources"]
+    ]
+    return result
 
 
 @router.patch("/kyc/matches/{match_id}")

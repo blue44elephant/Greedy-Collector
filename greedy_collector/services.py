@@ -18,6 +18,7 @@ from .models import (
     KycMatch,
     KycScreeningRun,
     Label,
+    MonitoringRun,
     RiskResult,
     Transaction,
     WalletAlert,
@@ -233,6 +234,12 @@ class GreedyCollectorService:
                     "balance_native": address.balance_native if address else None,
                     "last_activity": address.last_activity if address else None,
                     "risk_score": address.risk_score if address else 0,
+                    "last_monitoring_status": db.scalar(
+                        select(MonitoringRun.status)
+                        .where(MonitoringRun.wallet_id == row.id)
+                        .order_by(MonitoringRun.started_at.desc())
+                        .limit(1)
+                    ),
                     "alert_count": db.scalar(
                         select(func.count(WalletAlert.id)).where(
                             WalletAlert.wallet == row.address,

@@ -3,6 +3,7 @@ from datetime import datetime, timezone
 import hashlib
 import importlib.util
 import logging
+from threading import Lock
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from sqlalchemy import select
@@ -16,22 +17,37 @@ from .services import GreedyCollectorService
 logger = logging.getLogger("GreedyCollector.Monitoring")
 settings = get_settings()
 scheduler = AsyncIOScheduler(timezone="UTC")
+_chain_locks = {"bitcoin": Lock(), "ethereum": Lock()}
 
 
-async def monitor_chain(chain: str) -> dict:
+async def monitor_chain(chain: str, wallet_id: str | None = None) -> dict:
+    """Scheduled and manual checks share one path, serialized per local chain."""
+    lock = _chain_locks[chain]
+    if not lock.acquire(blocking=False):
+        return {"chain": chain, "processed": 0, "busy": True, "run_ids": []}
+    try:
+        return await _monitor_chain(chain, wallet_id)
+    finally:
+        lock.release()
+
+
+async def _monitor_chain(chain: str, wallet_id: str | None = None) -> dict:
     service = GreedyCollectorService()
     db = SessionLocal()
     processed = 0
+    run_ids = []
     try:
-        wallets = db.scalars(
-            select(WatchlistWallet).where(
-                WatchlistWallet.chain == chain, WatchlistWallet.enabled.is_(True)
-            )
-        ).all()
+        query = select(WatchlistWallet).where(
+            WatchlistWallet.chain == chain, WatchlistWallet.enabled.is_(True)
+        )
+        if wallet_id is not None:
+            query = query.where(WatchlistWallet.id == wallet_id)
+        wallets = db.scalars(query).all()
         for wallet in wallets:
             run = MonitoringRun(wallet_id=wallet.id)
             db.add(run)
             db.flush()
+            run_ids.append(run.id)
             previous_tx = wallet.last_seen_tx
             try:
                 result = await service.lookup_address(
@@ -226,7 +242,7 @@ async def monitor_chain(chain: str) -> dict:
                 run.completed_at = datetime.now(timezone.utc)
                 logger.warning("Wallet monitoring failed for %s: %s", wallet.address, exc)
             db.commit()
-        return {"chain": chain, "processed": processed}
+        return {"chain": chain, "processed": processed, "run_ids": run_ids}
     finally:
         db.close()
 
@@ -292,4 +308,7 @@ def monitoring_status() -> dict:
         "configured": configured,
         "celery_installed": celery_installed,
         "fallback": "apscheduler",
+        "scheduler_running": scheduler.running,
+        "ethereum_interval_minutes": settings.ethereum_monitor_minutes,
+        "bitcoin_interval_minutes": settings.bitcoin_monitor_minutes,
     }

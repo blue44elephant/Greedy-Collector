@@ -1,423 +1,132 @@
 # Greedy Collector
 
-Greedy Collector accepts public Bitcoin and Ethereum addresses, retrieves public information from configured blockchain services, stores normalized results locally, applies deterministic rules to the collected activity, monitors addresses for newly observed activity, and exposes results through an API.
+Greedy Collector is a standalone application for inspecting public Bitcoin and Ethereum
+wallet activity. It retrieves records from configured providers, stores normalized results
+in SQLite, applies deterministic risk rules, and provides Wallet and Graph workspaces.
+Other existing backend workflows remain accessible through Swagger at `/docs`; they are
+not exposed in this frontend increment.
 
-## What It Does
+Production operations use real provider responses and database records. There is no
+fixture-data mode. An empty database or empty provider response produces an empty state.
+Mocks and provider fixtures belong only to automated tests.
 
-### Input
-- Bitcoin or Ethereum wallet addresses
-- Optional: Organize addresses into cases for grouped analysis
+## Install and run
 
-### Output
-- Bounded transaction history from the configured public providers
-- Current wallet balance
-- Deterministic risk indicators and their evidence
-- Periodic monitoring alerts for newly observed wallet activity
-- Local graph of transaction paths (1-3 hops)
-- Case management and analyst notes
-- Exportable reports (CSV, HTML, Markdown, PDF)
-
-### Data Sources
-
-**Bitcoin** (no API key required):
-- Blockstream.info (primary provider)
-- Mempool.space (fallback)
-- Free, public APIs
-
-**Ethereum** (requires free Etherscan API key):
-- Etherscan (primary: transactions and balance)
-- Alchemy (fallback: balance lookup)
-
-**Corporate manual sources:**
-- OpenCorporates
-- Companies House
-- No automated API integration for these two sources (manual analyst links)
-
-**Automated screening:**
-- OpenSanctions: optional name search, requires `OPENSANCTIONS_API_KEY`
-- URLScan: searches existing public scans when a domain is supplied; API key is optional
-- VirusTotal: optional domain reputation lookup, requires `VIRUSTOTAL_API_KEY`
-- INTERPOL, SEC EDGAR, and GDELT: automated public-record/name research
-- crt.sh: automated certificate lookup when a domain is supplied
-
-### History limits
-
-- Bitcoin: up to approximately 500 confirmed records plus the initial provider mempool set. If any Blockstream page fails, retrieval restarts with Mempool.space. Providers are not mixed within a history attempt.
-- Ethereum: normal ETH transactions and ERC-20 transfers each use up to 10 pages of 1,000 records (10,000 per action before normalization and deduplication). A later-page failure raises an error. Alchemy is only a balance fallback.
-- Neither chain provides guaranteed lifetime-complete history. Ethereum monitoring does not retrieve pending/mempool transactions or enforce finalized-block status.
-
-## Risk Analysis
-
-Greedy Collector detects behavioral patterns:
-
-- Direct exposure to labeled addresses (sanctioned, mixers, scams)
-- Dormant wallets becoming active
-- High-velocity activity
-- Large transfer patterns
-- Rapid pass-through activity
-- Wallet consolidation patterns
-- Bridge/exchange activity
-
-**Important**: Risk findings are informational patterns for analyst review. Greedy Collector does NOT identify wallet owners, make guilt determinations, or provide legally binding assessments.
-
-## Wallet Monitoring
-
-Add addresses to monitoring for periodic checks:
-
-- **First observation**: Establishes a quiet baseline (no alerts on historical data)
-- **Subsequent runs**: Detects new transactions and risk pattern changes
-- **Continuity detection**: Protects against provider inconsistencies
-- **Deduplication**: Same transaction + alert type = one alert (no duplicates across confirmations)
-
-Monitoring runs automatically via APScheduler or optional Celery/Redis for distributed setups.
-
-## Database
-
-Greedy Collector stores data locally in SQLite:
-
-- Observed transactions
-- Address profiles (balance, risk score, activity dates)
-- User labels and analyst notes
-- Monitoring state and alerts
-- Cases and case entities
-- Transaction graph edges
-
-The database is local and never leaves your machine unless you export data.
-
-## Installation
-
-### Requirements
-
-- Python 3.12+
-- Windows, macOS, or Linux
-- ~100 MB disk space for dependencies
-- Internet access for blockchain API calls
-
-### Setup (Windows PowerShell)
+Python 3.12 or newer is required.
 
 ```powershell
-# Clone or extract the repository
-cd C:\path\to\greedy-collector
-
-# Create virtual environment
-py -3.12 -m venv .venv
-
-# Activate
+cd "C:\Tools\Inventions\greedy-collector"
+python -m venv .venv
 .\.venv\Scripts\Activate.ps1
-
-# Install dependencies
 pip install -r requirements.txt
 pip install -r requirements-dev.txt
-
-# Configure environment
-Copy-Item .env.example -Destination .env
-
-# Initialize database
+Copy-Item .env.example .env
 alembic upgrade head
-
-# Run
 uvicorn main:app --reload
 ```
 
-### Setup (macOS/Linux)
+Open **http://127.0.0.1:8000/** for the application.
+API documentation remains at **http://127.0.0.1:8000/docs**.
+Health information is available at `/health` and `/api/greedy-collector/status`.
 
-```bash
-cd /path/to/greedy-collector
+The application reads process environment variables. To load credentials from `.env`,
+run `uvicorn main:app --reload --env-file .env` instead. For migrations using `.env`:
 
-python3.12 -m venv .venv
-source .venv/bin/activate
-
-pip install -r requirements.txt
-pip install -r requirements-dev.txt
-
-cp .env.example .env
-
-alembic upgrade head
-
-uvicorn main:app --reload
+```powershell
+python -c "from dotenv import load_dotenv; load_dotenv(); from alembic.config import main; main(argv=['upgrade', 'head'])"
 ```
 
-## Configuration
+Use public wallet addresses only. Never enter a private key or recovery phrase.
+No provider keys are entered through the browser.
 
-Edit `.env` with your settings. The application and Alembic read process environment variables; they do not automatically load `.env`. For the server, use `uvicorn main:app --reload --env-file .env`. For migrations with `.env` settings, use `python -c "from dotenv import load_dotenv; load_dotenv(); from alembic.config import main; main(argv=['upgrade', 'head'])"`. Alternatively, export the variables in your shell.
+## Providers and configuration
 
-**Required for Ethereum transaction retrieval:**
-- `ETHERSCAN_API_KEY` — Get free key at https://etherscan.io/apis
+### Bitcoin
 
-**Optional:**
-- `ALCHEMY_API_KEY` — Fallback for Ethereum balance
-- `GREEDY_COLLECTOR_ETH_MONITOR_MINUTES` — Check Ethereum wallets every N minutes (default: 10)
-- `GREEDY_COLLECTOR_BTC_MONITOR_MINUTES` — Check Bitcoin wallets every N minutes (default: 20)
+Blockstream is the primary public provider; Mempool.space is the fallback. No API key
+is normally required. History retrieves up to approximately 500 confirmed records plus
+the initial provider mempool set. A failure on any Blockstream history page discards that
+attempt and restarts with Mempool.space.
 
-**For scaling:**
-- `GREEDY_COLLECTOR_MONITORING_BACKEND=celery` + Redis URL for distributed monitoring
-- `GREEDY_COLLECTOR_GRAPH_BACKEND=neo4j` + Neo4j credentials for optional graph mirror
+### Ethereum
 
-See `.env.example` for complete configuration options.
+Full address lookup and transaction retrieval require `ETHERSCAN_API_KEY`.
+`ALCHEMY_API_KEY` is optional for balance fallback only; it does not replace Etherscan
+transaction retrieval. Alchemy uses HTTP POST JSON-RPC `eth_getBalance`.
 
-## Running
+Normal ETH transactions and ERC-20 transfers each paginate up to 10 pages of 1,000
+records, before normalization and deduplication. A later-page error fails the lookup.
+Ethereum pending/mempool monitoring is not implemented; finality is not enforced.
 
-### Development (with auto-reload)
+## Workspaces
 
-```bash
-uvicorn main:app --reload
-```
+### Wallet
 
-Then open http://127.0.0.1:8000/docs for API documentation.
+Choose Bitcoin or Ethereum and enter a public wallet address. **Lookup** calls the
+configured providers and shows fresh balance, records, risk findings, counterparties,
+and provenance. **View stored** reads local state without fetching provider data.
+Fresh lookup uses `POST /api/greedy-collector/lookup/address`. **View stored** reads
+`GET /api/greedy-collector/address/{chain}/{address}`, `/transactions`, and `/risk`.
+The view displays the profile update timestamp and stored risk calculation timestamp.
+No stored risk result and empty transactions have separate empty states.
+The `refresh` API input currently does not change lookup behavior: POST lookup always
+fetches providers. Counterparty **Investigate** is explicit; no recursive crawling occurs.
+Amounts retain their original decimal strings and token units. No USD valuation is
+invented. Missing Bitcoin timestamp/block information is presented as unconfirmed.
 
-### Production
+### Graph
 
-```bash
-uvicorn main:app --host 0.0.0.0 --port 8000 --workers 4
-```
+Load one to three hops from stored transactions using
+`GET /api/greedy-collector/address/{chain}/{address}/graph?hops=N`. Select a node for its address/type,
+read directional edges and their transaction details,
+use **Investigate wallet** to fetch that address, and pan/zoom the SVG view. Transactions
+are also listed below the graph. A deeper hop request does not fetch counterparties or
+guarantee complete blockchain coverage. SQLite is authoritative; optional Neo4j mirrors
+can be configured using the `GREEDY_COLLECTOR_NEO4J_*` settings.
 
-## API Endpoints
+## Storage and interpretation limits
 
-All endpoints return JSON. See `/docs` for interactive documentation.
+The default database is `sqlite:///./data/greedy_collector.db`, configured with
+`GREEDY_COLLECTOR_DATABASE_URL`. Use Alembic revision `20260630_01` for initialization.
+SQLite foreign keys are enabled by the application engine. No Epic Archer installation
+or database is required.
 
-### Address Lookup
-```
-POST /api/greedy-collector/lookup/address
-{
-  "chain": "bitcoin" or "ethereum",
-  "address": "wallet address",
-  "refresh": false
-}
-```
+- Neither chain guarantees lifetime-complete transaction history.
+- Repeated lookup inserts previously unseen transaction identities, updates the address,
+  and adds a risk result. Existing transaction rows are not updated, so stored confirmation
+  state/direction can differ from fresh lookup data. Direction reflects the lookup that
+  first inserted the row. The interface labels stored views; address queries may be
+  case-sensitive, so use the original address spelling when inspecting stored state.
+- Bitcoin normalization retains representative input/output addresses. Stored queries and
+  graph edges are simplified, not a complete Bitcoin input/output model.
+- SQLite graph traversal groups rows by transaction hash and may collapse multiple transfers
+  sharing that hash. Deeper graphs require additional explicit wallet lookups.
+- Provider transaction counts and returned-record counts can have different meanings.
+- Risk scores are deterministic indicators, not proof of wrongdoing or ownership.
+- External source availability and rate limits can cause failures. Errors never trigger
+  substitute data. Configure credentials server-side and retry when appropriate.
 
-Returns: Transactions, balance, risk score, labels, graph paths.
+## Tests
 
-### Wallet Monitoring
-```
-POST /api/greedy-collector/watchlist
-GET /api/greedy-collector/watchlist
-GET /api/greedy-collector/watchlist/{wallet_id}
-```
-
-Returns: List of monitored wallets and their alert history.
-
-### Risk Analysis
-```
-GET /api/greedy-collector/address/{chain}/{address}
-```
-
-Returns: Stored risk results and findings.
-
-### Case Management
-```
-POST /api/greedy-collector/cases
-GET /api/greedy-collector/cases
-```
-
-Returns: Analyst case groupings and associated entities.
-
-### Alerts
-```
-GET /api/greedy-collector/alerts
-PATCH /api/greedy-collector/alerts/{alert_id}
-```
-
-Returns: Monitoring-generated alerts with optional status updates.
-
-### Reports
-```
-POST /api/greedy-collector/case/{case_id}/report
-```
-
-Returns: CSV, HTML, Markdown, or PDF report of case data.
-
-Full API docs available at `/docs` when running locally.
-
-## Demo Workflow
-
-1. **Start the application**:
-   ```bash
-   uvicorn main:app --reload
-   ```
-
-2. **Lookup a public address** (Bitcoin example):
-   Navigate to `/docs` and use the `/api/greedy-collector/lookup/address` endpoint:
-   ```json
-   {
-     "chain": "bitcoin",
-     "address": "1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa",
-     "refresh": true
-   }
-   ```
-
-3. **Review results**: Transactions, balance, risk indicators, counterparties
-
-4. **Add to watchlist** (optional):
-   ```json
-   {
-     "chain": "bitcoin",
-     "address": "1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa",
-     "label": "Investigation case 2026-A"
-   }
-   ```
-
-5. **Observe monitoring**: Alerts generated on subsequent monitoring runs
-
-6. **Inspect graph**: View 1-3 hop transaction paths from this address
-
-7. **Export case**: Generate report in preferred format
-
-## Testing
-
-Run the full test suite:
-
-```bash
+```powershell
 python -m pytest tests/ -q
 ```
 
-Expected result: **74 passed**
+Tests use isolated SQLite state and mocked external providers. Production paths do not
+load these fixtures. Optional browser smoke verification uses an installed Chromium browser
+and Node without a frontend build or third-party browser-testing package:
 
-Run specific test category:
-
-```bash
-python -m pytest tests/test_bitcoin_pagination.py -v
-python -m pytest tests/test_ethereum_fallback.py -v
-python -m pytest tests/test_monitoring_mempool.py -v
+```powershell
+node tests/browser_smoke.cjs
 ```
 
-## What It Does NOT Do
+This starts a temporary local test server, uses test-only provider fixtures, checks Wallet/Graph
+browser interactions, stored state, explicit investigation, and empty/error states, and shuts down its processes. It does not contact public providers.
 
-- Identify wallet owners by name or profile
-- Make guilt or criminality determinations
-- Monitor Ethereum pending/mempool transactions (history uses Etherscan on-chain records; finality is not enforced)
-- Provide investment advice or market predictions
-- Interact with smart contracts or transfer funds
-- Perform blockchain analysis beyond 3 hops
-- Guarantee accuracy (blockchain data is only as fresh as provider APIs)
+## Source structure
 
-## Architecture
-
-**Backend:**
-- FastAPI (async REST API)
-- SQLAlchemy 2.0+ (database ORM)
-- APScheduler (monitoring task scheduling)
-- Alembic (database migrations)
-
-**Database:**
-- SQLite (default, single-file, no server needed)
-- Optional PostgreSQL for production
-- Optional Neo4j for graph analysis mirror
-
-**Optional Distributed Scale:**
-- Redis (message broker)
-- Celery (distributed task queue)
-
-**Frontend:**
-- Accessible via `/docs` (Swagger UI)
-- Exportable reports (CSV, HTML, Markdown, PDF)
-- No web UI included (API-first design)
-
-## Key Concepts
-
-### Deduplication
-When a Bitcoin transaction moves from unconfirmed (mempool) to confirmed state, its risk score may change. Greedy Collector identifies transaction alerts by wallet, chain, transaction hash, and trigger type. It also checks persisted fields to recognize older alerts. Risk-only alerts retain score-sensitive deduplication.
-
-### Continuity Loss Detection
-If the stored transaction boundary is missing from the bounded results, that run reports continuity loss, suppresses transaction alerts from the ambiguous window, and preserves the boundary. Future scheduled checks continue.
-
-### Immutable Baseline
-First observation of a wallet establishes a stable baseline silently (no alerts). Subsequent checks process only new transactions. Bitcoin uses the newest confirmed transaction to avoid volatile mempool data.
-
-### Graph Edges
-Greedy Collector stores transaction graph edges (sender → recipient) for local traversal. Optional Neo4j mirror provides optimized queries without affecting SQLite integrity.
-
-## Alchemy balance fallback
-
-Alchemy JSON-RPC uses HTTP POST with a JSON body. Offline transport tests verify the endpoint, request encoding, balance normalization, and conversion of HTTP, timeout, and malformed-JSON failures to `ChainDataError`. Live provider availability was not tested.
-
-## Troubleshooting
-
-### "ChainDataError" or API timeouts
-- Check internet connectivity
-- Verify Etherscan/Blockstream are not rate-limiting
-- Increase `GREEDY_COLLECTOR_TIMEOUT` in `.env`
-- Check API key validity (Etherscan)
-
-### Database locked
-- Ensure only one monitoring backend is running
-- If using Celery, verify Redis is accessible
-- Check file permissions on `data/greedy_collector.db`
-
-### Monitoring not running
-- Verify `GREEDY_COLLECTOR_MONITORING_BACKEND` is set (default: `apscheduler`)
-- Check application logs for startup errors
-- Confirm at least one wallet is `enabled=true` in watchlist
-
-### Tests fail with import errors
-- Verify virtual environment is activated
-- Run `pip install -r requirements-dev.txt`
-- Ensure you're in the repository root directory
-
-## Development
-
-### Code Structure
-```
-greedy_collector/
-├── chains/          # Blockchain adapters (Bitcoin, Ethereum)
-├── risk/            # Risk scoring engine
-├── kyc/             # KYC screening
-├── config.py        # Configuration
-├── models.py        # Database models
-├── database.py      # SQLAlchemy setup
-├── services.py      # Business logic
-├── router.py        # FastAPI endpoints
-├── monitoring.py    # Wallet monitoring
-└── graph.py         # Transaction graph storage
-
-tests/               # Test suite (74 tests)
-migrations/          # Alembic database migrations
-```
-
-### Adding a New Blockchain Adapter
-
-1. Create `greedy_collector/chains/newchain.py`
-2. Inherit from `ChainAdapter`
-3. Implement `lookup_address()`, `lookup_transaction()`, `transactions()`
-4. Return `NormalizedTransaction` objects
-5. Add tests in `tests/test_newchain_*.py`
-6. Update `get_chain_adapter()` in `chains/__init__.py`
-
-### Running Tests in Development
-
-```bash
-# All tests
-python -m pytest tests/ -q
-
-# Verbose with test names
-python -m pytest tests/ -v
-
-# Specific test file
-python -m pytest tests/test_bitcoin_pagination.py -v
-
-# With coverage
-pytest tests/ --cov=greedy_collector --cov-report=html
-```
-
-## Performance
-
-- Small dataset (< 10,000 transactions): Milliseconds
-- Medium dataset (10K - 100K transactions): < 1 second
-- Large dataset (100K+ transactions): Depends on graph queries
-
-Graph traversal (3 hops) scales to ~1 million edges on modern hardware.
-
-## License
-
-Greedy Collector is provided as-is for research and analyst use.
-
-## Support
-
-For issues, questions, or contributions, refer to:
-- This README
-- Inline code documentation
-- API docs at `/docs` when running
-- Test files as usage examples
-
----
-
-**Built for transparency. Used for due diligence.**
+- `main.py`: application entry point and lifecycle
+- `static/index.html`, `static/app.css`, `static/js/`: browser application
+- `greedy_collector/`: provider adapters, storage, services, API, risk, monitoring, research
+- `migrations/`: immutable Alembic baseline
+- `tests/`: automated checks and test-only fixtures

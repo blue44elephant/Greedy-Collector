@@ -18,7 +18,6 @@ class GreedyCollectorSettings(BaseModel):
         "SEC_USER_AGENT", "Greedy Collector research contact@example.invalid"
     )
     request_timeout: float = float(os.getenv("GREEDY_COLLECTOR_TIMEOUT", "20"))
-    demo_mode: bool = os.getenv("GREEDY_COLLECTOR_DEMO_MODE", "true").lower() == "true"
     ethereum_monitor_minutes: int = int(
         os.getenv("GREEDY_COLLECTOR_ETH_MONITOR_MINUTES", "10")
     )
