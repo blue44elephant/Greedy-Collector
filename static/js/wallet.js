@@ -1,3 +1,4 @@
+import {attributionSummary} from "./attribution_summary.js";
 import {addToCaseButton} from "./case_actions.js";
 import {readLabels, labelsFor, labelCards} from "./label_ui.js";
 import {api} from "./api.js";
@@ -6,6 +7,8 @@ const providerNames = {blockstream:"Blockstream", mempool_space:"Mempool.space",
 let navigate;
 export function investigate(chain, address) {
   if (byId("lookup-form").dataset.busy === "true") return;
+  // A new investigation replaces this result; do not refresh its old attribution.
+  byId("results").hidden = true;
   navigate("wallet");
   byId("wallet-address").value = address;
   return lookup(false);
@@ -110,6 +113,7 @@ function renderLookup(data, stored = false, labels = [], labelsUnavailable = fal
   }
   byId("counterparties").replaceChildren(counterpartyNodes);
   byId("counterparties-empty").hidden = counterparties.length !== 0;
+  byId("wallet-attribution").replaceChildren(attributionSummary({chain:profile.chain,address:profile.address}));
   byId("results").hidden = false;
 }
 

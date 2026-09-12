@@ -27,7 +27,8 @@ module.exports=async({evaluate,call,work})=>{
   assert.equal(await evaluate("document.querySelectorAll('#labels-list tbody tr').length"),1);
   await evaluate(`button('#labels-list','View label details').click();${idle}`);
   await evaluate("labelRequests.length=0;button('#label-detail','Investigate wallet').click();waitFor(()=>document.getElementById('lookup-form').dataset.busy==='false')");
-  assert.deepEqual(await evaluate('labelRequests.map(r=>r.url)'),['/api/greedy-collector/resolve','/api/greedy-collector/lookup/address','/api/greedy-collector/labels']);
+  assert.deepEqual(await evaluate('labelRequests.filter(r=>!r.url.startsWith("/api/greedy-collector/attribution/claims?")).map(r=>r.url)'),['/api/greedy-collector/resolve','/api/greedy-collector/lookup/address','/api/greedy-collector/labels']);
+  assert.equal(await evaluate('labelRequests.filter(r=>r.url.startsWith("/api/greedy-collector/attribution/claims?")).length'),1);
   assert.ok((await text('#wallet-labels')).includes('Browser exchange'));
   assert.ok((await text('#wallet-labels')).includes('https://source.example/annotation'));
   assert.ok((await text('#wallet-labels')).includes('Confidence: 0.85'));

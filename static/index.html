@@ -21,6 +21,7 @@
     <button type="button" data-workspace="cases" aria-current="false">Cases</button>
     <button type="button" data-workspace="labels" aria-current="false">Labels</button>
     <button type="button" data-workspace="research" aria-current="false">Research</button>
+    <button type="button" data-workspace="attribution" aria-current="false">Attribution</button>
   </nav>
   <main>
     <div id="wallet-workspace" class="workspace">
@@ -69,6 +70,8 @@
         <p class="bounded-note">History is bounded by the configured providers. These records are not guaranteed to cover the wallet’s lifetime.</p>
       </section>
 
+      <section id="wallet-attribution" class="panel" aria-label="Wallet attribution"></section>
+
       <section class="panel" aria-labelledby="transactions-heading">
         <div class="section-heading"><h2 id="transactions-heading">Transactions</h2><span id="transactions-mode" class="muted small"></span></div>
         <p id="transactions-empty" class="empty" hidden>No transactions were returned for this address.</p>
@@ -104,6 +107,7 @@
     <section id="cases-workspace" class="workspace" hidden></section>
     <section id="labels-workspace" class="workspace" hidden></section>
     <section id="research-workspace" class="workspace" hidden></section>
+    <section id="attribution-workspace" class="workspace" hidden></section>
     <footer>Greedy Collector · Public blockchain records, stored locally.</footer>
     <noscript><p class="error">Enable JavaScript to use wallet lookup. The API is also available through <a href="/docs">Swagger</a>.</p></noscript>
   </main>

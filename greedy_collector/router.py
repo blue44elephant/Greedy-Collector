@@ -421,3 +421,9 @@ def report(
         return Response(content=content, media_type=media_type)
     except KeyError as exc:
         raise HTTPException(status_code=404, detail="Case not found") from exc
+
+
+# Explicit manual attribution routes; no startup service construction.
+from .attribution.router import router as attribution_router
+
+router.include_router(attribution_router)

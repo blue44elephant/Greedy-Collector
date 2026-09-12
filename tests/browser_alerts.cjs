@@ -32,7 +32,8 @@ exports.review=async({evaluate,call,work})=>{
     assert.equal(await evaluate("document.querySelector('#alert-review [name=notes]').value"),'Persisted browser analyst note');
   }
   await evaluate(`alertRequests.length=0;button('#alert-detail','Investigate wallet').click();waitFor(()=>document.getElementById('lookup-form').dataset.busy==='false')`);
-  assert.deepEqual(await evaluate('alertRequests.map(r=>r.url)'),['/api/greedy-collector/resolve','/api/greedy-collector/lookup/address','/api/greedy-collector/labels']);
+  assert.deepEqual(await evaluate('alertRequests.filter(r=>!r.url.startsWith("/api/greedy-collector/attribution/claims?")).map(r=>r.url)'),['/api/greedy-collector/resolve','/api/greedy-collector/lookup/address','/api/greedy-collector/labels']);
+  assert.equal(await evaluate('alertRequests.filter(r=>r.url.startsWith("/api/greedy-collector/attribution/claims?")).length'),1);
   await evaluate(`go('alerts')`);await choose('Browser transaction alert');
   await evaluate(`alertRequests.length=0;button('#alert-detail','Open transaction').click();waitFor(()=>document.getElementById('lookup-form').dataset.busy==='false')`);
   assert.deepEqual(await evaluate('alertRequests.map(r=>r.url)'),['/api/greedy-collector/resolve','/api/greedy-collector/lookup/tx']);

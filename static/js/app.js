@@ -1,3 +1,4 @@
+import {refreshAttribution} from "./attribution_summary.js";
 import {byId} from "./ui.js";
 import {initWallet} from "./wallet.js";
 import {initGraph} from "./graph.js";
@@ -6,6 +7,8 @@ import {initAlerts} from "./alerts.js";
 import {initCases} from "./cases.js";
 import {initLabels} from "./labels.js";
 import {initResearch} from "./research.js";
+
+import {initAttribution} from "./attribution.js";
 
 function navigate(name, id) {
   if (!byId(`${name}-workspace`)) return;
@@ -16,6 +19,12 @@ function navigate(name, id) {
   if (name === "cases") loadCases(id);
   if (name === "labels") loadLabels(id);
   if (name === "research") loadResearch();
+  if (name === "attribution") loadAttribution(id);
+  if (name === "wallet" && !byId("results").hidden) refreshAttribution(byId("wallet-workspace"));
+  if (name === "graph") queueMicrotask(() => {
+    // A handoff can immediately submit a replacement graph after navigation.
+    if (byId("graph-workspace").querySelector("form").dataset.busy !== "true") refreshAttribution(byId("graph-workspace"));
+  });
 }
 initWallet(navigate);
 initGraph();
@@ -24,6 +33,8 @@ const loadAlerts = initAlerts(navigate);
 const loadCases = initCases();
 const loadLabels = initLabels();
 const loadResearch = initResearch();
+const loadAttribution = initAttribution();
+document.addEventListener("open-attribution", event => navigate("attribution", event.detail));
 document.addEventListener("open-label", event => navigate("labels", event.detail.id));
 document.addEventListener("open-case", event => navigate("cases", event.detail.id));
 document.addEventListener("open-alert", event => navigate("alerts", event.detail.id));

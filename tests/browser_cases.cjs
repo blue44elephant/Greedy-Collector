@@ -47,7 +47,8 @@ module.exports=async({evaluate,call,work})=>{
   assert.deepEqual(attachments.map(item=>fs.readFileSync(path.join(work,'data',item.entity_ref),'utf8')),['First harmless attachment','Second harmless attachment']);
   assert.equal(await evaluate("!!button('#case-attachments','Download')"),false);
   await evaluate(`caseRequests.length=0;button('#case-entities','Investigate wallet').click();waitFor(()=>document.getElementById('lookup-form').dataset.busy==='false')`);
-  assert.deepEqual(await evaluate('caseRequests.map(r=>r.url)'),['/api/greedy-collector/resolve','/api/greedy-collector/lookup/address','/api/greedy-collector/labels']);
+  assert.deepEqual(await evaluate('caseRequests.filter(r=>!r.url.startsWith("/api/greedy-collector/attribution/claims?")).map(r=>r.url)'),['/api/greedy-collector/resolve','/api/greedy-collector/lookup/address','/api/greedy-collector/labels']);
+  assert.equal(await evaluate('caseRequests.filter(r=>r.url.startsWith("/api/greedy-collector/attribution/claims?")).length'),1);
   await open();
   await evaluate(`caseRequests.length=0;button('#case-entities','Open transaction').click();waitFor(()=>document.getElementById('lookup-form').dataset.busy==='false')`);
   assert.deepEqual(await evaluate('caseRequests.map(r=>r.url)'),['/api/greedy-collector/resolve','/api/greedy-collector/lookup/tx']);

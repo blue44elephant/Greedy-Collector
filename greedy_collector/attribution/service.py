@@ -357,3 +357,41 @@ class AttributionService:
         result = self._page(Event, query, limit=limit)
         result["next_sequence"] = result["items"][-1]["sequence"] if result.pop("next_offset") is not None else None
         return result
+
+
+    def claim_evidence_details(self, claim_id, **filters):
+        """Bounded link page with one batched capture-summary query for HTTP views."""
+        result = self.list_claim_evidence(claim_id, **filters)
+        identifiers = [item['evidence_id'] for item in result['items']]
+        evidence = {row.id: row_data(row) for row in self.db.scalars(
+            select(Evidence).where(Evidence.id.in_(identifiers))).all()} if identifiers else {}
+        fields = ('id', 'title', 'evidence_type', 'source_name', 'source_url',
+                  'source_locator', 'origin', 'source_reliability', 'captured_at')
+        for item in result['items']:
+            item['evidence'] = {key: evidence[item['evidence_id']][key] for key in fields}
+        return result
+
+    def claim_detail(self, claim_id):
+        """Current proposition, entity and bounded evidence; history stays separate."""
+        result = self.get_claim(claim_id)
+        result['entity'] = self.get_entity(result['entity_id'])
+        counts = dict(self.db.execute(select(Link.stance, func.count()).where(
+            Link.claim_id == claim_id, Link.withdrawn_at.is_(None)).group_by(Link.stance)).all())
+        result['active_evidence_counts'] = {stance: counts.get(stance, 0) for stance in STANCES}
+        result['active_evidence'] = {**self.claim_evidence_details(claim_id), 'limit': 50, 'offset': 0}
+        return result
+
+    def event_page(self, *, claim_id=None, entity_id=None, evidence_id=None, limit=50, offset=0):
+        """HTTP offset pagination with total across the entire selected stream.
+
+        The AT-1 sequence-cursor method remains available with its original semantics.
+        """
+        targets = [(Claim, 'claim_id', claim_id), (Entity, 'entity_id', entity_id),
+                   (Evidence, 'evidence_id', evidence_id)]
+        selected = [(model, field, identifier) for model, field, identifier in targets if identifier is not None]
+        if len(selected) != 1:
+            raise AttributionError('Choose exactly one event scope')
+        model, field, identifier = selected[0]
+        self._get(model, identifier)
+        query = select(Event).where(getattr(Event, field) == identifier).order_by(Event.sequence)
+        return self._page(Event, query, limit=limit, offset=offset)

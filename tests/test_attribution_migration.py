@@ -94,7 +94,7 @@ def test_empty_downgrade_and_populated_history_protection(tmp_path,monkeypatch):
     engine.dispose()
 
 
-def test_normal_startup_has_no_attribution_routes_workspaces_or_automatic_schema(tmp_path):
+def test_normal_startup_has_guarded_attribution_routes_but_no_automatic_schema(tmp_path):
     code='''
 from unittest.mock import patch
 from fastapi.testclient import TestClient
@@ -109,10 +109,11 @@ with patch.object(httpx.AsyncClient,'request',side_effect=AssertionError('No ext
         for route in ['/','/health','/docs','/openapi.json']:
             assert client.get(route).status_code==200
         html=client.get('/').text
-        assert html.count('data-workspace=')==7
-        assert 'data-workspace="attribution"' not in html
+        assert html.count('data-workspace=')==8
+        assert 'data-workspace="attribution"' in html
         paths=client.get('/openapi.json').json()['paths']
-        assert not any('/attributions' in p or p.endswith('/entities') and '/cases/' not in p for p in paths)
+        assert '/api/greedy-collector/attribution/entities' in paths
+        assert client.get('/api/greedy-collector/attribution/entities').status_code==503
         assert not any(t.startswith('attribution_') for t in inspect(engine).get_table_names())
 assert not scheduler.running
 '''

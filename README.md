@@ -234,7 +234,7 @@ The exact, case-sensitive storage key is `(chain,address,label,source)`. Manual 
 
 The calibrated risk policy is unchanged: Sanctioned/Scam/Mixer counterparty contact has raw contributions of **40/30/25**, subject to existing overlap/category caps. Exchange/Bridge/Unknown contribute **0**. A label on the queried wallet is not a newly introduced attribution rule. Wallet risk cards show the label evidence and applied contribution; current annotations may differ from historical saved findings. Labels do not automatically rescore stored results or issue external research requests.
 
-A label is an analyst/source annotation associated with an address, not proof of ownership or confirmed attribution. A future attribution subsystem would need richer entity relationships, evidence, provenance, confidence, and analyst assessment. No automatic attribution, sanctions ingestion, or sample labels are included here.
+A label is an analyst/source annotation associated with an address, not proof of ownership or confirmed attribution. The separate Attribution workspace organizes explicit claims and immutable evidence; Label-to-evidence handoff is not yet available. No automatic attribution, sanctions ingestion, or sample labels are included here.
 
 ## Research â€” public records & screening
 
@@ -263,3 +263,21 @@ Analysts can persist **Unreviewed**, **Potential match**, **False positive**, or
 Cases currently have no research-match entity type. Use **Open source** / **Copy result**, then explicitly add an analyst note in Cases; no automatic case association occurs. Previous research-run browsing is not currently exposed. Runs and reviews are stored in SQLite, but this page retains only the current result until reload/close. Copy material needed for investigation before closing. Existing stored runs are not rewritten.
 
 The existing endpoints remain `GET /api/greedy-collector/kyc/sources`, `POST /api/greedy-collector/kyc/screen`, and `PATCH /api/greedy-collector/kyc/matches/{match_id}`. There are no new sources, migrations, attribution rules, or frontend dependencies. See [the complete source capability audit](docs/RESEARCH_CAPABILITIES.md) for every source's exact inputs, outputs, URL behavior, and failure handling. Research browser checks use only temporary SQLite state and test-only provider fixtures.
+
+## Attribution — evidence-backed entity claims
+
+The Attribution workspace provides paginated **Claims** and **Entities** views for explicit manual investigation. Create an entity descriptor, enter a public Bitcoin/Ethereum wallet claim, capture or reuse immutable evidence, and record an assessment after reviewing supporting, contradicting, and contextual material. Contradictions require explicit acknowledgement and discussion. History, version conflicts, archival, link withdrawal/restoration, and evidence replacement remain inspectable.
+
+Attribution is evidence-backed analyst assessment. It is not automatic wallet-owner discovery. Creating attribution does not change risk or automatically derive claims from Labels, Research, blockchain activity, or Cases. No source URLs or external providers are queried by this workspace.
+
+Attribution requires a database explicitly prepared through the existing migration **20260912_01**. If the schema is unavailable, the workspace displays an initialization message; it does not migrate or seed the database. Follow the existing migration guidance before preparing a legacy database. Other workspaces remain usable.
+
+See [the Attribution workspace guide](docs/ATTRIBUTION_AT3.md) for workflows, evidence immutability, concurrency, limitations, and isolated browser verification.
+
+## Wallet and Graph attribution (AT-4)
+
+Wallet and selected Graph wallets show persisted claims, separate entities and relationships, assessments, review-required state, and evidence stance counts. Open an exact claim or explicitly create one with the public wallet subject prefilled; choose the entity, relationship, and rationale before saving. Summaries refresh on workspace return or manual refresh, with pagination and an archived/rejected toggle.
+
+Graph offers an optional attribution overlay, off by default, for current assessed claims on the selected wallet and current summary page. Distinct entity nodes and claim arrows supplement the unchanged wallet/transaction graph; claims are not transactions or blockchain hops. No graph-wide attribution fetch, ownership inference, provider request, or automatic assessment is added. Attribution failures or an unmigrated database leave ordinary Wallet/Graph investigation usable.
+
+See [AT-4 behavior, boundaries, and isolated verification](docs/ATTRIBUTION_AT4.md), including existing graph limitations. Labels/Research evidence handoffs and Cases/report integration remain future increments.

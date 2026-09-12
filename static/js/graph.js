@@ -1,3 +1,5 @@
+import {attributionSummary,graphSubjectIsUnambiguous} from "./attribution_summary.js";
+import {attributionOverlay} from "./attribution_overlay.js";
 import {addToCaseButton} from "./case_actions.js";
 import {readLabels, labelsFor, labelCards} from "./label_ui.js";
 import {api} from "./api.js";
@@ -42,7 +44,10 @@ export function renderGraph(host, graph, chain, labels = null) {
   const marker = svgNode("marker", {id:"graph-arrow", viewBox:"0 0 10 10", refX:10, refY:5, markerWidth:8, markerHeight:8, orient:"auto"});
   marker.append(svgNode("path", {d:"M 0 0 L 10 5 L 0 10 z", fill:"#607b90"})); defs.append(marker); svg.append(defs);
   const detail = element("div", undefined, "node-detail"); detail.id = "graph-detail";
+  const attributionHost=element('div');attributionHost.id='graph-attribution';
+  let overlay=null,selectionEpoch=0;
   const clear = () => {
+    selectionEpoch++;attributionHost.replaceChildren();overlay?.clear();
     svg.querySelectorAll(".selected").forEach(node => {node.classList.remove("selected"); node.setAttribute("aria-pressed", "false");});
     detail.replaceChildren(element("p", "Select an entity or connection to inspect it. Drag empty space to pan. Focus entities are blue; selection has an amber outline.", "muted small"));
   };
@@ -88,12 +93,17 @@ export function renderGraph(host, graph, chain, labels = null) {
         element("p", `${node.chain || chain} · ${node.is_focus ? "Focus entity" : "Related entity"} · ${count} stored transaction relationships`),
         action("Investigate wallet", () => investigate(node.chain || chain, node.id)),
         addToCaseButton("wallet", node.chain || chain, node.id), labelCards(annotations));
+      const subject={...node,chain:node.chain||chain};
+      if(graphSubjectIsUnambiguous(graph,subject)){
+        overlay.source(subject,position);const epoch=selectionEpoch;
+        attributionHost.replaceChildren(attributionSummary({chain:subject.chain,address:subject.id,graph:true,onPage:rows=>{if(epoch===selectionEpoch)overlay.claims(rows);}}));
+      }else attributionHost.replaceChildren(element('h3','Attribution'),element('p','This graph contains ambiguous case-folded address keys. Inspect the exact public address in Wallet or Attribution before attaching claims.','bounded-note'));
     });
     svg.append(group);
   }
   const ratio = 900 / 560;
   function fit() {
-    const [x,y,w,h] = layout.bounds, width = Math.max(w,h*ratio), height=width/ratio;
+    const [x,y,w,h] = overlay?.bounds() || layout.bounds, width = Math.max(w,h*ratio), height=width/ratio;
     return [x+(w-width)/2,y+(h-height)/2,width,height];
   }
   const focus = layout.positions.get(nodeKey(layout.nodes.find(node => node.is_focus)?.id || layout.nodes[0]?.id || ""));
@@ -109,11 +119,12 @@ export function renderGraph(host, graph, chain, labels = null) {
     action("Reset view",()=>{view=[...initial];setView();clear();}), action("Zoom in",()=>zoom(.8)), action("Zoom out",()=>zoom(1.25)));
   svg.addEventListener("wheel",event=>{event.preventDefault();zoom(event.deltaY>0?1.1:.9);},{passive:false});
   let drag;
-  svg.addEventListener("pointerdown",event=>{if(event.target.closest(".graph-node,.graph-edge"))return;drag=[event.clientX,event.clientY,...view];svg.setPointerCapture(event.pointerId);});
+  svg.addEventListener("pointerdown",event=>{if(event.target.closest(".graph-node,.graph-edge,.attribution-entity,.attribution-edge"))return;drag=[event.clientX,event.clientY,...view];svg.setPointerCapture(event.pointerId);});
   svg.addEventListener("pointermove",event=>{if(!drag)return;const scale=Math.min(svg.clientWidth/view[2],svg.clientHeight/view[3]);view[0]=drag[2]-(event.clientX-drag[0])/scale;view[1]=drag[3]-(event.clientY-drag[1])/scale;setView();});
   ["pointerup","pointercancel","lostpointercapture"].forEach(type=>svg.addEventListener(type,()=>{drag=null;}));
   svg.addEventListener("keydown",event=>{if(event.key==="Escape")clear();});
   const records = element("details"); records.append(element("summary", `All returned transaction records (${graph.edges.length})`));
   records.addEventListener("toggle",()=>{if(records.open&&!records.querySelector("table"))records.append(edgeTable(graph.edges));});
-  host.append(tools,svg,detail,records); setView(); clear();
+  overlay=attributionOverlay({svg,tools,detail,layout,getView:()=>view,setView:value=>{view=[...value];setView();}});
+  host.append(tools,svg,detail,attributionHost,records); setView(); clear();
 }
