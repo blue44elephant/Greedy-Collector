@@ -1,7 +1,8 @@
 from datetime import datetime
 from typing import Any, Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator, field_validator
+import re
 
 
 ChainName = Literal["ethereum", "bitcoin"]
@@ -74,12 +75,22 @@ class AnalystNoteCreate(BaseModel):
 
 
 class ManualLabelCreate(BaseModel):
-    chain: str = "any"
-    address: str
-    label: str
+    chain: Literal["bitcoin", "ethereum", "any"] = "any"
+    address: str = Field(min_length=1, max_length=128)
+    label: str = Field(min_length=1, max_length=255)
     type: Literal["Exchange", "Mixer", "Bridge", "Scam", "Sanctioned", "Unknown"]
-    source: str = "Manual analyst label"
+    source: str = Field(default="Manual analyst label", min_length=1, max_length=255)
     confidence: float = Field(default=0.7, ge=0, le=1)
+
+
+    @model_validator(mode="after")
+    def validate_public_address(self):
+        if not self.address.strip() or not self.label.strip() or not self.source.strip():
+            raise ValueError("Address, label, and source must not be blank")
+        if self.chain != "any":
+            from .chains import get_chain_adapter
+            get_chain_adapter(self.chain).validate_address(self.address)
+        return self
 
 
 class KycQuery(BaseModel):
@@ -90,6 +101,29 @@ class KycQuery(BaseModel):
     identifier: str | None = None
     domain: str | None = None
     include_manual_sources: bool = True
+
+
+    @field_validator("name")
+    @classmethod
+    def validate_research_name(cls, value):
+        value=value.strip()
+        if len(value)<2:
+            raise ValueError("Enter a research name of at least two characters")
+        return value
+
+    @field_validator("domain")
+    @classmethod
+    def validate_research_domain(cls, value):
+        if value is None or not value.strip():
+            return None
+        try:
+            domain=value.strip().rstrip(".").encode("idna").decode("ascii").lower()
+        except UnicodeError as exc:
+            raise ValueError("Enter a domain name without a URL, path, or port") from exc
+        parts=domain.split(".")
+        if len(domain)>253 or len(parts)<2 or any(not re.fullmatch(r"[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?",part) for part in parts) or parts[-1].isdigit():
+            raise ValueError("Enter a domain name without a URL, path, or port")
+        return domain
 
 
 class KycReviewUpdate(BaseModel):

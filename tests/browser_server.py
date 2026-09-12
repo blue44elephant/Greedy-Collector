@@ -74,7 +74,9 @@ for adapter in [BitcoinAdapter, EthereumAdapter]:
     adapter.transactions = AsyncMock(side_effect=transactions)
 
 async def research_request(url, **kwargs):
-    if "opensanctions" in url: return {"results": [{"caption":"Fixture Company", "id":"test-entity", "schema":"Company", "datasets":["test"]}]}
+    if "opensanctions" in url:
+        if kwargs.get("params", {}).get("q") == "No result fixture": return {"results": []}
+        return {"results": [{"caption":"Fixture Company", "id":"test-entity", "schema":"Company", "datasets":["test"], "api_key":"browser-test-only-key", "public_evidence":"Retained source evidence"}]}
     if "interpol" in url: return {"_embedded":{"notices":[]}}
     if "sec.gov" in url: return {}
     if "gdelt" in url: return {"articles":[]}

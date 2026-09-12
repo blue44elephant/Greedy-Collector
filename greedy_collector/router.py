@@ -6,6 +6,7 @@ import re
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, Response, UploadFile
 from sqlalchemy.orm import Session
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy import func, select
 
 from .chains.base import ChainDataError
@@ -319,7 +320,11 @@ async def add_case_attachment(
 def manual_label(payload: ManualLabelCreate, db: Session = Depends(get_db)):
     row = Label(**(payload.model_dump() if hasattr(payload, "model_dump") else payload.dict()))
     db.add(row)
-    db.commit()
+    try:
+        db.commit()
+    except IntegrityError as exc:
+        db.rollback()
+        raise HTTPException(status_code=409, detail="This label already exists for this chain, address, label name, and source. CSV import can update its type and confidence.") from exc
     db.refresh(row)
     return row_dict(row)
 
@@ -365,8 +370,8 @@ async def import_labels(file: UploadFile = File(...), db: Session = Depends(get_
     try:
         content = (await file.read()).decode("utf-8-sig")
         return service.import_labels(db, content)
-    except (UnicodeDecodeError, ValueError) as exc:
-        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except (UnicodeDecodeError, ValueError, csv.Error) as exc:
+        raise HTTPException(status_code=422, detail="Invalid label CSV. Check required columns and each row: chain, address, label, type, source, confidence (0 to 1).") from exc
 
 
 @router.get("/dashboard")
@@ -376,19 +381,8 @@ def dashboard(db: Session = Depends(get_db)):
 
 @router.get("/kyc/sources")
 def kyc_sources():
-    return {
-        "sources": [
-            {
-                "id": item.id,
-                "name": item.name,
-                "category": item.category,
-                "mode": item.mode,
-                "credential_env": item.credential_env,
-                "note": item.note,
-            }
-            for item in SOURCE_CATALOG
-        ]
-    }
+    from .kyc.presentation import source_capabilities
+    return source_capabilities()
 
 
 @router.post("/kyc/screen")
@@ -412,7 +406,8 @@ def kyc_review(
         raise HTTPException(status_code=404, detail="KYC match not found")
     row.review_status = payload.review_status
     db.commit()
-    return row_dict(row)
+    from .kyc.presentation import sanitize_research
+    return sanitize_research(row_dict(row))
 
 
 @router.get("/reports/{case_id}")

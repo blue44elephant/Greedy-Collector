@@ -162,3 +162,32 @@ input[type="checkbox"] { width:20px; height:20px; min-height:20px; }
 #alerts-list .badge { display:inline-block; white-space:nowrap; }
 #alerts-list button { white-space:nowrap; padding:8px 14px; }
 #alerts-list td:nth-child(5) { white-space:normal; min-width:160px; }
+
+.labels-tools { display:grid; grid-template-columns:minmax(0,2fr) minmax(260px,1fr); gap:24px; align-items:start; }
+#labels-filter { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); }
+#labels-list td { white-space:nowrap; overflow-wrap:normal; }
+#labels-list td:nth-child(1), #labels-list td:nth-child(5) { white-space:normal; min-width:150px; max-width:260px; overflow-wrap:anywhere; }
+#label-detail .metadata { margin:20px 0; }
+.label-cards { display:grid; gap:12px; margin:12px 0; min-width:0; }
+.label-cards:empty { display:none; }
+.label-card { padding:12px; border:1px solid #dce2e8; border-radius:8px; background:#f8fafc; overflow-wrap:anywhere; }
+.label-card p { margin:6px 0; }
+.label-card button { padding:7px 12px; }
+#wallet-labels { margin:18px 0; }
+.counterparties li { flex-wrap:wrap; }
+.counterparties .label-cards { flex-basis:100%; }
+@media (max-width:850px) { .labels-tools { grid-template-columns:1fr; } #labels-filter { grid-template-columns:1fr; } }
+
+/* Research uses the existing application components, with bounded evidence and tables. */
+#research-query { grid-template-columns:minmax(180px,1fr) minmax(180px,1fr) auto auto; align-items:end; }
+#research-query input[type="checkbox"] { width:auto; align-self:start; }
+#research-workspace td { min-width:110px; overflow-wrap:anywhere; }
+#research-matches td:last-child, #research-matches td:nth-child(5) { white-space:nowrap; }
+#research-workspace summary { cursor:pointer; padding:10px 0; }
+#research-capabilities .table-scroll, #research-manual .table-scroll { max-height:420px; overflow:auto; }
+#research-detail { border-left:4px solid #28588a; scroll-margin-top:24px; }
+#research-detail pre { max-height:360px; overflow:auto; white-space:pre-wrap; overflow-wrap:anywhere; }
+#research-detail > a { overflow-wrap:anywhere; }
+#research-review { grid-template-columns:minmax(200px,320px) auto; justify-content:start; align-items:end; }
+@media(max-width:950px) { #research-query { grid-template-columns:1fr 1fr; } }
+@media(max-width:600px) { #research-query, #research-review { grid-template-columns:1fr; } }

@@ -1,3 +1,4 @@
+import {openLabel} from "./label_ui.js";
 import {api} from "./api.js";
 import {byId, element, panel, table, shortValue, dateText, details, fields, action, run, UserError, chains} from "./ui.js";
 import {investigate} from "./wallet.js";
@@ -62,6 +63,7 @@ export function initCases() {
         controls.append(action("Investigate wallet", () => investigate(chain,item.entity_ref)));
         if (chains.some(([value]) => value === chain)) controls.append(action("Open graph", () => openGraph(chain,item.entity_ref)));
       }
+      if (item.entity_type === "label") controls.append(action("Open label", () => openLabel(item.entity_ref)));
       if (item.entity_type === "transaction") controls.append(action("Open transaction", () => investigate(chain,item.entity_ref)));
       return [item.entity_type, shortValue(item.entity_ref), details("Stored metadata", item.metadata_json), controls];
     }), "No entities have been added to this case."));

@@ -17,6 +17,7 @@ class KycScreeningEngine:
         self.settings = get_settings()
 
     async def screen(self, query: KycQuery) -> dict:
+        source_ids = ["opensanctions", "interpol", "sec_edgar", "gdelt"]
         tasks = [
             self._opensanctions(query),
             self._interpol(query),
@@ -24,6 +25,7 @@ class KycScreeningEngine:
             self._gdelt(query),
         ]
         if query.domain:
+            source_ids.extend(["crtsh", "urlscan", "virustotal"])
             tasks.extend(
                 [
                     self._crtsh(query.domain),
@@ -33,10 +35,10 @@ class KycScreeningEngine:
             )
         batches = await asyncio.gather(*tasks, return_exceptions=True)
         matches, checked, unavailable = [], [], []
-        for batch in batches:
+        for source_id, batch in zip(source_ids, batches):
             if isinstance(batch, Exception):
-                logger.warning("KYC source failed: %s", batch)
-                continue
+                logger.warning("KYC source failed: %s", source_id)
+                batch = self._unavailable(source_id, "Source unavailable")
             matches.extend(batch.get("matches", []))
             target = checked if batch.get("checked") else unavailable
             target.append(
@@ -316,4 +318,5 @@ class KycScreeningEngine:
 
     @staticmethod
     def _unavailable(source: str, reason: str) -> dict:
-        return {"source": source, "checked": False, "reason": reason, "matches": []}
+        safe_reason = "Optional API_KEY is not configured" if "API_KEY is not configured" in reason else "Source unavailable. Check server configuration or try again later."
+        return {"source": source, "checked": False, "reason": safe_reason, "matches": []}

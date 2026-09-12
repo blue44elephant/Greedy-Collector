@@ -32,7 +32,7 @@ exports.review=async({evaluate,call,work})=>{
     assert.equal(await evaluate("document.querySelector('#alert-review [name=notes]').value"),'Persisted browser analyst note');
   }
   await evaluate(`alertRequests.length=0;button('#alert-detail','Investigate wallet').click();waitFor(()=>document.getElementById('lookup-form').dataset.busy==='false')`);
-  assert.deepEqual(await evaluate('alertRequests.map(r=>r.url)'),['/api/greedy-collector/resolve','/api/greedy-collector/lookup/address']);
+  assert.deepEqual(await evaluate('alertRequests.map(r=>r.url)'),['/api/greedy-collector/resolve','/api/greedy-collector/lookup/address','/api/greedy-collector/labels']);
   await evaluate(`go('alerts')`);await choose('Browser transaction alert');
   await evaluate(`alertRequests.length=0;button('#alert-detail','Open transaction').click();waitFor(()=>document.getElementById('lookup-form').dataset.busy==='false')`);
   assert.deepEqual(await evaluate('alertRequests.map(r=>r.url)'),['/api/greedy-collector/resolve','/api/greedy-collector/lookup/tx']);
@@ -40,7 +40,8 @@ exports.review=async({evaluate,call,work})=>{
   assert.ok(await evaluate("document.getElementById('alert-detail').innerText.includes('No transaction reference')"));
   assert.equal(await evaluate("!!button('#alert-detail','Open transaction')"),false);
   await evaluate(`alertRequests.length=0;button('#alert-detail','Open graph').click();waitFor(()=>document.querySelector('#graph-workspace form').dataset.busy==='false')`);
-  assert.equal(await evaluate('alertRequests.length'),1);
+  assert.equal(await evaluate('alertRequests.length'),2);
+  assert.equal(await evaluate('alertRequests[1].url'),'/api/greedy-collector/labels');
   assert.ok(await evaluate("alertRequests[0].url.includes('/graph?hops=')"));
   assert.equal(await evaluate("document.querySelector('#graph-workspace [name=address]').value"),'0x'+'4'.repeat(40));
   await evaluate(`go('alerts')`);await choose('Browser risk-only alert');

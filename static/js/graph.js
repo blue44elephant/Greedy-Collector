@@ -1,4 +1,5 @@
 import {addToCaseButton} from "./case_actions.js";
+import {readLabels, labelsFor, labelCards} from "./label_ui.js";
 import {api} from "./api.js";
 import {byId, panel, element, makeForm, chainAddress, table, shortValue, action, dateText, UserError} from "./ui.js";
 import {investigate} from "./wallet.js";
@@ -20,7 +21,8 @@ export function initGraph() {
     output.replaceChildren(element("h2", "Stored relationships"));
     if (!data.address.trim()) throw new UserError("Enter a public wallet address.");
     const graph = await api(`/address/${data.chain}/${encodeURIComponent(data.address.trim())}/graph?hops=${data.hops}`);
-    renderGraph(output, graph, data.chain);
+    const labels = await readLabels();
+    renderGraph(output, graph, data.chain, labels);
   });
   controls.append(form); host.append(controls, output);
   output.append(element("p", "Search a wallet, then load its stored relationships here.", "empty"));
@@ -29,7 +31,7 @@ export function initGraph() {
   });
 }
 
-export function renderGraph(host, graph, chain) {
+export function renderGraph(host, graph, chain, labels = null) {
   host.replaceChildren(element("h2", "Stored relationships"));
   host.append(element("p", `Requested hops: ${graph.requested_hops} · Available: ${graph.available_hops} · ${graph.nodes.length} returned entities · ${graph.edges.length} transaction records`, "muted small"));
   if (!graph.nodes.length && !graph.edges.length) { host.append(element("p", "No stored relationships are available for this address.", "empty")); return; }
@@ -70,20 +72,22 @@ export function renderGraph(host, graph, chain) {
   }
   for (const node of layout.nodes) {
     const position = layout.positions.get(nodeKey(node.id));
-    const named = node.label && node.label !== node.id;
+    const annotations = labelsFor(labels || [], node.chain || chain, node.id);
+    const displayLabel = annotations[0]?.label || (labels === null ? node.label : node.id);
+    const named = displayLabel && displayLabel !== node.id;
     const group = svgNode("g", {class:`graph-node${node.is_focus ? " is-focus" : ""}`, "data-node-id":node.id,
       "data-depth":position.depth ?? "unconnected", transform:`translate(${position.x} ${position.y})`, "aria-label":`Select ${node.label || node.id}`});
     group.append(svgNode("rect", {width:position.width, height:position.height, rx:9}));
-    group.append(svgNode("text", {x:13,y:23,class:"entity-name"}, named ? node.label.length > 28 ? node.label.slice(0,25)+"…" : node.label : compact(node.id)));
+    group.append(svgNode("text", {x:13,y:23,class:"entity-name"}, named ? displayLabel.length > 28 ? displayLabel.slice(0,25)+"…" : displayLabel : compact(node.id)));
     group.append(svgNode("text", {x:13,y:43,class:"entity-address"}, named ? compact(node.id) : "Wallet entity"));
-    group.append(svgNode("text", {x:13,y:63,class:"entity-chain"}, `${node.chain || chain}${node.is_focus ? " · FOCUS" : ""}`));
-    group.append(svgNode("title", {}, `${node.label || node.id}\n${node.id}\n${node.chain || chain}`));
+    group.append(svgNode("text", {x:13,y:63,class:"entity-chain"}, `${node.chain || chain}${annotations[0] ? " · " + annotations[0].type : ""}${node.is_focus ? " · FOCUS" : ""}`));
+    group.append(svgNode("title", {}, `${displayLabel || node.id}\n${node.id}\n${node.chain || chain}`));
     selectable(group, () => {
       const count = graph.edges.filter(edge => nodeKey(edge.source) === nodeKey(node.id) || nodeKey(edge.target) === nodeKey(node.id)).length;
-      detail.replaceChildren(element("h3", named ? node.label : "Wallet entity"), element("p", node.id, "full-address"),
+      detail.replaceChildren(element("h3", named ? displayLabel : "Wallet entity"), element("p", node.id, "full-address"),
         element("p", `${node.chain || chain} · ${node.is_focus ? "Focus entity" : "Related entity"} · ${count} stored transaction relationships`),
         action("Investigate wallet", () => investigate(node.chain || chain, node.id)),
-        addToCaseButton("wallet", node.chain || chain, node.id));
+        addToCaseButton("wallet", node.chain || chain, node.id), labelCards(annotations));
     });
     svg.append(group);
   }

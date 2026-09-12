@@ -19,6 +19,8 @@
     <button type="button" data-workspace="monitoring" aria-current="false">Monitoring</button>
     <button type="button" data-workspace="alerts" aria-current="false">Alerts</button>
     <button type="button" data-workspace="cases" aria-current="false">Cases</button>
+    <button type="button" data-workspace="labels" aria-current="false">Labels</button>
+    <button type="button" data-workspace="research" aria-current="false">Research</button>
   </nav>
   <main>
     <div id="wallet-workspace" class="workspace">
@@ -49,6 +51,7 @@
         <p id="result-address" class="full-address"></p>
         <button id="wallet-graph" type="button" class="secondary">Open graph</button>
         <span id="wallet-case-action"></span>
+        <div id="wallet-labels"></div>
         <dl class="metrics">
           <div><dt>Balance</dt><dd id="balance"></dd></div>
           <div><dt>Risk score</dt><dd id="risk-score"></dd></div>
@@ -99,6 +102,8 @@
     <section id="monitoring-workspace" class="workspace" hidden></section>
     <section id="alerts-workspace" class="workspace" hidden></section>
     <section id="cases-workspace" class="workspace" hidden></section>
+    <section id="labels-workspace" class="workspace" hidden></section>
+    <section id="research-workspace" class="workspace" hidden></section>
     <footer>Greedy Collector · Public blockchain records, stored locally.</footer>
     <noscript><p class="error">Enable JavaScript to use wallet lookup. The API is also available through <a href="/docs">Swagger</a>.</p></noscript>
   </main>

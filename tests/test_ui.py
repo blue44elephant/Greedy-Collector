@@ -59,7 +59,7 @@ def test_ui_page(ui_client):
 
 @pytest.mark.parametrize("filename,media_type", [
     *[(f"js/{name}.js", "javascript") for name in
-      ["api", "ui", "app", "wallet", "graph", "graph_layout", "monitoring", "alerts", "cases", "case_actions"]],
+      ["api", "ui", "app", "wallet", "graph", "graph_layout", "monitoring", "alerts", "cases", "case_actions", "labels", "label_ui", "research"]],
     ("app.css", "text/css"),
 ])
 def test_ui_assets(ui_client, filename, media_type):
@@ -214,10 +214,10 @@ def test_core_api_and_empty_graph_remain_available(ui_client):
 @pytest.mark.parametrize("workspace", ["cases", "labels", "research"])
 def test_frontend_workspace_scope(ui_client, workspace):
     client, _ = ui_client
-    if workspace == "cases":
-        assert 'data-workspace="cases"' in client.get("/").text
-        assert './cases.js' in client.get('/static/js/app.js').text
-        assert client.get('/static/js/cases.js').status_code == 200
+    if workspace in {"cases", "labels", "research"}:
+        assert f'data-workspace="{workspace}"' in client.get("/").text
+        assert f'./{workspace}.js' in client.get('/static/js/app.js').text
+        assert client.get(f'/static/js/{workspace}.js').status_code == 200
         return
     assert f'data-workspace="{workspace}"' not in client.get("/").text
     assert f'./{workspace}.js' not in client.get("/static/js/app.js").text
@@ -318,7 +318,7 @@ def test_monitoring_assets_and_status_keep_credentials_private(ui_client, monkey
     monkeypatch.setattr(main.settings, "etherscan_api_key", secret)
     monkeypatch.setattr(main.settings, "alchemy_api_key", secret)
     for path in ["/", "/api/greedy-collector/status", "/static/app.css",
-                 *[f"/static/js/{name}.js" for name in ["api", "ui", "app", "wallet", "graph", "graph_layout", "monitoring", "alerts", "cases", "case_actions"]]]:
+                 *[f"/static/js/{name}.js" for name in ["api", "ui", "app", "wallet", "graph", "graph_layout", "monitoring", "alerts", "cases", "case_actions", "labels", "label_ui", "research"]]]:
         response = client.get(path)
         assert response.status_code == 200
         assert secret not in response.text

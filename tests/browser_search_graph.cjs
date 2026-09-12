@@ -21,7 +21,7 @@ module.exports=async({evaluate,call,work})=>{
     assert.ok(await evaluate("!!button('#transaction-result','Investigate wallet')"));
   }
   await evaluate(`searchRequests.length=0;button('#transaction-result','Investigate wallet').click();waitFor(()=>document.getElementById('lookup-form').dataset.busy==='false')`);
-  assert.deepEqual(await evaluate('searchRequests.map(r=>r.url)'),['/api/greedy-collector/resolve','/api/greedy-collector/lookup/address']);
+  assert.deepEqual(await evaluate('searchRequests.map(r=>r.url)'),['/api/greedy-collector/resolve','/api/greedy-collector/lookup/address','/api/greedy-collector/labels']);
   await evaluate(`document.getElementById('wallet-graph').click();document.querySelector('#graph-workspace form').requestSubmit();waitFor(()=>document.querySelector('#graph-workspace form').dataset.busy==='false')`);
   const positions=await evaluate("[...document.querySelectorAll('.graph-node')].map(n=>[n.dataset.nodeId,n.getAttribute('transform')])");
   assert.equal(new Set(positions.map(row=>row[0])).size,positions.length);
@@ -48,7 +48,7 @@ module.exports=async({evaluate,call,work})=>{
   const metrics=await call('Page.getLayoutMetrics');
   await call('Page.captureScreenshot',{format:'png',captureBeyondViewport:true,clip:{x:0,y:0,width:metrics.cssContentSize.width,height:metrics.cssContentSize.height,scale:1}}).then(result=>fs.writeFileSync(path.join(work,'graph.png'),Buffer.from(result.data,'base64')));
   await evaluate(`document.querySelector('.graph-node').dispatchEvent(new MouseEvent('click',{bubbles:true}));searchRequests.length=0;button('#graph-detail','Investigate wallet').click();waitFor(()=>document.getElementById('lookup-form').dataset.busy==='false')`);
-  assert.deepEqual(await evaluate('searchRequests.map(r=>r.url)'),['/api/greedy-collector/resolve','/api/greedy-collector/lookup/address']);
+  assert.deepEqual(await evaluate('searchRequests.map(r=>r.url)'),['/api/greedy-collector/resolve','/api/greedy-collector/lookup/address','/api/greedy-collector/labels']);
   await evaluate('window.fetch=window.originalSearchFetch');
   console.log('Unified search and graph browser passed: Enter, local resolution, unknown input, address/transaction dispatch, investigation, stable entities, connection records, selection, focus/fit/reset.');
 };

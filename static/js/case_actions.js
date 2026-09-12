@@ -29,7 +29,7 @@ export function openGraph(chain, address) {
   document.dispatchEvent(new CustomEvent("wallet-selected", {detail:{chain,address}}));
   document.querySelector('[data-workspace="graph"]').click(); form.requestSubmit();
 }
-export function addToCaseButton(kind, chain, reference) {
+export function addToCaseButton(kind, chain, reference, metadata = null) {
   return action("Add to case", async () => {
     if (document.getElementById("case-picker")) return;
     const dialog = element("dialog"); dialog.id = "case-picker";
@@ -52,7 +52,7 @@ export function addToCaseButton(kind, chain, reference) {
         event.preventDefault(); const id = form.elements.case_id.value;
         run(dialog, async () => {
           await caseRequest(`${casePath(id)}/entities`, {method:"POST", body:{entity_type:kind, entity_ref:reference,
-            metadata:{chain, [kind === "wallet" ? "address" : "tx_hash"]:reference}}});
+            metadata:metadata || {chain, [kind === "wallet" ? "address" : "tx_hash"]:reference}}});
           form.replaceChildren(element("p", "Reference added to the selected case."), action("Open case", () => {dialog.close(); openCase(id);}), close);
         }, "Adding reference…");
       });

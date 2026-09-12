@@ -27,7 +27,7 @@ from .models import (
 from .reporting import case_html, case_json, case_markdown, case_pdf
 from .risk import ExplainableRiskEngine
 from .risk.engine import SCORING_MODEL, contribution_summary
-from .schemas import KycQuery, LookupRequest, NormalizedTransaction
+from .schemas import KycQuery, LookupRequest, NormalizedTransaction, ManualLabelCreate
 
 
 def row_dict(row) -> dict:
@@ -285,7 +285,9 @@ class GreedyCollectorService:
         }
 
     async def kyc_screen(self, db: Session, query: KycQuery) -> dict:
-        result = await self.kyc_engine.screen(query)
+        from .kyc.presentation import sanitize_research
+
+        result = sanitize_research(await self.kyc_engine.screen(query))
         run = KycScreeningRun(
             query=result["query"],
             checked_sources=result["checked_sources"],
@@ -305,13 +307,22 @@ class GreedyCollectorService:
         return result
 
     def import_labels(self, db: Session, content: str) -> dict:
-        reader = csv.DictReader(StringIO(content))
+        reader = csv.DictReader(StringIO(content), strict=True)
         required = {"address", "label", "type", "source", "confidence"}
         if not required.issubset(set(reader.fieldnames or [])):
             raise ValueError(f"CSV requires columns: {', '.join(sorted(required))}")
-        count = 0
+        # Validate the entire file before staging database writes. CSV and manual
+        # creation share one schema; a rejected file must not partially import rows.
+        validated = []
         for item in reader:
-            chain = item.get("chain") or "any"
+            if None in item or any(item.get(key) is None for key in required):
+                raise ValueError("CSV row has an incorrect number of columns")
+            payload = {key: item[key] for key in required}
+            payload["chain"] = item.get("chain") or "any"
+            validated.append(ManualLabelCreate.model_validate(payload).model_dump())
+        count = 0
+        for item in validated:
+            chain = item["chain"]
             existing = db.scalar(
                 select(Label).where(
                     Label.chain == chain,

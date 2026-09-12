@@ -2,7 +2,7 @@
 
 Greedy Collector is a standalone application for inspecting public Bitcoin and Ethereum
 wallet activity. It retrieves records from configured providers, stores normalized results
-in SQLite, applies deterministic risk rules, and provides Wallet, Graph, Monitoring, Alerts, and Cases workspaces.
+in SQLite, applies deterministic risk rules, and provides Wallet, Graph, Monitoring, Alerts, Cases, and Labels workspaces.
 Other existing backend workflows remain accessible through Swagger at `/docs`; they are
 not exposed in this frontend increment.
 
@@ -221,3 +221,45 @@ Weak chronological same-asset decreasing amounts, rapid sequences, and long obse
 The Wallet view shows applied category totals, raw points, caps, and per-finding adjustments. Applied points sum to the displayed score; evidence remains inspectable. Existing stored scores are preserved, and historical unversioned results are identified as lacking a category breakdown. Use a fresh lookup to apply the current model. No migration or background rescoring occurs.
 
 See [the full risk audit](docs/RISK_CALIBRATION.md) for every original rule, overlap analysis, policy rationale, limitations, and the synthetic before/after matrix. Reproduce that matrix without provider calls using `python -m tests.risk_calibration_report`. These controls demonstrate scoring mechanics, not real-world statistical accuracy.
+
+## Labels
+
+The Labels workspace manages real local address annotations: **Exchange, Mixer, Bridge, Scam, Sanctioned, Unknown**. Create a manual label, filter by chain/type or label/source text, inspect provenance and confidence, investigate its wallet, open the stored graph, or add its existing label ID to a case. Wallet and Graph show stored names alongside addresses and link back to label details. Cases open the referenced label record.
+
+Manual creation defaults to source **Manual analyst label** and confidence **0.7**. Confidence remains the stored 0–1 value; it is not the risk score. Sources remain visible, with HTTP(S) URLs safely linked. Bitcoin/Ethereum addresses are validated locally without provider calls. `any` preserves unvalidated address-scope semantics; it does not establish chain membership. Unsupported chains are rejected on new writes. Existing records are not migrated or rewritten.
+
+CSV import requires `address,label,type,source,confidence`; `chain` is optional and defaults to `any`. Use UTF-8 `.csv` files. The full file is validated before writes. The result counts processed rows, including updates, not only newly created labels. Export downloads the existing backend CSV with `chain,address,label,type,source,confidence,last_updated`; JavaScript does not reconstruct or reimport the file.
+
+The exact, case-sensitive storage key is `(chain,address,label,source)`. Manual duplicates return a conflict, including when only type/confidence differs. CSV import updates type/confidence and the timestamp for that key, retaining its ID. A different source creates a separate annotation. Duplicate CSV keys are processed in order, so the last row wins. There is no label edit/delete endpoint or automatic versioning in this increment.
+
+The calibrated risk policy is unchanged: Sanctioned/Scam/Mixer counterparty contact has raw contributions of **40/30/25**, subject to existing overlap/category caps. Exchange/Bridge/Unknown contribute **0**. A label on the queried wallet is not a newly introduced attribution rule. Wallet risk cards show the label evidence and applied contribution; current annotations may differ from historical saved findings. Labels do not automatically rescore stored results or issue external research requests.
+
+A label is an analyst/source annotation associated with an address, not proof of ownership or confirmed attribution. A future attribution subsystem would need richer entity relationships, evidence, provenance, confidence, and analyst assessment. No automatic attribution, sanctions ingestion, or sample labels are included here.
+
+## Research — public records & screening
+
+Research submits a **name**, optionally a **domain**, to the existing server-side screening engine. Only **Run research** makes provider requests; typing, changing workspaces, and opening match details do not rerun screening. Accepted API fields aliases, country, date of birth, and identifier are currently unused by adapters and are omitted from this form.
+
+The capability panel reports automated/manual modes, actual inputs, and credential-configured booleans. Configuration is not a provider health check. Seven sources have automated adapters:
+
+| Source | Input used | Credentials |
+| --- | --- | --- |
+| OpenSanctions | Name | `OPENSANCTIONS_API_KEY` required for this optional integration |
+| INTERPOL Public Notices | Name | No API key |
+| SEC EDGAR | Name | No API key; configured `SEC_USER_AGENT` request header |
+| GDELT | Name | No API key |
+| crt.sh | Domain | No API key |
+| urlscan.io | Domain | `URLSCAN_API_KEY` optional; public mode otherwise |
+| VirusTotal | Domain | `VIRUSTOTAL_API_KEY` required for this optional integration |
+
+Without a domain, the three domain adapters are skipped, not reported as failed. Results separately show successfully checked sources, automated matches, unavailable sources, and manual links. A partial source failure preserves successful results. Missing credentials and provider failures are reported safely; credential values and raw exceptions are not displayed.
+
+The 18 **manual-link-only** sources are OpenScreening, OFAC, UN Security Council Consolidated List, UK Sanctions List/OFSI, EU Sanctions Map, U.S. Consolidated Screening List, FIU-India, OpenCorporates, Companies House UK, Open Ownership Register, OCCRP Aleph, India MCA Master Data, GST Taxpayer Search, ICANN Lookup, ARIN RDAP/WHOIS, Google Search Operators, Google Alerts, and Local News/Court/Regulator Searches. Greedy Collector generates links; it has not queried those services. In particular, OpenCorporates and Companies House have no automated integration here. Links open in a new tab without opener/referrer access.
+
+Inspect a match for its source, source URL, rationale, categories, review status, and expandable evidence. **Match score** is the engine's case-insensitive text similarity (`SequenceMatcher`, rounded to three decimals, 0–1). It is not identity probability, wallet risk, or domain safety. A domain compared to itself can score 1 regardless of reputation.
+
+Analysts can persist **Unreviewed**, **Potential match**, **False positive**, or **Confirmed source match**. Confirming a source record does not establish wallet ownership. Research does not automatically create wallet labels, associate wallets, or infer attribution. Useful evidence is retained; credential-bearing fields are redacted before API output and new screening persistence.
+
+Cases currently have no research-match entity type. Use **Open source** / **Copy result**, then explicitly add an analyst note in Cases; no automatic case association occurs. Previous research-run browsing is not currently exposed. Runs and reviews are stored in SQLite, but this page retains only the current result until reload/close. Copy material needed for investigation before closing. Existing stored runs are not rewritten.
+
+The existing endpoints remain `GET /api/greedy-collector/kyc/sources`, `POST /api/greedy-collector/kyc/screen`, and `PATCH /api/greedy-collector/kyc/matches/{match_id}`. There are no new sources, migrations, attribution rules, or frontend dependencies. See [the complete source capability audit](docs/RESEARCH_CAPABILITIES.md) for every source's exact inputs, outputs, URL behavior, and failure handling. Research browser checks use only temporary SQLite state and test-only provider fixtures.

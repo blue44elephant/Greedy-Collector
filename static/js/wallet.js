@@ -1,4 +1,5 @@
 import {addToCaseButton} from "./case_actions.js";
+import {readLabels, labelsFor, labelCards} from "./label_ui.js";
 import {api} from "./api.js";
 import {byId, text, element, dateText, shortValue, action, run, UserError} from "./ui.js";
 const providerNames = {blockstream:"Blockstream", mempool_space:"Mempool.space", etherscan:"Etherscan", alchemy:"Alchemy"};
@@ -9,9 +10,12 @@ export function investigate(chain, address) {
   byId("wallet-address").value = address;
   return lookup(false);
 }
-function renderLookup(data, stored = false) {
+function renderLookup(data, stored = false, labels = [], labelsUnavailable = false) {
   const profile = data.address;
   byId("wallet-case-action").replaceChildren(addToCaseButton("wallet", profile.chain, profile.address));
+  byId("wallet-labels").replaceChildren(element("h3", "Wallet labels"),
+    labelCards(labelsFor(labels, profile.chain, profile.address), "No stored labels for this wallet."));
+  byId("wallet-labels").append(element("p", labelsUnavailable ? "Current labels could not be loaded. Returned lookup annotations are shown where available." : "Current stored annotations. Risk evidence reflects labels at evaluation time; labels do not prove ownership.", "muted small"));
   const transactions = data.transactions;
   const risk = data.risk || {findings: []};
   text("data-mode", stored ? "Stored local state" : "Fresh provider lookup");
@@ -80,6 +84,9 @@ function renderLookup(data, stored = false) {
     if (finding.raw_score_contribution != null) card.append(element("p", `Category: ${finding.category} · Raw points: ${finding.raw_score_contribution} · ${finding.score_adjustment}`, "finding-meta"));
     if (finding.explanation) card.append(element("p", finding.explanation));
     if (finding.evidence != null) {
+      const observations = finding.evidence.observations || [finding.evidence];
+      const evidenceLabels = [...new Map(observations.filter(item => item.label).map(item => [JSON.stringify(item.label), item.label])).values()];
+      if (evidenceLabels.length) card.append(labelCards(evidenceLabels));
       const details = element("details");
       details.append(element("summary", `Evidence${finding.rule_id ? ` · ${finding.rule_id}` : ""}`));
       details.append(element("pre", JSON.stringify(finding.evidence, null, 2)));
@@ -97,6 +104,7 @@ function renderLookup(data, stored = false) {
   for (const counterparty of counterparties) {
     const item = element("li");
     item.append(shortValue(counterparty.address), element("span", `${counterparty.transaction_count} transaction records`, "muted small"));
+    item.append(labelCards(labelsFor(labels, profile.chain, counterparty.address)));
     item.append(action("Investigate", () => investigate(profile.chain, counterparty.address)));
     counterpartyNodes.append(item);
   }
@@ -135,7 +143,9 @@ async function lookup(stored) {
     } else {
       data = await api("/lookup/address", {method: "POST", body: {chain, address}});
     }
-    renderLookup(data, stored);
+    let labelsUnavailable = false;
+    const labels = await readLabels().catch(() => {labelsUnavailable = true; return data.labels || [];});
+    renderLookup(data, stored, labels, labelsUnavailable);
     byId("counterparties-empty").textContent = stored ? "Counterparties are included in fresh lookup results." : "No counterparties were returned.";
     document.dispatchEvent(new CustomEvent("wallet-selected", {detail:{chain, address}}));
     byId("overview-heading").focus();
