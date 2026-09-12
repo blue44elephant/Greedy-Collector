@@ -26,6 +26,7 @@ from .models import (
 )
 from .reporting import case_html, case_json, case_markdown, case_pdf
 from .risk import ExplainableRiskEngine
+from .risk.engine import SCORING_MODEL, contribution_summary
 from .schemas import KycQuery, LookupRequest, NormalizedTransaction
 
 
@@ -145,7 +146,15 @@ class GreedyCollectorService:
             .where(RiskResult.chain == chain, RiskResult.address == address)
             .order_by(RiskResult.calculated_at.desc())
         )
-        return row_dict(row) if row else None
+        if row is None:
+            return None
+        result = row_dict(row)
+        # Historical scores stay unchanged. Only versioned saved findings can explain
+        # the new category totals; never infer a new model for legacy/empty findings.
+        if row.findings and all(item.get("scoring_model") == SCORING_MODEL for item in row.findings):
+            result["scoring_model"] = SCORING_MODEL
+            result["category_contributions"] = contribution_summary(row.findings)
+        return result
 
     def address_graph(
         self, db: Session, chain: str, address: str, hops: int

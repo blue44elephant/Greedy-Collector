@@ -1,0 +1,126 @@
+{
+  "Empty/new": {
+    "score": 0,
+    "level": "Low",
+    "rules": {}
+  },
+  "Normal low volume": {
+    "score": 0,
+    "level": "Low",
+    "rules": {}
+  },
+  "Busy 778 records": {
+    "score": 58,
+    "level": "Medium",
+    "rules": {
+      "high_velocity": 10,
+      "many_to_one": 8,
+      "one_to_many": 8,
+      "round_number_transfers": 5,
+      "large_transfer": 10,
+      "peel_chain": 12,
+      "repeated_counterparty": 5
+    }
+  },
+  "Many counterparties": {
+    "score": 26,
+    "level": "Low",
+    "rules": {
+      "high_velocity": 10,
+      "many_to_one": 8,
+      "one_to_many": 8
+    }
+  },
+  "Exchange-like fan-in/out": {
+    "score": 46,
+    "level": "Medium",
+    "rules": {
+      "high_velocity": 10,
+      "many_to_one": 8,
+      "one_to_many": 8,
+      "round_number_transfers": 5,
+      "rapid_pass_through": 15
+    }
+  },
+  "Dormant/reactivated": {
+    "score": 12,
+    "level": "Low",
+    "rules": {
+      "dormant_reactivated": 12
+    }
+  },
+  "Single risky counterparty": {
+    "score": 30,
+    "level": "Low",
+    "rules": {
+      "direct_scam": 30
+    }
+  },
+  "Repeated risky exposure": {
+    "score": 45,
+    "level": "Medium",
+    "rules": {
+      "direct_scam": 30,
+      "high_velocity": 10,
+      "repeated_counterparty": 5
+    }
+  },
+  "Known Mixer counterparty": {
+    "score": 25,
+    "level": "Low",
+    "rules": {
+      "direct_mixer": 25
+    }
+  },
+  "Known Scam counterparty": {
+    "score": 30,
+    "level": "Low",
+    "rules": {
+      "direct_scam": 30
+    }
+  },
+  "Known Sanctioned counterparty": {
+    "score": 40,
+    "level": "Medium",
+    "rules": {
+      "direct_sanctioned": 40
+    }
+  },
+  "Exchange counterparty": {
+    "score": 5,
+    "level": "Low",
+    "rules": {
+      "exchange_pattern": 5
+    }
+  },
+  "Bridge counterparty": {
+    "score": 5,
+    "level": "Low",
+    "rules": {
+      "cross_chain_bridge": 5
+    }
+  },
+  "Two-hop exposure": {
+    "score": 15,
+    "level": "Low",
+    "rules": {
+      "indirect_exposure": 15
+    }
+  },
+  "Three-hop exposure": {
+    "score": 10,
+    "level": "Low",
+    "rules": {
+      "indirect_exposure": 10
+    }
+  },
+  "Mixed strong exposure": {
+    "score": 95,
+    "level": "High",
+    "rules": {
+      "direct_sanctioned": 40,
+      "direct_scam": 30,
+      "direct_mixer": 25
+    }
+  }
+}

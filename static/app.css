@@ -129,6 +129,24 @@ input[type="checkbox"] { width:20px; height:20px; min-height:20px; }
 #transaction-result .metadata { margin:20px 0; }
 #wallet-graph { margin-bottom:18px; }
 
+.cases-layout { display:grid; grid-template-columns:minmax(240px, 300px) minmax(0, 1fr); gap:24px; align-items:start; }
+.cases-layout > * { min-width:0; }
+.case-list-item { padding:16px 0; border-bottom:1px solid #dce2e8; }
+.case-list-item button { text-align:left; width:100%; overflow-wrap:anywhere; }
+.case-list-item button[aria-pressed="true"] { background:#e7f0fc; border-color:#28588a; }
+.case-list-item .prose { max-height:100px; overflow:auto; }
+#case-detail .editor, #case-create { display:grid; grid-template-columns:1fr; }
+#case-detail .toolbar { flex-wrap:wrap; }
+#case-detail td { min-width:90px; }
+#case-alerts td { white-space:nowrap; overflow-wrap:normal; }
+#case-alerts td:nth-child(4), #case-alerts td:nth-child(6) { white-space:normal; min-width:160px; }
+#case-detail button { white-space:nowrap; }
+#case-detail .prose { white-space:pre-wrap; }
+#case-picker { width:min(540px,90vw); border:1px solid #ccd5df; border-radius:12px; padding:24px; color:inherit; }
+#case-picker::backdrop { background:rgb(25 35 45 / 45%); }
+#case-picker .editor { display:grid; grid-template-columns:1fr; }
+@media (max-width:900px) { .cases-layout { grid-template-columns:1fr; } }
+
 #alerts-status { width:auto; min-width:180px; }
 #alert-detail .metadata { row-gap:20px; margin:20px 0; }
 #alert-detail .metadata dd { overflow-wrap:anywhere; }

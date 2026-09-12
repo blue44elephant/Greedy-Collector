@@ -18,6 +18,7 @@
     <button type="button" data-workspace="graph" aria-current="false">Graph</button>
     <button type="button" data-workspace="monitoring" aria-current="false">Monitoring</button>
     <button type="button" data-workspace="alerts" aria-current="false">Alerts</button>
+    <button type="button" data-workspace="cases" aria-current="false">Cases</button>
   </nav>
   <main>
     <div id="wallet-workspace" class="workspace">
@@ -47,6 +48,7 @@
         <div class="section-heading"><h2 id="overview-heading" tabindex="-1">Overview</h2><span id="data-mode" class="badge"></span><span id="result-chain" class="badge"></span></div>
         <p id="result-address" class="full-address"></p>
         <button id="wallet-graph" type="button" class="secondary">Open graph</button>
+        <span id="wallet-case-action"></span>
         <dl class="metrics">
           <div><dt>Balance</dt><dd id="balance"></dd></div>
           <div><dt>Risk score</dt><dd id="risk-score"></dd></div>
@@ -81,6 +83,7 @@
         <p id="risk-time" class="muted small" hidden></p>
         <p>Risk findings are rule-based indicators and are not proof of wrongdoing.</p>
         <p id="risk-empty" class="empty" hidden>No risk findings were produced for the returned activity.</p>
+        <div id="risk-breakdown"></div>
         <div id="risk-findings" class="findings"></div>
         <p id="risk-disclaimer" class="bounded-note"></p>
       </section>
@@ -95,6 +98,7 @@
     <section id="graph-workspace" class="workspace" hidden></section>
     <section id="monitoring-workspace" class="workspace" hidden></section>
     <section id="alerts-workspace" class="workspace" hidden></section>
+    <section id="cases-workspace" class="workspace" hidden></section>
     <footer>Greedy Collector · Public blockchain records, stored locally.</footer>
     <noscript><p class="error">Enable JavaScript to use wallet lookup. The API is also available through <a href="/docs">Swagger</a>.</p></noscript>
   </main>

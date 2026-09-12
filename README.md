@@ -2,7 +2,7 @@
 
 Greedy Collector is a standalone application for inspecting public Bitcoin and Ethereum
 wallet activity. It retrieves records from configured providers, stores normalized results
-in SQLite, applies deterministic risk rules, and provides Wallet, Graph, Monitoring, and Alerts workspaces.
+in SQLite, applies deterministic risk rules, and provides Wallet, Graph, Monitoring, Alerts, and Cases workspaces.
 Other existing backend workflows remain accessible through Swagger at `/docs`; they are
 not exposed in this frontend increment.
 
@@ -112,7 +112,7 @@ inference, or automatic crawling. Bitcoin relationships remain simplified endpoi
 ### Monitoring
 
 Add a public Bitcoin or Ethereum address without first looking it up. Edit its label,
-notes, priority, enabled state, or optional existing case ID. Duplicate addresses return
+notes, priority, enabled state, or an optional case selected from stored cases. Duplicate addresses return
 the existing watch. **Disable watch** preserves its baseline, runs, and alerts;
 re-enabling continues from that retained boundary. The UI does not hard-delete watches.
 
@@ -199,3 +199,25 @@ browser interactions, stored state, explicit investigation, and empty/error stat
 - `greedy_collector/`: provider adapters, storage, services, API, risk, monitoring, research
 - `migrations/`: immutable Alembic baseline
 - `tests/`: automated checks and test-only fixtures
+
+## Cases
+
+The Cases workspace organizes real, analyst-selected investigation references in the local database. Create a case, attach wallet/transaction/label/graph references, and add analyst notes. Wallet, transaction, and selected graph-wallet results provide **Add to case**, with an explicit existing-case choice. References do not imply identity or ownership and do not automatically collect more data.
+
+Monitoring offers a dropdown of stored cases. A watch's case assignment applies to alerts generated thereafter; it does not retroactively move existing alerts. Associated alerts can open their case or the Alerts review workspace.
+
+Uploaded attachments are stored locally. The browser adds a unique filename prefix to avoid collisions; direct API uploads retain existing filename semantics. The current API provides metadata/references, not attachment downloads or active previews. Do not upload private keys or provider credentials.
+
+Download reports as **Markdown, HTML, JSON, or PDF** using the existing report backend. HTML is downloaded, never injected into the application. Reports summarize current stored case material (case, entity references, alerts, notes); they do not automatically expand every wallet's complete blockchain history or attachment contents. No case deletion or multi-user identity is provided.
+
+## Risk interpretation and calibration
+
+Wallet risk is a deterministic investigative indicator, not a probability, proof of wrongdoing, or identification of real-world ownership. General activity is not inherently suspicious. Transaction count, fan-in/out, repeated counterparties, round/large asset amounts, short returned history, and Exchange/Bridge interactions now remain visible as **zero-point context**.
+
+Known-risk counterparty exposure weighs more than volume: Sanctioned/Scam/Mixer contacts retain 40/30/25 points. Overlapping classifications of one counterparty use the strongest classification; each risk type contributes at most once. Independent types can contribute up to 95. Two-/three-hop stored proximity contributes at most 10/5, and adds no points on top of direct risky contact. Labels are sourced assertions requiring review, not automatically verified attribution. There is currently no direct wallet-attribution rule.
+
+Weak chronological same-asset decreasing amounts, rapid sequences, and long observed gaps contribute 8/5/4, with a combined behavioral cap of 10. No current-clock dependency or second activity score is introduced. Overall cap remains 100; levels remain Low 0–30, Medium 31–70, High 71–100. A Low aggregate level does not negate a specific high-severity label finding.
+
+The Wallet view shows applied category totals, raw points, caps, and per-finding adjustments. Applied points sum to the displayed score; evidence remains inspectable. Existing stored scores are preserved, and historical unversioned results are identified as lacking a category breakdown. Use a fresh lookup to apply the current model. No migration or background rescoring occurs.
+
+See [the full risk audit](docs/RISK_CALIBRATION.md) for every original rule, overlap analysis, policy rationale, limitations, and the synthetic before/after matrix. Reproduce that matrix without provider calls using `python -m tests.risk_calibration_report`. These controls demonstrate scoring mechanics, not real-world statistical accuracy.

@@ -12,7 +12,7 @@ def tx(index: int, direction: str = "outgoing", value: str = "10"):
         to_address=f"0xtarget{index}" if direction == "outgoing" else "0xfocus",
         value_native=value,
         token_symbol="ETH",
-        timestamp=datetime.now(timezone.utc) - timedelta(minutes=index),
+        timestamp=datetime(2026, 9, 12, tzinfo=timezone.utc) + timedelta(minutes=index),
         direction=direction,
         source_api="test",
     )
@@ -41,7 +41,8 @@ def test_behavioral_rules_do_not_exceed_one_hundred():
         tx(index, "outgoing", str(200 - index * 10)) for index in range(25)
     ]
     result = ExplainableRiskEngine().evaluate("0xfocus", transactions, [])
-    assert 0 <= result["score"] <= 100
+    assert 0 <= result["score"] <= 10
+    assert result["level"] == "Low"
     ids = {item["rule_id"] for item in result["findings"]}
     assert {"high_velocity", "one_to_many", "peel_chain"}.issubset(ids)
 

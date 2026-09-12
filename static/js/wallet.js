@@ -1,3 +1,4 @@
+import {addToCaseButton} from "./case_actions.js";
 import {api} from "./api.js";
 import {byId, text, element, dateText, shortValue, action, run, UserError} from "./ui.js";
 const providerNames = {blockstream:"Blockstream", mempool_space:"Mempool.space", etherscan:"Etherscan", alchemy:"Alchemy"};
@@ -10,6 +11,7 @@ export function investigate(chain, address) {
 }
 function renderLookup(data, stored = false) {
   const profile = data.address;
+  byId("wallet-case-action").replaceChildren(addToCaseButton("wallet", profile.chain, profile.address));
   const transactions = data.transactions;
   const risk = data.risk || {findings: []};
   text("data-mode", stored ? "Stored local state" : "Fresh provider lookup");
@@ -52,6 +54,19 @@ function renderLookup(data, stored = false) {
   byId("transactions-empty").hidden = transactions.length !== 0;
   byId("transactions-table").hidden = transactions.length === 0;
 
+  const breakdown = byId("risk-breakdown");
+  breakdown.replaceChildren();
+  if (risk.category_contributions) {
+    const summary = element("dl", undefined, "metadata");
+    for (const [key, label] of [["direct_evidence", "Direct evidence"], ["exposure", "Exposure"], ["behavioral", "Behavioral"], ["context", "Context"]]) {
+      const category = risk.category_contributions[key];
+      if (!category) continue;
+      const row = element("div"); row.append(element("dt", label), element("dd", `${category.applied} points (raw ${category.raw}; cap ${category.cap})`)); summary.append(row);
+    }
+    breakdown.append(element("h3", "Score breakdown"), summary, element("p", "Activity context adds no risk points. Applied contributions sum to the score; overlapping evidence and category caps can reduce raw points.", "muted small"));
+  } else if (stored && data.risk) {
+    breakdown.append(element("p", "This saved result has no versioned category breakdown. Its original score is preserved. A fresh lookup uses the current scoring policy.", "muted small"));
+  }
   const findings = Array.isArray(risk.findings) ? risk.findings : [];
   const findingNodes = document.createDocumentFragment();
   for (const finding of findings) {
@@ -62,6 +77,7 @@ function renderLookup(data, stored = false) {
     if (finding.confidence != null) metadata.push(`Confidence: ${finding.confidence}`);
     if (finding.score_contribution != null) metadata.push(`Score contribution: ${finding.score_contribution}`);
     card.append(element("p", metadata.join(" · "), "finding-meta"));
+    if (finding.raw_score_contribution != null) card.append(element("p", `Category: ${finding.category} · Raw points: ${finding.raw_score_contribution} · ${finding.score_adjustment}`, "finding-meta"));
     if (finding.explanation) card.append(element("p", finding.explanation));
     if (finding.evidence != null) {
       const details = element("details");
@@ -136,7 +152,7 @@ function renderTransaction(tx) {
     if (value == null || value === "") continue;
     const row = element("div"); row.append(element("dt", label), element("dd", value)); rows.append(row);
   }
-  host.append(rows);
+  host.append(rows, addToCaseButton("transaction", tx.chain, tx.tx_hash));
   for (const [label, address] of [["Sender", tx.from_address], ["Recipient", tx.to_address]]) {
     if (!address) continue;
     const row = element("div", undefined, "toolbar");

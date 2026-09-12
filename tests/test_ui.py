@@ -59,7 +59,7 @@ def test_ui_page(ui_client):
 
 @pytest.mark.parametrize("filename,media_type", [
     *[(f"js/{name}.js", "javascript") for name in
-      ["api", "ui", "app", "wallet", "graph", "graph_layout", "monitoring", "alerts"]],
+      ["api", "ui", "app", "wallet", "graph", "graph_layout", "monitoring", "alerts", "cases", "case_actions"]],
     ("app.css", "text/css"),
 ])
 def test_ui_assets(ui_client, filename, media_type):
@@ -150,7 +150,7 @@ def test_ui_lookup_response_contract(ui_client, monkeypatch, chain):
         assert tx["value_usd"] is None
         assert "raw_payload" not in tx
     assert data["counterparties"] == [{"address": counterparty, "transaction_count": 2}]
-    assert data["risk"]["score"] == 22
+    assert data["risk"]["score"] == 0
     assert data["risk"]["level"] == "Low"
     assert data["risk"]["disclaimer"]
     assert {"rule_id", "rule_name", "severity", "confidence", "score_contribution",
@@ -212,8 +212,13 @@ def test_core_api_and_empty_graph_remain_available(ui_client):
 
 
 @pytest.mark.parametrize("workspace", ["cases", "labels", "research"])
-def test_out_of_scope_frontend_is_not_exposed(ui_client, workspace):
+def test_frontend_workspace_scope(ui_client, workspace):
     client, _ = ui_client
+    if workspace == "cases":
+        assert 'data-workspace="cases"' in client.get("/").text
+        assert './cases.js' in client.get('/static/js/app.js').text
+        assert client.get('/static/js/cases.js').status_code == 200
+        return
     assert f'data-workspace="{workspace}"' not in client.get("/").text
     assert f'./{workspace}.js' not in client.get("/static/js/app.js").text
     assert client.get(f"/static/js/{workspace}.js").status_code == 404
@@ -313,7 +318,7 @@ def test_monitoring_assets_and_status_keep_credentials_private(ui_client, monkey
     monkeypatch.setattr(main.settings, "etherscan_api_key", secret)
     monkeypatch.setattr(main.settings, "alchemy_api_key", secret)
     for path in ["/", "/api/greedy-collector/status", "/static/app.css",
-                 *[f"/static/js/{name}.js" for name in ["api", "ui", "app", "wallet", "graph", "graph_layout", "monitoring", "alerts"]]]:
+                 *[f"/static/js/{name}.js" for name in ["api", "ui", "app", "wallet", "graph", "graph_layout", "monitoring", "alerts", "cases", "case_actions"]]]:
         response = client.get(path)
         assert response.status_code == 200
         assert secret not in response.text

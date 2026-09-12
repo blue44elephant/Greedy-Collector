@@ -43,8 +43,8 @@ def lookup_client():
     ("bitcoin", "Sanctioned", "direct_sanctioned", 40),
     ("bitcoin", "Mixer", "direct_mixer", 25),
     ("bitcoin", "Scam", "direct_scam", 30),
-    ("ethereum", "Bridge", "cross_chain_bridge", 5),
-    ("ethereum", "Exchange", "exchange_pattern", 5),
+    ("ethereum", "Bridge", "cross_chain_bridge", 0),
+    ("ethereum", "Exchange", "exchange_pattern", 0),
 ])
 def test_lookup_persists_label_evidence_as_json(
     lookup_client, monkeypatch, chain, label_type, rule_id, score
@@ -113,5 +113,6 @@ def test_lookup_persists_label_evidence_as_json(
     stored_response = client.get(f"{prefix}/address/{chain}/{address}/risk")
     assert stored_response.status_code == 200
     assert stored_response.json()["findings"] == data["risk"]["findings"]
+    assert stored_response.json()["category_contributions"] == data["risk"]["category_contributions"]
     adapter.lookup_address.assert_awaited_once_with(address)
     adapter.transactions.assert_awaited_once_with(address)

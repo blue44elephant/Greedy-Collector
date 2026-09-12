@@ -1,3 +1,4 @@
+import {addToCaseButton} from "./case_actions.js";
 import {api} from "./api.js";
 import {byId, panel, element, makeForm, chainAddress, table, shortValue, action, dateText, UserError} from "./ui.js";
 import {investigate} from "./wallet.js";
@@ -81,7 +82,8 @@ export function renderGraph(host, graph, chain) {
       const count = graph.edges.filter(edge => nodeKey(edge.source) === nodeKey(node.id) || nodeKey(edge.target) === nodeKey(node.id)).length;
       detail.replaceChildren(element("h3", named ? node.label : "Wallet entity"), element("p", node.id, "full-address"),
         element("p", `${node.chain || chain} · ${node.is_focus ? "Focus entity" : "Related entity"} · ${count} stored transaction relationships`),
-        action("Investigate wallet", () => investigate(node.chain || chain, node.id)));
+        action("Investigate wallet", () => investigate(node.chain || chain, node.id)),
+        addToCaseButton("wallet", node.chain || chain, node.id));
     });
     svg.append(group);
   }

@@ -2,6 +2,8 @@ import {api, ApiError} from "./api.js";
 import {byId, element, panel, table, shortValue, dateText, fields, run, UserError} from "./ui.js";
 import {investigate} from "./wallet.js";
 
+import {listCases, openCase} from "./case_actions.js";
+
 const statuses = ["New", "Reviewed", "Dismissed", "Escalated"];
 const badge = (value, type) => {
   const known = {New:"new", Reviewed:"reviewed", Dismissed:"dismissed", Escalated:"escalated", Critical:"critical", High:"high", Medium:"medium", Low:"low"};
@@ -25,7 +27,7 @@ async function request(path, options) {
 
 export function initAlerts(navigate) {
   const host = byId("alerts-workspace");
-  let selectedId = null;
+  let selectedId = null, caseRows = [];
   const heading = element("div", undefined, "workspace-heading"); heading.append(element("h1", "Alerts"));
   const message = element("p", undefined, "operation-status"); message.setAttribute("role", "status");
   const filters = panel("Review alerts", "Alerts are monitoring indicators and investigation workflow records, not proof of wrongdoing. The first monitoring observation is silent; no alerts does not mean a wallet was never checked.");
@@ -53,7 +55,7 @@ export function initAlerts(navigate) {
     for (const [name, value] of [["Alert ID", alert.id], ["Wallet", alert.wallet], ["Chain", alert.chain],
       ["Transaction", alert.tx_hash || "No transaction reference"], ["Counterparty", alert.counterparty || "Not available"],
       ["Amount", alert.amount ?? "Not available"], ["Asset", alert.token || "Not available"], ["Risk score", alert.risk_score],
-      ["Timestamp (UTC)", dateText(alert.timestamp)], ["Associated case ID", alert.case_id || "None"]]) {
+      ["Timestamp (UTC)", dateText(alert.timestamp)], ["Associated case", caseRows.find(row => row.id === alert.case_id)?.title || (alert.case_id ? "Case title unavailable" : "None")], ["Case ID", alert.case_id || "None"]]) {
       const row = element("div"); row.append(element("dt", name), element("dd", value)); metadata.append(row);
     }
     detail.append(metadata, element("h3", "Explanation"), element("p", alert.explanation, "prose"));
@@ -68,6 +70,7 @@ export function initAlerts(navigate) {
       }));
     }
     if (alert.tx_hash) actions.append(button("Open transaction", () => investigate(alert.chain, alert.tx_hash)));
+    if (alert.case_id) actions.append(button("Open case", () => openCase(alert.case_id)));
     detail.append(actions, element("h3", "Review status and analyst notes"));
     const form = element("form", undefined, "editor"); form.id = "alert-review";
     form.append(fields([{name:"status", label:"Status", options:statuses, value:alert.status},
@@ -90,6 +93,7 @@ export function initAlerts(navigate) {
     const response = await request(filter.value ? `/alerts?status=${encodeURIComponent(filter.value)}` : "/alerts");
     if (!response || !Array.isArray(response.alerts) || !response.alerts.every(validAlert)) throw malformed();
     // Preserve backend ordering and identity; only suppress repeated DOM IDs.
+    caseRows = response.alerts.some(row => row.case_id) ? await listCases().catch(() => []) : [];
     const rows = [...new Map(response.alerts.map(alert => [alert.id,alert])).values()];
     list.replaceChildren(element("h2", "Stored alerts"));
     list.append(element("p", `${rows.length} returned alerts. Newest first. The current API does not paginate alerts.`, "muted small"));
@@ -103,5 +107,9 @@ export function initAlerts(navigate) {
     else if (saved) renderDetail(saved, true);
     else {selectedId = null; detail.hidden = true;}
   }
-  return () => perform(() => load());
+  return id => {
+    if (host.dataset.busy === "true") return;
+    if (id) {filter.value=""; selectedId=id;}
+    return perform(async () => {await load(); if(id && selectedId !== id) throw new UserError("This alert no longer exists. Refresh the alert list.");});
+  };
 }
