@@ -16,39 +16,37 @@
   <nav id="navigation" aria-label="Workspaces">
     <button type="button" data-workspace="wallet" aria-current="true">Wallet</button>
     <button type="button" data-workspace="graph" aria-current="false">Graph</button>
+    <button type="button" data-workspace="monitoring" aria-current="false">Monitoring</button>
+    <button type="button" data-workspace="alerts" aria-current="false">Alerts</button>
   </nav>
   <main>
     <div id="wallet-workspace" class="workspace">
     <section class="lookup-panel" aria-labelledby="page-title">
-      <p class="eyebrow">Wallet lookup</p>
-      <h1 id="page-title">Wallet investigation</h1>
-      <p class="intro">Enter a public Bitcoin or Ethereum address to retrieve available public blockchain records.</p>
+      <p class="eyebrow">Unified search</p>
+      <h1 id="page-title">Blockchain investigation</h1>
+      <p class="intro">Unified search automatically resolves supported blockchain identifiers.</p>
       <form id="lookup-form" novalidate>
         <fieldset id="lookup-fields">
-          <div class="chain-field">
-            <label for="chain">Chain</label>
-            <select id="chain" name="chain">
-              <option value="bitcoin">Bitcoin</option>
-              <option value="ethereum">Ethereum</option>
-            </select>
-          </div>
           <div class="address-field">
-            <label for="wallet-address">Public wallet address</label>
-            <input id="wallet-address" name="address" type="text" autocomplete="off" autocapitalize="none" spellcheck="false" placeholder="Enter a public wallet address" aria-describedby="input-note">
+            <label for="wallet-address">Wallet address or transaction hash</label>
+            <input id="wallet-address" name="address" type="text" autocomplete="off" autocapitalize="none" spellcheck="false" placeholder="Search wallet address or transaction hash" aria-describedby="input-note">
           </div>
-          <button id="lookup-button" type="submit">Lookup</button>
+          <button id="lookup-button" type="submit">Search</button>
           <button id="stored-button" type="button" class="secondary">View stored</button>
         </fieldset>
       </form>
-      <p id="input-note" class="input-note">Use public wallet addresses only. Never enter a private key or recovery phrase.</p>
+      <p class="muted small">Supported: Bitcoin addresses, Ethereum addresses, Bitcoin transaction IDs, and Ethereum transaction hashes.</p>
+      <p id="input-note" class="input-note">Use public blockchain identifiers only. Never enter a private key or recovery phrase.</p>
       <p class="muted small">Bitcoin needs no API key. Ethereum requires Etherscan configured on the server.</p>
       
     </section>
 
+    <section id="transaction-result" class="panel" hidden></section>
     <div id="results" hidden>
       <section class="panel" aria-labelledby="overview-heading">
         <div class="section-heading"><h2 id="overview-heading" tabindex="-1">Overview</h2><span id="data-mode" class="badge"></span><span id="result-chain" class="badge"></span></div>
         <p id="result-address" class="full-address"></p>
+        <button id="wallet-graph" type="button" class="secondary">Open graph</button>
         <dl class="metrics">
           <div><dt>Balance</dt><dd id="balance"></dd></div>
           <div><dt>Risk score</dt><dd id="risk-score"></dd></div>
@@ -95,6 +93,8 @@
     </div>
     </div>
     <section id="graph-workspace" class="workspace" hidden></section>
+    <section id="monitoring-workspace" class="workspace" hidden></section>
+    <section id="alerts-workspace" class="workspace" hidden></section>
     <footer>Greedy Collector · Public blockchain records, stored locally.</footer>
     <noscript><p class="error">Enable JavaScript to use wallet lookup. The API is also available through <a href="/docs">Swagger</a>.</p></noscript>
   </main>

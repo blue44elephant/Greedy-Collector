@@ -5,7 +5,6 @@ let navigate;
 export function investigate(chain, address) {
   if (byId("lookup-form").dataset.busy === "true") return;
   navigate("wallet");
-  byId("chain").value = chain;
   byId("wallet-address").value = address;
   return lookup(false);
 }
@@ -93,12 +92,23 @@ function renderLookup(data, stored = false) {
 
 async function lookup(stored) {
   const form = byId("lookup-form");
-  const chain = byId("chain").value;
-  const address = byId("wallet-address").value.trim();
+  const input = byId("wallet-address").value.trim();
   if (form.dataset.busy === "true") return;
-  byId("results").hidden = true;
+  byId("results").hidden = byId("transaction-result").hidden = true;
   return run(form, async () => {
-    if (!address) throw new UserError("Enter a public wallet address.");
+    if (!input) throw new UserError("Enter a supported wallet address or transaction hash.");
+    const resolved = await api("/resolve", {method:"POST", body:{input}});
+    if (!["address", "transaction"].includes(resolved.kind)) {
+      throw new UserError("Greedy Collector could not identify this value as a supported wallet address or transaction hash. Supported: Bitcoin/Ethereum addresses and transaction hashes.");
+    }
+    const chain = resolved.chain, address = resolved.normalized;
+    byId("wallet-address").value = address;
+    if (resolved.kind === "transaction") {
+      if (stored) throw new UserError("Stored-state views require a wallet address. Use Search to retrieve this transaction.");
+      const tx = await api("/lookup/tx", {method:"POST", body:{chain, tx_hash:address}});
+      renderTransaction(tx);
+      return;
+    }
     const path = `/address/${chain}/${encodeURIComponent(address)}`;
     let data;
     if (stored) {
@@ -113,10 +123,32 @@ async function lookup(stored) {
     byId("counterparties-empty").textContent = stored ? "Counterparties are included in fresh lookup results." : "No counterparties were returned.";
     document.dispatchEvent(new CustomEvent("wallet-selected", {detail:{chain, address}}));
     byId("overview-heading").focus();
-  }, stored ? "Loading stored state…" : "Retrieving public records…");
+  }, stored ? "Resolving and loading stored state…" : "Resolving identifier and retrieving public records…");
+}
+function renderTransaction(tx) {
+  const host = byId("transaction-result");
+  const heading = element("h2", "Transaction"); heading.tabIndex = -1;
+  host.replaceChildren(heading, element("p", tx.tx_hash, "full-address"));
+  const rows = element("dl", undefined, "metadata");
+  for (const [label, value] of [["Chain", tx.chain], ["Amount", tx.value_native], ["Asset", tx.token_symbol],
+    ["Block", tx.block_number], ["Timestamp", tx.timestamp ? dateText(tx.timestamp) : tx.chain === "bitcoin" && !tx.block_number ? "Unconfirmed" : null],
+    ["Fee", tx.fee], ["Provider", providerNames[tx.source_api]]]) {
+    if (value == null || value === "") continue;
+    const row = element("div"); row.append(element("dt", label), element("dd", value)); rows.append(row);
+  }
+  host.append(rows);
+  for (const [label, address] of [["Sender", tx.from_address], ["Recipient", tx.to_address]]) {
+    if (!address) continue;
+    const row = element("div", undefined, "toolbar");
+    row.append(element("strong", label), shortValue(address), action("Investigate wallet", () => investigate(tx.chain,address)));
+    host.append(row);
+  }
+  host.append(element("p", "This is the provider's normalized transaction record. Bitcoin sender/recipient endpoints are representative. Transaction lookup does not automatically persist a wallet graph; investigate a wallet to collect its records.", "bounded-note"));
+  host.hidden = false; heading.focus();
 }
 export function initWallet(go) {
   navigate = go;
   byId("lookup-form").addEventListener("submit", event => {event.preventDefault(); lookup(false);});
   byId("stored-button").addEventListener("click", () => lookup(true));
+  byId("wallet-graph").addEventListener("click", () => navigate("graph"));
 }

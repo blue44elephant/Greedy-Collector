@@ -20,12 +20,14 @@ from .schemas import (
     KycQuery,
     KycReviewUpdate,
     LookupRequest,
+    ResolveRequest,
     ManualLabelCreate,
     TransactionLookupRequest,
     WatchlistCreate,
     WatchlistUpdate,
 )
 from .services import GreedyCollectorService, row_dict
+from .resolver import resolve_identifier
 
 
 router = APIRouter(prefix="/api/greedy-collector", tags=["Greedy Collector"])
@@ -62,6 +64,11 @@ def status():
             "reports",
         ],
     }
+
+
+@router.post("/resolve")
+def resolve(payload: ResolveRequest):
+    return resolve_identifier(payload.input)
 
 
 @router.post("/lookup/address")

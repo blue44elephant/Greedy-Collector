@@ -96,3 +96,7 @@ class KycReviewUpdate(BaseModel):
     review_status: Literal[
         "Unreviewed", "Potential match", "False positive", "Confirmed source match"
     ]
+
+
+class ResolveRequest(BaseModel):
+    input: str

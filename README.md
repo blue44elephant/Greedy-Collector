@@ -2,7 +2,7 @@
 
 Greedy Collector is a standalone application for inspecting public Bitcoin and Ethereum
 wallet activity. It retrieves records from configured providers, stores normalized results
-in SQLite, applies deterministic risk rules, and provides Wallet, Graph, and Monitoring workspaces.
+in SQLite, applies deterministic risk rules, and provides Wallet, Graph, Monitoring, and Alerts workspaces.
 Other existing backend workflows remain accessible through Swagger at `/docs`; they are
 not exposed in this frontend increment.
 
@@ -72,27 +72,42 @@ Ethereum pending/mempool monitoring is not implemented; finality is not enforced
 
 ### Wallet
 
-Choose Bitcoin or Ethereum and enter a public wallet address. **Lookup** calls the
-configured providers and shows fresh balance, records, risk findings, counterparties,
-and provenance. **View stored** reads local state without fetching provider data.
-Fresh lookup uses `POST /api/greedy-collector/lookup/address`. **View stored** reads
-`GET /api/greedy-collector/address/{chain}/{address}`, `/transactions`, and `/risk`.
-The view displays the profile update timestamp and stored risk calculation timestamp.
-No stored risk result and empty transactions have separate empty states.
-The `refresh` API input currently does not change lookup behavior: POST lookup always
-fetches providers. Counterparty **Investigate** is explicit; no recursive crawling occurs.
-Amounts retain their original decimal strings and token units. No USD valuation is
-invented. Missing Bitcoin timestamp/block information is presented as unconfirmed.
+Unified search automatically resolves supported blockchain identifiers:
+Bitcoin addresses (forms accepted by the existing adapter), Ethereum addresses,
+bare 64-hex Bitcoin transaction IDs, and `0x` + 64-hex Ethereum transaction hashes.
+`0x` + 40-hex is an Ethereum address. Paste an identifier and press **Search** or Enter.
+The local `POST /api/greedy-collector/resolve` endpoint classifies syntax without provider
+requests. Unknown values produce a supported-types message and no lookup request.
+Support can be extended later; other blockchains and naming systems are not implemented.
+
+Addresses dispatch to the existing `/lookup/address` API; transaction hashes use
+`/lookup/tx`. Transaction results show only returned normalized fields and allow explicit
+wallet investigation. Transaction lookup itself does not store a wallet graph.
+Wallet results retain exact decimal balances, activity, risk/evidence, counterparties,
+and provenance. **View stored** reads profile, transactions, and risk through the existing
+address GET endpoints, without claiming they are live. **Open graph** carries the selected
+wallet into the Graph workspace. Provider requirements remain unchanged.
 
 ### Graph
 
-Load one to three hops from stored transactions using
-`GET /api/greedy-collector/address/{chain}/{address}/graph?hops=N`. Select a node for its address/type,
-read directional edges and their transaction details,
-use **Investigate wallet** to fetch that address, and pan/zoom the SVG view. Transactions
-are also listed below the graph. A deeper hop request does not fetch counterparties or
-guarantee complete blockchain coverage. SQLite is authoritative; optional Neo4j mirrors
-can be configured using the `GREEDY_COLLECTOR_NEO4J_*` settings.
+Graphs use the existing stored endpoint with `hops=1`, `2`, or `3`. A deterministic layout
+places returned focus entities first, then groups nodes by minimum undirected hop depth
+from the focus solely for visualization. Stable parent ordering and address tie-breaks
+keep placement repeatable. Each depth uses non-overlapping cards, with at most 12 rows
+before wrapping into additional columns. Labels are bounded visually; full labels and
+addresses remain accessible. Disconnected returned nodes receive their own group.
+
+Blue cards identify focus; amber outlines identify selection. Curved arrows preserve
+direction. Parallel records with the same ordered source/target share one visual connection;
+select it to inspect every underlying transaction separately, without summing token amounts.
+Reverse directions remain separate. Select a node for details and **Investigate wallet**
+to return through unified search. Selection alone makes no provider request.
+
+Fit, focus centering, reset, pan, and zoom operate within a fixed viewport. Large graphs
+start centered on focus; all returned nodes and records remain available. The expandable
+complete transaction table also retains records whose endpoints cannot be positioned.
+This is a view of stored relationships, not complete blockchain coverage, ownership
+inference, or automatic crawling. Bitcoin relationships remain simplified endpoints.
 
 ### Monitoring
 
@@ -122,6 +137,21 @@ no transaction hash. The existing alerts endpoint has no wallet filter or pagina
 Bitcoin requires no API key. Ethereum monitoring requires `ETHERSCAN_API_KEY`;
 `ALCHEMY_API_KEY` is only an optional balance fallback and does not replace Etherscan history.
 No fake watches, provider results, or alerts are substituted when requests fail.
+
+### Alerts
+
+The global Alerts workspace lists actual stored monitoring alerts, newest first. Filter
+by All, New, Reviewed, Dismissed, or Escalated using the existing status-filtered API.
+Select a record to inspect its explanation, transaction fields, case reference, and notes.
+Save review status and analyst notes through the existing PATCH endpoint; returning to
+New is supported. No alert deletion is exposed.
+
+Explicit actions investigate a wallet or transaction through unified search, or open the
+wallet's stored graph. Selecting an alert itself makes no provider request. Risk-only
+alerts may have no transaction hash, counterparty, or amount. Severity and review status
+are indicators/workflow states, not proof of wrongdoing. First-run monitoring is silent:
+absence of alerts does not mean a wallet was never checked, and historical activity is
+not automatically turned into alerts. The current alert API is not paginated.
 
 ## Storage and interpretation limits
 

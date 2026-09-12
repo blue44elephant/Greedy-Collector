@@ -48,10 +48,10 @@ def test_ui_page(ui_client):
     assert response.status_code == 200
     assert response.headers["content-type"].startswith("text/html")
     for expected in (
-        'id="lookup-form"', 'value="bitcoin"', 'value="ethereum"',
-        'id="wallet-address"', '>Lookup</button>', 'id="transaction-rows"',
+        'id="lookup-form"', 'placeholder="Search wallet address or transaction hash"',
+        'id="wallet-address"', '>Search</button>', 'id="transaction-rows"',
         'id="risk-findings"', 'id="counterparties"',
-        "Use public wallet addresses only. Never enter a private key or recovery phrase.",
+        "Use public blockchain identifiers only. Never enter a private key or recovery phrase.",
         '/static/js/app.js', '/static/app.css',
     ):
         assert expected in response.text
@@ -59,7 +59,7 @@ def test_ui_page(ui_client):
 
 @pytest.mark.parametrize("filename,media_type", [
     *[(f"js/{name}.js", "javascript") for name in
-      ["api", "ui", "app", "wallet", "graph"]],
+      ["api", "ui", "app", "wallet", "graph", "graph_layout", "monitoring", "alerts"]],
     ("app.css", "text/css"),
 ])
 def test_ui_assets(ui_client, filename, media_type):
@@ -68,6 +68,11 @@ def test_ui_assets(ui_client, filename, media_type):
     assert response.status_code == 200
     assert media_type in response.headers["content-type"]
     assert response.text.strip()
+
+
+def test_unified_search_has_no_mandatory_chain(ui_client):
+    client, _ = ui_client
+    assert 'id="chain"' not in client.get("/").text
 
 
 def test_ui_preserves_root(ui_client):
@@ -206,7 +211,7 @@ def test_core_api_and_empty_graph_remain_available(ui_client):
     assert result["requested_hops"] == 3
 
 
-@pytest.mark.parametrize("workspace", ["monitoring", "alerts", "cases", "labels", "research"])
+@pytest.mark.parametrize("workspace", ["cases", "labels", "research"])
 def test_out_of_scope_frontend_is_not_exposed(ui_client, workspace):
     client, _ = ui_client
     assert f'data-workspace="{workspace}"' not in client.get("/").text
@@ -266,3 +271,99 @@ def test_ui_stored_missing_and_no_risk_contract(ui_client, monkeypatch, chain):
         db.commit()
     assert client.get(path).status_code == 200
     assert client.get(path + "/risk").status_code == 404
+
+
+def test_monitoring_workspace_navigation(ui_client):
+    client, _ = ui_client
+    html = client.get("/").text
+    assert 'data-workspace="monitoring"' in html
+    assert 'id="monitoring-workspace"' in html
+    assert 'import {initMonitoring} from "./monitoring.js"' in client.get("/static/js/app.js").text
+    module = client.get("/static/js/monitoring.js").text
+    assert "No wallets are being monitored." in module
+    assert "No monitoring history for this wallet." in module
+    assert "No alerts for this wallet." in module
+
+
+def test_monitoring_ui_routes_and_consumed_fields_exist(ui_client):
+    client, _ = ui_client
+    schema = client.get("/openapi.json").json()
+    prefix = "/api/greedy-collector"
+    for route, methods in {"/watchlist": ["get", "post"], "/watchlist/{wallet_id}": ["patch"],
+                           "/watchlist/{wallet_id}/check": ["post"], "/watchlist/{wallet_id}/runs": ["get"],
+                           "/alerts": ["get"], "/status": ["get"]}.items():
+        assert all(method in schema["paths"][prefix + route] for method in methods)
+    for model in ["WatchlistCreate", "WatchlistUpdate"]:
+        assert {"enabled", "priority", "label", "notes", "case_id"} <= schema["components"]["schemas"][model]["properties"].keys()
+    params = {item["name"]: item for item in schema["paths"][prefix + "/watchlist/{wallet_id}/runs"]["get"]["parameters"]}
+    assert params["limit"]["schema"]["maximum"] >= 25
+    assert params["offset"]["schema"]["minimum"] == 0
+    module = client.get("/static/js/monitoring.js").text
+    assert 'request(`${watchPath(id)}/check`, {method:"POST"})' in module
+    assert '/runs?limit=${PAGE_SIZE}&offset=${offset}' in module
+    assert 'request("/alerts")' in module
+    assert 'request("/watchlist", {method:"POST"' in module
+    assert 'method:"PATCH"' in module
+    assert 'method:"DELETE"' not in module
+
+
+def test_monitoring_assets_and_status_keep_credentials_private(ui_client, monkeypatch):
+    client, _ = ui_client
+    secret = "dummy-monitoring-secret-not-for-production"
+    monkeypatch.setattr(main.settings, "etherscan_api_key", secret)
+    monkeypatch.setattr(main.settings, "alchemy_api_key", secret)
+    for path in ["/", "/api/greedy-collector/status", "/static/app.css",
+                 *[f"/static/js/{name}.js" for name in ["api", "ui", "app", "wallet", "graph", "graph_layout", "monitoring", "alerts"]]]:
+        response = client.get(path)
+        assert response.status_code == 200
+        assert secret not in response.text
+
+
+def test_global_alerts_workspace_and_api_contract(ui_client):
+    client, _ = ui_client
+    html = client.get("/").text
+    assert 'data-workspace="alerts"' in html and 'id="alerts-workspace"' in html
+    assert 'initAlerts(navigate)' in client.get("/static/js/app.js").text
+    module = client.get("/static/js/alerts.js").text
+    assert "No alerts have been generated." in module
+    assert '"/alerts"' in module and '/alerts?status=${encodeURIComponent(filter.value)}' in module
+    assert 'request(`/alerts/${encodeURIComponent(alert.id)}`, {method:"PATCH"' in module
+    assert 'method:"DELETE"' not in module
+    schema = client.get("/openapi.json").json()
+    assert "get" in schema["paths"]["/api/greedy-collector/alerts"]
+    assert "patch" in schema["paths"]["/api/greedy-collector/alerts/{alert_id}"]
+    assert set(schema["components"]["schemas"]["AlertUpdate"]["properties"]) == {"status", "notes"}
+    assert client.get("/api/greedy-collector/alerts").json() == {"alerts": []}
+
+
+@pytest.mark.parametrize("status", ["New", "Reviewed", "Dismissed", "Escalated"])
+def test_alert_review_and_filter_response_contract(ui_client, status):
+    from datetime import datetime, timezone
+    from greedy_collector.models import WalletAlert
+    client, engine = ui_client
+    with Session(engine) as db:
+        risk = WalletAlert(wallet="0x"+"1"*40, chain="ethereum", trigger_type="High velocity",
+                           severity="High", explanation="Test-only risk finding", dedupe_key="risk-test",
+                           timestamp=datetime(2026,1,1,tzinfo=timezone.utc))
+        tx = WalletAlert(wallet="0x"+"2"*40, chain="ethereum", tx_hash="0x"+"a"*64,
+                         counterparty="0x"+"3"*40, amount="0.000000000000000001", token="ETH",
+                         trigger_type="New incoming transaction", severity="Medium", explanation="Test-only transaction",
+                         dedupe_key="tx-test", timestamp=datetime(2026,1,2,tzinfo=timezone.utc))
+        db.add_all([risk,tx]); db.commit(); risk_id=risk.id; tx_id=tx.id
+    data = client.get("/api/greedy-collector/alerts").json()["alerts"]
+    assert [row["id"] for row in data] == [tx_id, risk_id]
+    assert data[1]["tx_hash"] is data[1]["counterparty"] is data[1]["amount"] is None
+    assert data[0]["amount"] == "0.000000000000000001"
+    response = client.patch(f"/api/greedy-collector/alerts/{risk_id}", json={"status":status,"notes":"Persisted analyst test note"})
+    assert response.status_code == 200
+    assert response.json()["notes"] == "Persisted analyst test note"
+    rows = client.get("/api/greedy-collector/alerts", params={"status":status}).json()["alerts"]
+    assert all(row["status"] == status for row in rows)
+    assert any(row["id"] == risk_id for row in rows)
+    assert client.patch(f"/api/greedy-collector/alerts/{risk_id}", json={"notes":""}).json()["notes"] == ""
+
+
+def test_alert_update_missing_and_invalid_status(ui_client):
+    client, _ = ui_client
+    assert client.patch("/api/greedy-collector/alerts/missing", json={"status":"Reviewed"}).status_code == 404
+    assert client.patch("/api/greedy-collector/alerts/missing", json={"status":"unsupported"}).status_code == 422

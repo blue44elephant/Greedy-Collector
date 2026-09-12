@@ -1,0 +1,54 @@
+const assert=require('node:assert/strict');
+const fs=require('node:fs');
+const path=require('node:path');
+module.exports=async({evaluate,call,work})=>{
+  await evaluate(`go('wallet'); window.searchRequests=[]; window.originalSearchFetch=window.fetch; window.fetch=(url,options)=>{searchRequests.push({url,body:options?.body});return originalSearchFetch(url,options);}`);
+  const search=async value=>{
+    await evaluate(`searchRequests.length=0;document.getElementById('wallet-address').value=${JSON.stringify(value)};document.getElementById('wallet-address').focus()`);
+    await call('Input.dispatchKeyEvent',{type:'keyDown',key:'Enter',code:'Enter',windowsVirtualKeyCode:13,text:'\r',unmodifiedText:'\r'});
+    await call('Input.dispatchKeyEvent',{type:'keyUp',key:'Enter',code:'Enter',windowsVirtualKeyCode:13});
+    await evaluate(`waitFor(()=>searchRequests.length>0&&document.getElementById('lookup-form').dataset.busy==='false')`);
+  };
+  assert.equal(await evaluate("document.querySelector('#lookup-form select')"),null);
+  await search('unsupported identifier');
+  assert.deepEqual(await evaluate('searchRequests.map(r=>r.url)'),['/api/greedy-collector/resolve']);
+  assert.ok(await evaluate("document.querySelector('#lookup-form .operation-status').innerText.includes('could not identify')"));
+  for(const value of ['a'.repeat(64),'0x'+'b'.repeat(64)]){
+    await search(value);
+    assert.deepEqual(await evaluate('searchRequests.map(r=>r.url)'),['/api/greedy-collector/resolve','/api/greedy-collector/lookup/tx']);
+    assert.equal(await evaluate("document.getElementById('transaction-result').hidden"),false);
+    assert.equal(await evaluate("document.getElementById('results').hidden"),true);
+    assert.ok(await evaluate("!!button('#transaction-result','Investigate wallet')"));
+  }
+  await evaluate(`searchRequests.length=0;button('#transaction-result','Investigate wallet').click();waitFor(()=>document.getElementById('lookup-form').dataset.busy==='false')`);
+  assert.deepEqual(await evaluate('searchRequests.map(r=>r.url)'),['/api/greedy-collector/resolve','/api/greedy-collector/lookup/address']);
+  await evaluate(`document.getElementById('wallet-graph').click();document.querySelector('#graph-workspace form').requestSubmit();waitFor(()=>document.querySelector('#graph-workspace form').dataset.busy==='false')`);
+  const positions=await evaluate("[...document.querySelectorAll('.graph-node')].map(n=>[n.dataset.nodeId,n.getAttribute('transform')])");
+  assert.equal(new Set(positions.map(row=>row[0])).size,positions.length);
+  const initial=await evaluate("document.querySelector('#graph-workspace svg').getAttribute('viewBox')");
+  await evaluate(`searchRequests.length=0;document.querySelector('.graph-edge').dispatchEvent(new MouseEvent('click',{bubbles:true}))`);
+  assert.equal(await evaluate('searchRequests.length'),0);
+  assert.ok(await evaluate("document.getElementById('graph-detail').innerText.includes('underlying transaction records')"));
+  assert.ok(await evaluate("document.querySelectorAll('#graph-detail tbody tr').length>=2"));
+  assert.equal(await evaluate("document.querySelectorAll('.graph-edge.selected').length"),1);
+  await evaluate(`document.querySelector('.graph-node').dispatchEvent(new MouseEvent('click',{bubbles:true}))`);
+  assert.equal(await evaluate('searchRequests.length'),0);
+  assert.equal(await evaluate("document.querySelectorAll('.graph-node.selected').length"),1);
+  assert.equal(await evaluate("document.querySelectorAll('.graph-edge.selected').length"),0);
+  await evaluate(`button('#graph-workspace','Center on focus').click()`);
+  assert.ok(await evaluate("document.querySelector('.graph-node.is-focus').dataset.depth==='0'"));
+  await evaluate(`button('#graph-workspace','Fit to graph').click()`);
+  assert.equal(await evaluate("document.querySelector('#graph-workspace svg').getAttribute('viewBox')"),initial);
+  await evaluate(`button('#graph-workspace','Zoom in').click()`);
+  await evaluate(`button('#graph-workspace','Reset view').click()`);
+  assert.equal(await evaluate("document.querySelector('#graph-workspace svg').getAttribute('viewBox')"),initial);
+  await evaluate(`document.querySelector('#graph-workspace form').requestSubmit();waitFor(()=>document.querySelector('#graph-workspace form').dataset.busy==='false')`);
+  assert.deepEqual(await evaluate("[...document.querySelectorAll('.graph-node')].map(n=>[n.dataset.nodeId,n.getAttribute('transform')])"),positions);
+  await evaluate('window.scrollTo(0,0)');
+  const metrics=await call('Page.getLayoutMetrics');
+  await call('Page.captureScreenshot',{format:'png',captureBeyondViewport:true,clip:{x:0,y:0,width:metrics.cssContentSize.width,height:metrics.cssContentSize.height,scale:1}}).then(result=>fs.writeFileSync(path.join(work,'graph.png'),Buffer.from(result.data,'base64')));
+  await evaluate(`document.querySelector('.graph-node').dispatchEvent(new MouseEvent('click',{bubbles:true}));searchRequests.length=0;button('#graph-detail','Investigate wallet').click();waitFor(()=>document.getElementById('lookup-form').dataset.busy==='false')`);
+  assert.deepEqual(await evaluate('searchRequests.map(r=>r.url)'),['/api/greedy-collector/resolve','/api/greedy-collector/lookup/address']);
+  await evaluate('window.fetch=window.originalSearchFetch');
+  console.log('Unified search and graph browser passed: Enter, local resolution, unknown input, address/transaction dispatch, investigation, stable entities, connection records, selection, focus/fit/reset.');
+};
