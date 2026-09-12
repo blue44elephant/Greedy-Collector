@@ -62,7 +62,10 @@ SessionLocal = sessionmaker(bind=engine, autoflush=False, expire_on_commit=False
 
 
 def initialize_database() -> None:
-    Base.metadata.create_all(bind=engine)
+    # Existing workspaces retain their startup behavior. Attribution is migration-only.
+    legacy_tables = [table for table in Base.metadata.sorted_tables
+                     if not table.name.startswith("attribution_")]
+    Base.metadata.create_all(bind=engine, tables=legacy_tables)
 
 
 @contextmanager

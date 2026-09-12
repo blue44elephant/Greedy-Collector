@@ -423,3 +423,7 @@ The selected v1 defaults are explicit so implementation can be reviewed without 
 ### Design-task verification record
 
 Only this document is added by this task. No README change is necessary. Existing uncommitted application work is preserved. Verify `python -m pytest tests/ -q` against isolated SQLite and `git diff --check`; compare start/end file hashes to prove existing source, tests, static assets, migrations, and configuration did not change. No live provider calls or user database access is needed to review this architecture.
+
+### AT-1 implementation clarification
+
+AT-1 is implemented as documented in [ATTRIBUTION_AT1.md](ATTRIBUTION_AT1.md). The original design and later-phase boundaries above are retained. To satisfy both migration safety and unchanged existing startup, legacy initialization excludes attribution tables; the new attribution service requires the migrated schema before use. Explicit metadata-created test/development databases install equivalent immutability triggers and use an explicit metadata-only service option. SQLite replacement INSERT guards supplement the required UPDATE/DELETE guards so replacement statements cannot erase immutable evidence/event history. Python foundation lists use bounded offset pagination; no HTTP pagination contract is exposed in AT-1. See the implementation document for the original deployment issue, selected correction, service transaction contract, and rationale.
