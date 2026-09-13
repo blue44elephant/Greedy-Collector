@@ -1,4 +1,5 @@
 import {api} from "./api.js";
+import {evidenceHandoffButton} from './attribution_handoff.js';
 import {byId, element, panel, table, shortValue, dateText, fields, action, run, UserError} from "./ui.js";
 import {investigate} from "./wallet.js";
 import {addToCaseButton, openGraph} from "./case_actions.js";
@@ -64,6 +65,7 @@ export function initLabels() {
       if(row.chain!=="any" && resolved.chain!==row.chain)throw new UserError("This stored label has incompatible chain/address metadata.");
       openGraph(resolved.chain,resolved.normalized);
     }),addToCaseButton("label",row.chain,row.id,{chain:row.chain,address:row.address}));
+    controls.append(evidenceHandoffButton('label',row.id));
     detail.append(metadata,controls,id,element("p","Labels influence subsequent risk evaluations according to type. Saved risk findings retain their original evidence until a fresh lookup.","muted small"));
   }
   function renderList() {

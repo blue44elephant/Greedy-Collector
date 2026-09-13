@@ -234,7 +234,7 @@ The exact, case-sensitive storage key is `(chain,address,label,source)`. Manual 
 
 The calibrated risk policy is unchanged: Sanctioned/Scam/Mixer counterparty contact has raw contributions of **40/30/25**, subject to existing overlap/category caps. Exchange/Bridge/Unknown contribute **0**. A label on the queried wallet is not a newly introduced attribution rule. Wallet risk cards show the label evidence and applied contribution; current annotations may differ from historical saved findings. Labels do not automatically rescore stored results or issue external research requests.
 
-A label is an analyst/source annotation associated with an address, not proof of ownership or confirmed attribution. The separate Attribution workspace organizes explicit claims and immutable evidence; Label-to-evidence handoff is not yet available. No automatic attribution, sanctions ingestion, or sample labels are included here.
+A label is an analyst/source annotation associated with an address, not proof of ownership or confirmed attribution. The separate Attribution workspace organizes explicit claims and immutable evidence; Labels offer an explicit Use as attribution evidence handoff; no automatic conversion occurs. No automatic attribution, sanctions ingestion, or sample labels are included here.
 
 ## Research — public records & screening
 
@@ -280,4 +280,12 @@ Wallet and selected Graph wallets show persisted claims, separate entities and r
 
 Graph offers an optional attribution overlay, off by default, for current assessed claims on the selected wallet and current summary page. Distinct entity nodes and claim arrows supplement the unchanged wallet/transaction graph; claims are not transactions or blockchain hops. No graph-wide attribution fetch, ownership inference, provider request, or automatic assessment is added. Attribution failures or an unmigrated database leave ordinary Wallet/Graph investigation usable.
 
-See [AT-4 behavior, boundaries, and isolated verification](docs/ATTRIBUTION_AT4.md), including existing graph limitations. Labels/Research evidence handoffs and Cases/report integration remain future increments.
+See [AT-4 behavior, boundaries, and isolated verification](docs/ATTRIBUTION_AT4.md), including existing graph limitations. Labels/Research evidence handoffs are available through AT-5; Cases/report integration remains a future increment.
+
+## Label and Research evidence handoffs (AT-5)
+
+Use as attribution evidence opens a server-read preview of a selected Label or persisted automated Research match. Choose an existing claim or explicitly create one, select Supports/Contradicts/Context and directness, write a rationale, and confirm capture. Entity and relationship choices remain manual. Research does not supply an inferred wallet.
+
+Captured evidence retains immutable sanitized source provenance. Later label edits or research review changes do not rewrite it. Identical repeat handoffs conflict; source or claim changes require renewed review. Source scores and review statuses do not become attribution assessments or risk points. No provider calls or automatic migration occur during handoff; Labels/Research remain usable without attribution storage.
+
+See [AT-5 workflows, snapshot semantics, and verification](docs/ATTRIBUTION_AT5.md). Manual research links and unavailable-source notices are not eligible automated evidence. Cases/report integration remains AT-6.

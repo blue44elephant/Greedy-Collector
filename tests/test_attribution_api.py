@@ -443,8 +443,8 @@ def test_openapi_explicit_models_enums_and_exact_surface(api):
     client, _ = api
     spec = ok(client.get('/openapi.json'))
     paths = {p: methods for p, methods in spec['paths'].items() if p.startswith(P)}
-    assert len(paths) == 21 and len(spec['paths']) == 50
-    assert sum(len(methods) for methods in paths.values()) == 26
+    assert len(paths) == 24 and len(spec['paths']) == 53
+    assert sum(len(methods) for methods in paths.values()) == 29
     for path, methods in paths.items():
         assert 'delete' not in methods
         if path.endswith('/events'):

@@ -78,6 +78,22 @@ class LinkUpdate(VersionAction):
     link: LinkFields
 
 
+class SourceHandoff(domain.Input):
+    expected_version: Version
+    expected_source_fingerprint: Annotated[str, Field(pattern=r'^[a-f0-9]{64}$')]
+    link: LinkFields
+
+
+class SourcePreview(BaseModel):
+    source_kind: Literal['label', 'research']
+    source_id: str
+    source_fingerprint: str
+    origin: Literal['analyst_added', 'public_osint']
+    source_name: str
+    source_url: str | None
+    snapshot: dict[str, JsonValue]
+
+
 class EvidenceReplacement(CaptureAndLink):
     reason: domain.Long
 

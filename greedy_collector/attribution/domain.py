@@ -152,7 +152,7 @@ class LinkInput(Input):
         return self
 
 
-class EvidenceInput(Input):
+class EvidenceContentInput(Input):
     evidence_type: str
     title: Short
     summary: Long
@@ -183,9 +183,6 @@ class EvidenceInput(Input):
     @model_validator(mode="after")
     def provenance(self):
         choice(self.evidence_type, enums.EVIDENCE_TYPES)
-        # Snapshot ingestion belongs to AT-5, not a trusted-ID bypass here.
-        if self.evidence_type in ("label_snapshot", "research_snapshot"):
-            raise AttributionError("Source snapshot handoffs are not enabled in AT-1")
         choice(self.origin, ("public_osint", "analyst_added"))
         choice(self.source_reliability, enums.RELIABILITIES)
         if self.source_reliability != "unassessed" and not self.reliability_rationale.strip():
@@ -214,6 +211,15 @@ class EvidenceInput(Input):
                 raise AttributionError("Analyst observations require an explanatory note")
         elif not (self.source_url or self.source_locator):
             raise AttributionError("A source URL or citation locator is required")
+        return self
+
+
+class EvidenceInput(EvidenceContentInput):
+    """Manual capture cannot impersonate a server-read source snapshot."""
+    @model_validator(mode="after")
+    def manual_only(self):
+        if self.evidence_type in ("label_snapshot", "research_snapshot"):
+            raise AttributionError("Use the explicit source snapshot handoff")
         return self
 
 

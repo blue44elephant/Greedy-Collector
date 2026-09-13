@@ -29,6 +29,8 @@ def test_attribution_navigation_and_views(ui_client):
                                      'Edit evidence text','Delete evidence','Delete event','fakeGraph','sampleWallet','demoNodes','cannedSearch'])
 def test_attribution_has_no_forbidden_controls_or_fixtures(forbidden):
     text='\n'.join(path.read_text(encoding='utf-8') for path in (ROOT/'static/js').glob('attribution*.js'))
+    # Research status is permitted only in this explicit non-attribution warning.
+    text=text.replace("Confirmed source match does not confirm wallet attribution.", "")
     assert forbidden not in text
 
 

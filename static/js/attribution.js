@@ -1,4 +1,5 @@
 import {ApiError} from './api.js';
+import {initEvidenceHandoff, snapshotProvenance} from './attribution_handoff.js';
 import {byId, element, panel, table, fields, shortValue, dateText, details, run, UserError} from './ui.js';
 import {request, readPage, encodeId, caption, options, assessments, relationships, entityTypes, stances, origins} from './attribution_api.js';
 import {reasonField, descriptorFields, descriptor, claimFields, scopeFields, scopeData, linkFields, linkData, captureFields, advancedCapture, captureData} from './attribution_forms.js';
@@ -24,6 +25,11 @@ export function initAttribution() {
     element('p','Attribution is evidence-backed analyst assessment. Claims and strongly supported assessments are not legal proof. Public wallet addresses only; never enter private keys or recovery phrases.','bounded-note'),
     tabs,claimsView,entitiesView,picker);
   top.append(button('Reload',reload));
+  const handoff=initEvidenceHandoff(host,{
+    createClaim:async subject=>{await switchView('claims');openClaimEditor(null,subject);},
+    openClaim:async id=>{await switchView('claims');await showClaim(id);}
+  });
+  host.insertBefore(byId('attr-source-handoff'),tabs);
   const claimsTab=button('Claims',()=>switchView('claims')), entitiesTab=button('Entities',()=>switchView('entities'));
   claimsTab.setAttribute('aria-pressed','true');entitiesTab.setAttribute('aria-pressed','false');tabs.append(claimsTab,entitiesTab);
 
@@ -173,7 +179,7 @@ export function initAttribution() {
         if(!targetEntity)throw new UserError('Choose or create the target entity first.');
         const row=await request('/claims',{method:'POST',body:{entity_id:targetEntity.id,subject_type:data.subject_type,chain:data.chain,
           subject_ref:data.subject_ref,relationship:data.relationship,...scopeData(data)}});
-        claimEditor.hidden=true;await loadClaims();await showClaim(row.id);
+        claimEditor.hidden=true;await loadClaims();await showClaim(row.id);await handoff.claimCreated(row.id);
       }),button('Cancel',()=>{claimEditor.hidden=true;}));
     if(subject){const node=claimEditor.querySelector('form');node.elements.subject_type.value='wallet';node.elements.chain.value=subject.chain;node.elements.subject_ref.value=subject.address;node.elements.relationship.value='';}
     reveal(claimEditor);
@@ -245,6 +251,7 @@ export function initAttribution() {
     const row=await request(`/evidence/${encodeId(id)}`);
     host.replaceChildren(element('h4',row.title),element('p',`Origin: ${caption(row.origin)} · Actor: ${row.captured_by}`,'small'));
     if(!origins.includes(row.origin)) {host.append(element('p','Restricted-origin capture. Detailed material is not displayed in this workspace.'));return;}
+    if(['label_snapshot','research_snapshot'].includes(row.collection_method))host.append(snapshotProvenance(row.metadata_json));
     host.append(element('p',row.summary,'prose'),element('p',row.excerpt||'No excerpt captured.','prose'),metadata([
       ['Source',row.source_name],['Locator',row.source_locator||'Not supplied'],['Published',row.published_on||'Unknown'],['Observed',row.observed_on||'Unknown'],
       ['Captured',dateText(row.captured_at)],['Source reliability',caption(row.source_reliability)],['Evidence ID',row.id],['Fingerprint',row.content_sha256],
@@ -338,7 +345,8 @@ export function initAttribution() {
   }
   return context=>{
     if(context)return perform(async()=>{
-      if(context.action==='open_claim'&&typeof context.id==='string'){await switchView('claims');await showClaim(context.id);}
+      if(context.action==='source_evidence'){await handoff.open(context);}
+      else if(context.action==='open_claim'&&typeof context.id==='string'){await switchView('claims');await showClaim(context.id);}
       else if(context.action==='open_entity'&&typeof context.id==='string'){await switchView('entities');await showEntity(context.id);}
       else if(context.action==='create_claim'&&['bitcoin','ethereum'].includes(context.chain)&&typeof context.address==='string'){
         await switchView('claims');openClaimEditor(null,{chain:context.chain,address:context.address});

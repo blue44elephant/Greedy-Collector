@@ -1,4 +1,5 @@
 import {api, ApiError} from "./api.js";
+import {evidenceHandoffButton} from './attribution_handoff.js';
 import {byId, element, panel, table, fields, details, run, UserError} from "./ui.js";
 
 const statuses=["Unreviewed","Potential match","False positive","Confirmed source match"];
@@ -91,6 +92,7 @@ export function initResearch() {
     detail.replaceChildren(element("h2",row.subject_name),element("p",`${name(row.source)} · ${category(row.source)} · Match score ${row.match_score} / 1`),sourceLink(row.source_url),
       element("h3","Rationale"),element("p",row.match_rationale,"prose"),element("p",`Categories: ${row.categories.join(", ") || "None returned"}`),details("Source evidence",row.source_data));
     detail.append(element("p","Confirmed source match records an analyst assessment of the researched subject and source record. It does not confirm ownership of a blockchain wallet.","bounded-note"));
+    if(row.id && sources.some(source=>source.id===row.source&&source.mode==='api'))detail.append(evidenceHandoffButton('research',row.id));
     const review=element("form",undefined,"editor");review.id="research-review";review.append(fields([{name:"review_status",label:"Analyst review",options:statuses,value:row.review_status}]));
     const save=element("button","Save review");save.type="submit";review.append(save);
     review.addEventListener("submit",event=>{
