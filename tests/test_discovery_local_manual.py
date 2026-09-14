@@ -22,6 +22,7 @@ BECH='bc1qxy2kgdygjrsqtzq2n0yrf2493p83kkfjhx0wlh'
 
 @pytest.fixture
 def live(h,monkeypatch):
+    monkeypatch.delenv('DISCOVERY_GITHUB_TOKEN',raising=False)
     runtime=DiscoveryRuntime(h.sessions,metadata_only=True)
     monkeypatch.setattr(main,'start_monitoring',lambda:None)
     monkeypatch.setattr(main,'stop_monitoring',lambda:None)
@@ -60,7 +61,7 @@ def test_production_capabilities(live,tid,mode,source):
     src=next(s for s in ok(client.get(PREFIX+'/sources')) if s['id']==source)
     assert src['executable'] and not src['credential_required']
     github=next(t for t in ok(client.get(PREFIX+'/transforms')) if t['id']=='wallet.public_code_mentions')
-    assert not github['implemented'] and not github['executable']
+    assert github['implemented'] and not github['configured'] and not github['executable']
     assert h.count(DiscoveryRun)==0
 
 @pytest.mark.parametrize('chain,address,stored_chain,stored',[

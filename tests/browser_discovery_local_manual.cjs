@@ -10,9 +10,10 @@ module.exports=async({evaluate,httpPort,traffic})=>{
   await evaluate(`document.querySelector('#discovery-subject input').value=${JSON.stringify(address)};document.querySelector('#discovery-subject input').dispatchEvent(new Event('input',{bubbles:true}));document.getElementById('discovery-subject').requestSubmit()`);await busy();
   const catalog=await local('/discovery/transforms');
   for(const id of ['wallet.local_labels','wallet.manual_exact_web'])assert.ok(catalog.find(t=>t.id===id).implemented&&catalog.find(t=>t.id===id).executable);
-  assert.equal(catalog.find(t=>t.id==='wallet.public_code_mentions').implemented,false);
+  assert.equal(catalog.find(t=>t.id==='wallet.public_code_mentions').implemented,true);
+  assert.equal(catalog.find(t=>t.id==='wallet.public_code_mentions').configured,false);
   assert.ok((await text()).includes('Manual action generation available'));
-  assert.ok((await text()).includes('Not implemented / Not executable'));
+  assert.ok((await text()).includes('Not executable'));
   assert.equal((await local('/discovery/runs')).total,0,'typing does not run Discovery');
   async function run(tid,refresh=false){
     await evaluate(`document.querySelectorAll('#discovery-transforms input[type=checkbox]').forEach(n=>{n.checked=n.closest('[data-transform]').dataset.transform===${JSON.stringify(tid)};n.dispatchEvent(new Event('change',{bubbles:true}));});document.querySelector('#discovery-plan [name=refresh]').checked=${refresh};document.querySelector('#discovery-plan [name=refresh]').dispatchEvent(new Event('change',{bubbles:true}));`);

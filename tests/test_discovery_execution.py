@@ -54,7 +54,7 @@ class Harness:
         self.sessions=sessionmaker(self.engine)
         source=REGISTRY.sources['github'].model_dump();source.update(credential_env='DISCOVERY_GITHUB_TOKEN' if credential else None,storage_allowed=True,cost_class=cost,mode=mode,rate_limit_per_minute=100)
         sources=[{**source,'id':name} for name in ('test_one','test_two')]
-        transform=REGISTRY.transforms['wallet.public_code_mentions'].model_dump();transform.update(source_ids=('test_one','test_two'),cost_class=cost,mode=mode,max_requests=max_requests if mode=='automated' else 0)
+        transform=REGISTRY.transforms['wallet.public_code_mentions'].model_dump();transform.update(source_ids=('test_one','test_two'),cost_class=cost,mode=mode,max_requests=max_requests if mode=='automated' else 0,max_results=100,deadline_seconds=60)
         self.registry=Registry(sources,[transform]);self.executors=ExecutorRegistry(self.registry)
         self.runtime=DiscoveryRuntime(self.sessions,self.executors,metadata_only=True)
     def bind(self,source='test_one',executor=None,**policy):
@@ -109,7 +109,7 @@ def test_multiple_success_and_provenance(h):
 
 def test_unimplemented_and_production_registry(h):
     production=production_executors(h.sessions)
-    assert set(production._bindings)=={('wallet.local_labels','gc_labels')}
+    assert set(production._bindings)=={('wallet.local_labels','gc_labels'),('wallet.public_code_mentions','github')}
     assert set(production._manual)=={('wallet.manual_exact_web','google')}
     row=asyncio.run(job(h));assert row['status']=='failed'
     assert row['sources'][0]['status']=='unavailable'

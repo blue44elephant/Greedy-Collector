@@ -13,7 +13,7 @@ async function until(fn) { for (let n = 0; n < 160; n++) {try {const value = awa
 let server, browser, socket;
 const failures = [];
 const mode=process.argv[2] || 'production';
-assert.ok(['production','executor','unmigrated'].includes(mode));
+assert.ok(['production','executor','unmigrated','github'].includes(mode));
 (async () => {
   const httpPort = await port(), debugPort = await port();
   const browserPath = process.env.CHROMIUM_PATH || ['C:/Program Files/Google/Chrome/Application/chrome.exe', 'C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe'].find(fs.existsSync);

@@ -10,7 +10,8 @@ if not work.name.startswith('gc-discovery-browser-') or work==ROOT:
 sys.path.insert(0,str(ROOT))
 os.environ.update(PYTHON_DOTENV_DISABLED='1',GREEDY_COLLECTOR_DATABASE_URL='sqlite:///'+(work/'discovery-test.db').as_posix(),GREEDY_COLLECTOR_GRAPH_BACKEND='sqlite',GREEDY_COLLECTOR_MONITORING_BACKEND='apscheduler',DISCOVERY_GITHUB_TOKEN='ed3-test-only-secret')
 mode=sys.argv[2]
-if mode not in ('production','executor','unmigrated'):raise RuntimeError('Unknown test mode')
+if mode in ('production','unmigrated'):os.environ.pop('DISCOVERY_GITHUB_TOKEN',None)
+if mode not in ('production','executor','unmigrated','github'):raise RuntimeError('Unknown test mode')
 if mode!='unmigrated':
     from alembic import command
     from alembic.config import Config
@@ -22,9 +23,15 @@ import requests
 def blocked(*args,**kwargs):
     (work/'external-request-attempted').write_text('External HTTP was attempted')
     raise AssertionError('No external request is permitted in ED-3 tests')
+httpx.HTTPTransport.handle_request=blocked
+httpx.AsyncHTTPTransport.handle_async_request=blocked
 httpx.Client.request=blocked
 httpx.AsyncClient.request=blocked
 requests.Session.request=blocked
+
+if mode=='github':
+    from tests.browser_discovery_github_transport import install
+    install(work)
 
 import main
 if mode=='executor':

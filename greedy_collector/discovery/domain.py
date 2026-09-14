@@ -19,7 +19,7 @@ def choice(value,values):
 def clean(value):
     try:
         result=safe_snapshot(value)
-        secret=os.getenv('DISCOVERY_GITHUB_TOKEN','')
+        secret=os.getenv('DISCOVERY_GITHUB_TOKEN','').strip()
         def redact(item):
             if isinstance(item,str) and secret:
                 for variant in sorted({secret,quote(secret,safe=''),quote_plus(secret,safe='')},key=len,reverse=True):
@@ -88,7 +88,10 @@ def result_identity(query,kind,predicate,start,end,fact_key):
 def observation_fingerprint(payload,source):
     # Generated identities, retrieval clocks and provider ranking are not source content.
     excluded={'id','created_at','retrieved_at','result_id','execution_id','rank'}
-    return fingerprint({'source':source,'material':clean({k:v for k,v in payload.items() if k not in excluded})})
+    material={k:v for k,v in payload.items() if k not in excluded}
+    if material.get('kind')=='code_search_result' and isinstance(material.get('source_snapshot'),dict):
+        material['source_snapshot']={k:v for k,v in material['source_snapshot'].items() if k!='github_search_score'}
+    return fingerprint({'source':source,'material':clean(material)})
 
 class Input(BaseModel):model_config=ConfigDict(extra='forbid')
 

@@ -294,6 +294,8 @@ class Candidate(Input):
     observation:ObservationInput
 
 class QuotaReport(Input):
+    limit:int|None=Field(default=None,strict=True,ge=0)
+    resource:Literal['code_search','search','core']|None=None
     remaining:int|None=Field(default=None,strict=True,ge=0)
     reported_units:int|None=Field(default=None,strict=True,ge=0,le=1000000)
     reset_at:datetime|None=None

@@ -107,7 +107,8 @@ def test_manual_descriptor_and_unapproved_remote_do_not_produce_material(svc):
     source=svc.transition_source(row['sources'][0]['id'],'manual_ready',expected_run_version=row['version'])
     assert source['requests_attempted']==source['units_consumed']==source['returned_count']==0
     assert svc.run_items(row['id'])['total']==0
-    svc.registry=REGISTRY
+    # Explicit unapproved test policy; production GitHub now permits bounded public excerpts.
+    svc.registry=Registry([s.model_copy(update={'storage_allowed':False}) if s.id=='github' else s for s in REGISTRY.sources.values()],list(REGISTRY.transforms.values()))
     row=start(svc,run(svc,'unapproved'))
     with pytest.raises(DiscoveryError,match='retention'):batch(svc,row)
     assert svc.run_items(row['id'])['total']==0

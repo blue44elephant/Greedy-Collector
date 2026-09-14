@@ -220,6 +220,13 @@ export function initDiscovery() {
     observation = await request(`/observations/${encode(id)}`); const o = observation;
     const target = byId('discovery-observation');
     target.replaceChildren(element('h3',o.title),element('p',o.summary),reference(o.source_url || o.source_locator),element('p',`Source ${o.source_id} · Pivot ${o.transform_id} · ${label(o.kind)} · ${label(o.verification)}`),element('p',`Retrieved ${dateText(o.retrieved_at)} · Observed ${o.observed_on || dateText(o.observed_at)} · Published ${o.published_on || dateText(o.published_at)}`));
+    if (o.kind === 'code_search_result' && o.source_id === 'github') {
+      const s = o.source_snapshot || {};
+      target.append(element('h4','GitHub code mention'),table(['Field','Returned source value'],[['Repository',s.repository_full_name],['File path',s.file_path],['Matched full wallet',o.match_context?.matched_wallet],['GitHub search score',s.github_search_score ?? 'Not returned'],['Blob SHA',s.blob_sha ?? 'Not returned'],['Provider incomplete results',String(s.incomplete_results)]]),element('p','GitHub search score is ranking metadata, not ownership probability, Attribution confidence or a GC risk score. A code mention does not establish wallet control.','bounded-note'));
+      const link = reference(s.file_html_url);
+      if (link.tagName === 'A') link.textContent = 'Open on GitHub';
+      target.append(link,element('h4','Matched code context'));
+    }
     if (o.excerpt) target.append(element('blockquote',o.excerpt),element('p',o.excerpt_complete ? 'Source marks this excerpt complete.' : 'Bounded excerpt; not a complete document.','muted small'));
     if (o.kind === 'local_label_snapshot' && o.source_snapshot?.record) {
       const r = o.source_snapshot.record;

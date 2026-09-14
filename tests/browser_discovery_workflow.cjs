@@ -27,6 +27,8 @@ module.exports=async({evaluate,call,work,mode,httpPort,traffic})=>{
     const {execFileSync}=require('node:child_process');
     const output=execFileSync(process.env.PYTHON||'python',['-c',"import sqlite3,sys; c=sqlite3.connect(sys.argv[1]); print(c.execute(\"select count(*) from sqlite_master where type='table' and name like 'discovery_%'\").fetchone()[0])",path.join(work,'discovery-test.db')],{windowsHide:true,encoding:'utf8'});
     assert.equal(output.trim(),'0');
+  }else if(mode==='github'){
+    await require('./browser_discovery_github.cjs')({evaluate,call,work,httpPort,traffic});
   }else if(mode==='production'){
     await require('./browser_discovery_local_manual.cjs')({evaluate,call,work,httpPort,traffic});
   }else{

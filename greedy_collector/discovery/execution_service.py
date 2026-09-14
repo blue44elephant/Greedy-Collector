@@ -83,6 +83,9 @@ class ExecutionService(DiscoveryService):
         snapshot={**source.quota_snapshot,**(quota.model_dump(mode='json',exclude_none=True) if quota else {})}
         if eligibility:snapshot['eligibility']=eligibility
         if quota and quota.retry_after_at:source.retry_after_at=aware(quota.retry_after_at)
+        # transition_source reloads with populate_existing; persist the retry
+        # deadline before that reload when application autoflush is disabled.
+        self.db.flush()
         return self.transition_source(source.id,state,expected_run_version=run.version,error_code=category,quota_snapshot=snapshot)
 
     @atomic

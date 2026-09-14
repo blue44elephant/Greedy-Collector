@@ -19,7 +19,7 @@ class QuotaPolicy(BaseModel):
 class ExecutionSignal(Exception):
     """Closed error categories; never retain an upstream exception or message."""
     def __init__(self,category,quota=None):
-        if category not in ('rate_limited','timeout','transport_failed','invalid_provider_response','budget_exhausted','configuration_unavailable'):
+        if category not in ('rate_limited','timeout','transport_failed','invalid_provider_response','budget_exhausted','configuration_unavailable','entitlement_unavailable'):
             raise DiscoveryError('Unsupported executor outcome')
         self.category=category
         self.quota=QuotaReport.model_validate(quota or {})
@@ -96,7 +96,9 @@ def production_executors(sessions):
     # Bound to the application's chosen database; construction neither queries
     # Labels nor performs Discovery. Tests can supply isolated sessions.
     from .local import LocalLabelsExecutor,exact_web_actions
+    from .github import GitHubCodeExecutor
     registry=ExecutorRegistry()
     registry.register(Binding('wallet.local_labels','gc_labels',1,1,LocalLabelsExecutor(sessions),QuotaPolicy(daily_units=0,monthly_units=0)))
     registry.register_manual(ManualBinding('wallet.manual_exact_web','google',1,1,exact_web_actions))
+    registry.register(Binding('wallet.public_code_mentions','github',1,1,GitHubCodeExecutor(),QuotaPolicy(daily_units=100,monthly_units=3000)))
     return registry

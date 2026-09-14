@@ -1,0 +1,56 @@
+const assert=require('node:assert/strict');
+const fs=require('node:fs');
+const path=require('node:path');
+module.exports=async({evaluate,call,work,httpPort,traffic})=>{
+  const base=`http://127.0.0.1:${httpPort}/api/greedy-collector/discovery`;
+  const api=async suffix=>{const r=await fetch(base+suffix);assert.ok(r.ok);return r.json();};
+  const count=()=>fs.existsSync(path.join(work,'github-calls'))?Number(fs.readFileSync(path.join(work,'github-calls'),'utf8')):0;
+  const text=()=>evaluate(`document.getElementById('discovery-workspace').innerText`);
+  const busy=()=>evaluate(`waitFor(()=>document.getElementById('discovery-workspace').dataset.busy==='false')`);
+  const click=async label=>{await evaluate(`button('#discovery-workspace',${JSON.stringify(label)}).click()`);await busy();};
+  assert.equal(count(),0);
+  const address='0x'+'ab'.repeat(20);
+  await evaluate(`document.querySelector('#discovery-subject input').value=${JSON.stringify(address)};document.querySelector('#discovery-subject input').dispatchEvent(new Event('input',{bubbles:true}));document.getElementById('discovery-subject').requestSubmit()`);await busy();
+  const catalog=await api('/transforms');const github=catalog.find(t=>t.id==='wallet.public_code_mentions');
+  assert.ok(github.implemented&&github.configured&&github.executable);assert.equal(github.max_results,30);
+  async function run(refresh=false,status='completed'){
+    await evaluate(`document.querySelectorAll('#discovery-transforms input[type=checkbox]').forEach(n=>{n.checked=n.dataset.source==='github';n.dispatchEvent(new Event('change',{bubbles:true}));});document.querySelector('#discovery-plan [name=refresh]').checked=${refresh};document.querySelector('#discovery-plan [name=refresh]').dispatchEvent(new Event('change',{bubbles:true}));`);
+    const before=count();await click('Plan selected pivots');assert.equal(count(),before);
+    await click('Run discovery');await evaluate(`waitFor(()=>document.getElementById('discovery-run').dataset.status===${JSON.stringify(status)})`);
+    return evaluate(`document.getElementById('discovery-run').dataset.runId`);
+  }
+  const first=await run();assert.equal(count(),1);
+  await evaluate(`waitFor(()=>!!button('#discovery-results','Inspect result'))`);await click('Inspect result');
+  for(const expected of ['test/browser-fixture','src/wallet.txt',address,'GitHub search score','4.2','Matched code context','Open on GitHub'])assert.ok((await text()).includes(expected),expected);
+  const link=await evaluate(`(()=>{const a=[...document.querySelectorAll('#discovery-observation a')].find(a=>a.textContent==='Open on GitHub');return {href:a.href,target:a.target,rel:a.rel};})()`);
+  assert.equal(link.href,'https://github.com/test/browser-fixture/blob/main/src/wallet.txt');assert.equal(link.target,'_blank');assert.equal(link.rel,'noopener noreferrer');
+  assert.equal(await evaluate(`document.querySelector('#discovery-observation details').open`),false);
+  // Never follow the external link.
+  await evaluate(`document.querySelector('#discovery-review [name=status]').value='relevant';document.querySelector('#discovery-review [name=reason]').value='Test-only code relevance review';document.getElementById('discovery-review').requestSubmit()`);await busy();
+  assert.ok((await text()).includes('Test-only code relevance review'));
+  const old=(await api('/runs/'+first+'/results')).items[0];
+  const cached=await run();assert.equal(count(),1);assert.equal((await api('/runs/'+cached)).sources[0].status,'cache_hit');
+  fs.writeFileSync(path.join(work,'github-mode'),'empty');
+  const empty=await run(true);assert.equal(count(),2);assert.equal((await api('/runs/'+empty+'/results')).total,0);
+  assert.ok((await api('/observations/'+old.observation.id)).excerpt.startsWith('Test-only'));
+  fs.writeFileSync(path.join(work,'github-mode'),'changed');
+  const refreshed=await run(true);assert.equal(count(),3);
+  await evaluate(`waitFor(()=>!!button('#discovery-results','Inspect result'))`);await click('Inspect result');
+  assert.ok((await text()).includes('Source material changed since the previous review.'));
+  assert.ok((await text()).includes('Changed test-only context'));
+  assert.ok((await api('/observations/'+old.observation.id)).excerpt.startsWith('Test-only'));
+  assert.equal((await api('/runs/'+refreshed+'/results')).items[0].result.id,old.result.id);
+  fs.writeFileSync(path.join(work,'github-mode'),'rate');
+  await run(true,'failed');assert.equal(count(),4);assert.ok((await text()).includes('Rate limited'));
+  const created=await fetch(`http://127.0.0.1:${httpPort}/api/greedy-collector/labels/manual`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({chain:'ethereum',address,label:'Test-only mixed annotation',type:'Unknown',source:'Browser fixture'})});assert.ok(created.ok);
+  await evaluate(`document.querySelectorAll('#discovery-transforms input[type=checkbox]').forEach(n=>{n.checked=['gc_labels','github'].includes(n.dataset.source);n.dispatchEvent(new Event('change',{bubbles:true}));})`);
+  await click('Plan selected pivots');await click('Run discovery');await evaluate(`waitFor(()=>document.getElementById('discovery-run').dataset.status==='partial')`);
+  const mixed=await api('/runs/'+await evaluate(`document.getElementById('discovery-run').dataset.runId`));
+  assert.equal(mixed.sources.find(s=>s.source_id==='gc_labels').returned_count,1);assert.equal(mixed.sources.find(s=>s.source_id==='github').status,'rate_limited');
+  assert.equal((await text()).includes('ed3-test-only-secret'),false);
+  for(const name of ['wallet','graph','monitoring','alerts','cases','labels','research','attribution','discovery'])await evaluate(`go('${name}')`);
+  assert.equal(count(),4,'Workspace navigation never executes GitHub');
+  assert.ok(traffic.every(url=>url.startsWith(`http://127.0.0.1:${httpPort}/`)));
+  await call('Page.captureScreenshot',{format:'png'}).then(r=>fs.writeFileSync(path.join(work,'github-discovery.png'),Buffer.from(r.data,'base64')));
+  console.log('ED-4B production executor: public mention, provenance, review, cache, refresh, rate limit and nine workspaces passed.');
+};
