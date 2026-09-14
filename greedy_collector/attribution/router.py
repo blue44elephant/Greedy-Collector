@@ -14,6 +14,7 @@ from . import schemas as s
 from .domain import AttributionError, Conflict, NotFound, SchemaUnavailable
 from .service import AttributionService
 from .handoff import EvidenceHandoffService
+from .cases import CaseAttributionService
 
 
 def error(status, code, message, existing_id=None):
@@ -71,6 +72,23 @@ def get_handoff_service(db: Session = Depends(get_db)):
 
 
 Handoff = Annotated[EvidenceHandoffService, Depends(get_handoff_service)]
+
+
+def get_case_attribution_service(db: Session = Depends(get_db)):
+    return CaseAttributionService(db)
+
+
+CaseService = Annotated[CaseAttributionService, Depends(get_case_attribution_service)]
+
+
+@router.post('/cases/{case_id}/references', response_model=s.CaseAttributionReference, status_code=201)
+def add_case_attribution(case_id: str, payload: s.CaseAttributionCreate, svc: CaseService):
+    return svc.add_reference(case_id,payload.reference_type,payload.target_id,expected_version=payload.expected_version)
+
+
+@router.get('/cases/{case_id}/references', response_model=s.Page[s.CaseAttributionReference])
+def case_attribution(case_id: str, svc: CaseService, limit: Limit = 20, offset: Offset = 0):
+    return page(svc.list_references(case_id,limit=limit,offset=offset),limit,offset)
 
 
 @router.get('/evidence/sources/{source_kind}/{source_id}', response_model=s.SourcePreview)

@@ -252,3 +252,36 @@ class ErrorDetail(BaseModel):
 
 class ErrorResponse(BaseModel):
     detail: ErrorDetail
+
+
+CaseAttributionKind = Literal['entity', 'attribution_claim']
+
+
+class CaseAttributionCreate(domain.Input):
+    reference_type: CaseAttributionKind
+    target_id: Identifier
+    expected_version: Version
+
+
+class CaseAttributionPin(BaseModel):
+    schema_version: Literal[1]
+    reference_type: CaseAttributionKind
+    target_id: str
+    captured_at: datetime
+    entity: EntityRead
+    claim: ClaimRead | None
+    links: list[LinkRead] = Field(max_length=10000)
+
+
+class CaseAttributionCurrent(BaseModel):
+    entity: EntityRead | None
+    claim: ClaimRead | None
+    changed: bool
+
+
+class CaseAttributionReference(BaseModel):
+    id: str
+    case_id: str
+    pinned: CaseAttributionPin
+    current: CaseAttributionCurrent
+    pinned_evidence_counts: dict[Stance, int]

@@ -1,4 +1,5 @@
 import {ApiError} from './api.js';
+import {addToCaseButton} from './case_actions.js';
 import {initEvidenceHandoff, snapshotProvenance} from './attribution_handoff.js';
 import {byId, element, panel, table, fields, shortValue, dateText, details, run, UserError} from './ui.js';
 import {request, readPage, encodeId, caption, options, assessments, relationships, entityTypes, stances, origins} from './attribution_api.js';
@@ -156,6 +157,7 @@ export function initAttribution() {
       ['Created',dateText(row.created_at)],['Updated',dateText(row.updated_at)],['Actor',row.created_by],['Entity ID',row.id],
     ]),element('p',row.description||'No description.','prose'));
     const controls=element('div',undefined,'toolbar');
+    controls.append(addToCaseButton('entity','',row.id,{expected_version:row.version}));
     if(!row.archived_at)controls.append(button('Edit descriptor',()=>openEntityEditor(row)),button('Create claim for entity',async()=>{await switchView('claims');const subject=pendingSubject;pendingSubject=null;openClaimEditor(row,subject);}));
     controls.append(button(row.archived_at?'Restore entity':'Archive entity',()=>lifecycle(entityDetail,`/entities/${encodeId(id)}`,row,row.archived_at?'restore':'archive','entity',()=>showEntity(id))));
     entityDetail.append(controls);
@@ -201,6 +203,7 @@ export function initAttribution() {
     const count=row.active_evidence_counts;
     claimDetail.append(element('p',`${count.supports} supporting · ${count.contradicts} contradicting · ${count.context} contextual active links`,'attr-counts'));
     const controls=element('div',undefined,'toolbar'),editor=element('section');editor.id='attr-claim-action';
+    controls.append(addToCaseButton('attribution_claim',row.chain,row.id,{expected_version:row.version}));
     const active=!row.archived_at&&!row.entity_archived;
     if(active)controls.append(button('Capture evidence',()=>captureEditor(editor,row)),button('Link existing evidence',()=>reuseEvidence(editor,row)),
       button('Review assessment',()=>assessmentEditor(editor,row)),button('Revise scope',()=>{

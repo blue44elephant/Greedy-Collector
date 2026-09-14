@@ -416,14 +416,20 @@ def report(
     format: str = Query(default="markdown", pattern="^(markdown|html|json|pdf)$"),
     db: Session = Depends(get_db),
 ):
+    from .attribution.domain import AttributionError
     try:
         content, media_type = service.case_report(db, case_id, format)
         return Response(content=content, media_type=media_type)
     except KeyError as exc:
         raise HTTPException(status_code=404, detail="Case not found") from exc
+    except AttributionError:
+        raise HTTPException(status_code=422, detail="Attribution report material is unavailable or exceeds supported limits. Inspect the case references.") from None
 
 
 # Explicit manual attribution routes; no startup service construction.
 from .attribution.router import router as attribution_router
 
 router.include_router(attribution_router)
+
+from .discovery.router import router as discovery_router
+router.include_router(discovery_router)

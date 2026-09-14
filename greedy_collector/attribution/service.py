@@ -10,6 +10,7 @@ from ..models import (AttributionEntity as Entity, AttributionClaim as Claim,
                       AttributionEvidence as Evidence, AttributionClaimEvidence as Link,
                       AttributionEvent as Event, ATTRIBUTION_TRIGGER_SQL, utcnow)
 from ..kyc.presentation import sanitize_research
+from ..migration_state import migration_scripts, supports_revision
 from .domain import (AttributionError, Conflict, NotFound, SchemaUnavailable,
                      EntityInput, ClaimInput, ScopeInput, EvidenceInput, LinkInput,
                      choice, fingerprint, json_safe, name_key, normalize_subject, reason_text)
@@ -73,8 +74,7 @@ class AttributionService:
         if connection.exec_driver_sql("PRAGMA foreign_keys").scalar_one() != 1:
             raise SchemaUnavailable("Attribution requires SQLite foreign-key enforcement")
         if not metadata_only:
-            revisions = connection.execute(text("SELECT version_num FROM alembic_version")).scalars().all() if "alembic_version" in existing else []
-            if REVISION not in revisions:
+            if not supports_revision(connection, REVISION, scripts=migration_scripts()):
                 raise SchemaUnavailable("Attribution migration revision is required; do not blindly stamp an existing database")
 
     def _get(self, model, identifier):

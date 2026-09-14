@@ -443,8 +443,9 @@ def test_openapi_explicit_models_enums_and_exact_surface(api):
     client, _ = api
     spec = ok(client.get('/openapi.json'))
     paths = {p: methods for p, methods in spec['paths'].items() if p.startswith(P)}
-    assert len(paths) == 24 and len(spec['paths']) == 53
-    assert sum(len(methods) for methods in paths.values()) == 29
+    legacy_paths = {p for p in spec['paths'] if not p.startswith(API+'/discovery')}
+    assert len(paths) == 25 and len(legacy_paths) == 54
+    assert sum(len(methods) for methods in paths.values()) == 31
     for path, methods in paths.items():
         assert 'delete' not in methods
         if path.endswith('/events'):
@@ -544,6 +545,8 @@ import main
 from greedy_collector.database import engine
 from greedy_collector.monitoring import scheduler
 from greedy_collector.attribution.service import TABLES
+with engine.connect() as connection:
+    before_revision = connection.execute(text('SELECT version_num FROM alembic_version')).scalar_one()
 with patch.object(httpx.AsyncClient, 'request', side_effect=AssertionError('No provider calls')):
     with TestClient(main.app) as client:
         assert scheduler.running
@@ -553,7 +556,7 @@ with patch.object(httpx.AsyncClient, 'request', side_effect=AssertionError('No p
         assert client.get('/').text.count('data-workspace=') == 8
 assert not scheduler.running
 with engine.connect() as connection:
-    assert connection.execute(text('SELECT version_num FROM alembic_version')).scalar_one() == '20260912_01'
+    assert connection.execute(text('SELECT version_num FROM alembic_version')).scalar_one() == before_revision
     for table in TABLES:
         assert connection.execute(text('SELECT COUNT(*) FROM '+table)).scalar_one() == 0
     assert connection.execute(text('PRAGMA foreign_key_check')).all() == []

@@ -1,4 +1,5 @@
 import {openLabel} from "./label_ui.js";
+import {caseAttribution} from './case_attribution.js';
 import {api} from "./api.js";
 import {byId, element, panel, table, shortValue, dateText, details, fields, action, run, UserError, chains} from "./ui.js";
 import {investigate} from "./wallet.js";
@@ -57,7 +58,7 @@ export function initCases() {
       element("p", "Cases organize analyst-selected references. References do not establish identity or ownership. Updated time is the stored case timestamp, not a latest-evidence timestamp.", "bounded-note"));
     const entities = panel("Entities", "References do not automatically retrieve or expand blockchain history."); entities.id="case-entities";
     const attachments = row.entities.filter(item => item.entity_type === "attachment");
-    entities.append(table(["Type", "Reference", "Metadata", "Actions"], row.entities.filter(item => item.entity_type !== "attachment").map(item => {
+    entities.append(table(["Type", "Reference", "Metadata", "Actions"], row.entities.filter(item => !['attachment','entity','attribution_claim'].includes(item.entity_type)).map(item => {
       const controls = element("div", undefined, "toolbar"); const chain=item.metadata_json?.chain;
       if (item.entity_type === "wallet") {
         controls.append(action("Investigate wallet", () => investigate(chain,item.entity_ref)));
@@ -106,7 +107,7 @@ export function initCases() {
       const url=URL.createObjectURL(blob); const link=element("a"); link.href=url; link.download=`case-${row.id}.${extension}`;
       document.body.append(link); link.click(); link.remove(); setTimeout(()=>URL.revokeObjectURL(url),1000);
     }));
-    selected.replaceChildren(overview,entities,alerts,notes,files,reports);
+    selected.replaceChildren(overview,entities,caseAttribution(row.id),alerts,notes,files,reports);
   }
   return id => {if(host.dataset.busy === "true") return; if(id) selectedId=id; return perform(refresh);};
 }

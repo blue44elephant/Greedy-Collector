@@ -1,4 +1,5 @@
 import {api, ApiError} from "./api.js";
+import {addCaseAttribution} from './case_attribution.js';
 import {element, fields, run, UserError, action} from "./ui.js";
 
 export const casePath = id => `/cases/${encodeURIComponent(id)}`;
@@ -51,7 +52,8 @@ export function addToCaseButton(kind, chain, reference, metadata = null) {
       form.addEventListener("submit", event => {
         event.preventDefault(); const id = form.elements.case_id.value;
         run(dialog, async () => {
-          await caseRequest(`${casePath(id)}/entities`, {method:"POST", body:{entity_type:kind, entity_ref:reference,
+          if(['entity','attribution_claim'].includes(kind))await addCaseAttribution(id,kind,reference,metadata.expected_version);
+          else await caseRequest(`${casePath(id)}/entities`, {method:"POST", body:{entity_type:kind, entity_ref:reference,
             metadata:metadata || {chain, [kind === "wallet" ? "address" : "tx_hash"]:reference}}});
           form.replaceChildren(element("p", "Reference added to the selected case."), action("Open case", () => {dialog.close(); openCase(id);}), close);
         }, "Adding reference…");

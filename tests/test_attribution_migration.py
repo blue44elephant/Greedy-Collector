@@ -45,7 +45,7 @@ def schema(engine):
 def test_clean_upgrade_schema_equivalence_and_foreign_keys(tmp_path,monkeypatch):
     url='sqlite:///'+(tmp_path/'migrated.db').as_posix()
     cfg=config(url,monkeypatch)
-    command.upgrade(cfg,'head'); command.current(cfg); command.heads(cfg)
+    command.upgrade(cfg,REVISION); command.current(cfg); command.heads(cfg)
     assert REVISION in cfg.stdout.getvalue()
     migrated=create_fk_enabled_engine(url)
     metadata=create_fk_enabled_engine('sqlite:///'+(tmp_path/'metadata.db').as_posix())
@@ -73,7 +73,7 @@ def test_upgrade_existing_baseline_preserves_rows_and_creates_no_attribution(tmp
         connection.execute(text("INSERT INTO labels (id,address,chain,label,type,source,confidence,last_updated) VALUES ('test-label','test-address','any','Synthetic annotation','Unknown','Test only',0.7,'2026-09-12 00:00:00')"))
         before=connection.execute(text('SELECT * FROM labels')).all()
     old_tables=set(inspect(engine).get_table_names())
-    command.upgrade(cfg,'head')
+    command.upgrade(cfg,REVISION)
     with engine.connect() as connection:
         assert connection.execute(text('SELECT * FROM labels')).all()==before
         assert set(inspect(engine).get_table_names())-old_tables==set(TABLES)
@@ -84,7 +84,7 @@ def test_upgrade_existing_baseline_preserves_rows_and_creates_no_attribution(tmp
 
 def test_empty_downgrade_and_populated_history_protection(tmp_path,monkeypatch):
     url='sqlite:///'+(tmp_path/'downgrade.db').as_posix();cfg=config(url,monkeypatch)
-    command.upgrade(cfg,'head');command.downgrade(cfg,'20260630_01');command.upgrade(cfg,'head')
+    command.upgrade(cfg,REVISION);command.downgrade(cfg,'20260630_01');command.upgrade(cfg,REVISION)
     engine=create_fk_enabled_engine(url)
     with Session(engine) as db: AttributionService(db).create_entity({'canonical_name':'Retained synthetic history'})
     with pytest.raises(RuntimeError,match='populated attribution history'): command.downgrade(cfg,'20260630_01')

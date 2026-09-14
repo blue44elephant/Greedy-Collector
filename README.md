@@ -280,7 +280,7 @@ Wallet and selected Graph wallets show persisted claims, separate entities and r
 
 Graph offers an optional attribution overlay, off by default, for current assessed claims on the selected wallet and current summary page. Distinct entity nodes and claim arrows supplement the unchanged wallet/transaction graph; claims are not transactions or blockchain hops. No graph-wide attribution fetch, ownership inference, provider request, or automatic assessment is added. Attribution failures or an unmigrated database leave ordinary Wallet/Graph investigation usable.
 
-See [AT-4 behavior, boundaries, and isolated verification](docs/ATTRIBUTION_AT4.md), including existing graph limitations. Labels/Research evidence handoffs are available through AT-5; Cases/report integration remains a future increment.
+See [AT-4 behavior, boundaries, and isolated verification](docs/ATTRIBUTION_AT4.md), including existing graph limitations. Labels/Research evidence handoffs are available through AT-5; Cases/report integration is available through AT-6 with explicit pinned references.
 
 ## Label and Research evidence handoffs (AT-5)
 
@@ -288,4 +288,17 @@ Use as attribution evidence opens a server-read preview of a selected Label or p
 
 Captured evidence retains immutable sanitized source provenance. Later label edits or research review changes do not rewrite it. Identical repeat handoffs conflict; source or claim changes require renewed review. Source scores and review statuses do not become attribution assessments or risk points. No provider calls or automatic migration occur during handoff; Labels/Research remain usable without attribution storage.
 
-See [AT-5 workflows, snapshot semantics, and verification](docs/ATTRIBUTION_AT5.md). Manual research links and unavailable-source notices are not eligible automated evidence. Cases/report integration remains AT-6.
+See [AT-5 workflows, snapshot semantics, and verification](docs/ATTRIBUTION_AT5.md). Manual research links and unavailable-source notices are not eligible automated evidence. Cases/report integration is available through AT-6.
+
+## Case attribution and reports (AT-6)
+
+Cases can explicitly pin existing Attribution claims or entity descriptors. Use Add attribution in Cases or Add to case from Attribution. Choose the target and confirm; wallets, Labels and Research do not populate case attribution automatically. Duplicate references preserve the first pin.
+
+Case detail separates pinned assessment/version from current assessment, review and archive state. Markdown, HTML, JSON and PDF reports retain pinned supporting, contradicting and contextual evidence, with historical/current withdrawal status and provenance. Later claim changes do not rewrite the pin or an already downloaded report. A newly generated export adds a fresh timestamp and current-state comparison.
+
+No migration, report archive, repinning/removal workflow, provider request or risk change is introduced. Cases and reports remain usable when attribution storage is uninitialized. See [AT-6 pinning, report semantics and verification](docs/ATTRIBUTION_AT6.md).
+
+
+## Discovery API foundation (ED-2)
+
+Developer APIs under `/api/greedy-collector/discovery` provide local capabilities/planning, explicit bounded runs, stored history and review. Use one application worker. All production transforms remain unimplemented; no Discovery provider is queried and no Discovery workspace is available yet. Storage requires the existing explicit ED-1 migration (`20260913_01`); startup does not migrate it. See [ED-2 contracts, budgets, cancellation and limitations](docs/EVIDENCE_DISCOVERY_ED2.md). Existing workspaces remain unchanged.

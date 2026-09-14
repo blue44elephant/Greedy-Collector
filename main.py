@@ -17,6 +17,7 @@ from fastapi.staticfiles import StaticFiles
 from greedy_collector import router as greedy_collector_router
 from greedy_collector.config import get_settings
 from greedy_collector.monitoring import start_monitoring, stop_monitoring
+from greedy_collector.discovery.runtime import start_discovery, stop_discovery
 
 settings = get_settings()
 
@@ -48,11 +49,13 @@ app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 async def startup_event():
     """Start monitoring tasks on application startup."""
     start_monitoring()
+    await start_discovery(app)
 
 
 @app.on_event("shutdown")
 async def shutdown_event():
     """Stop monitoring tasks on application shutdown."""
+    await stop_discovery(app)
     stop_monitoring()
 
 

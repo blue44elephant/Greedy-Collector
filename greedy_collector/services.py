@@ -372,6 +372,10 @@ class GreedyCollectorService:
         }
 
     def case_report(self, db: Session, case_id: str, format_name: str) -> tuple[str | bytes, str]:
+        # Pin/current/evidence reads belong to one SQLite snapshot, without writes.
+        connection = db.connection()
+        if connection.dialect.name == 'sqlite' and not connection.connection.driver_connection.in_transaction:
+            connection.exec_driver_sql('BEGIN')
         case = db.get(Case, case_id)
         if not case:
             raise KeyError(case_id)
@@ -393,7 +397,11 @@ class GreedyCollectorService:
                 select(AnalystNote).where(AnalystNote.case_id == case_id)
             ).all()
         ]
-        args = (row_dict(case), entities, alerts, notes)
+        from .attribution.cases import report_attribution, KINDS
+        attribution = report_attribution(db,case_id)
+        # Attribution pins have their own typed report section, not raw legacy metadata.
+        entities = [row for row in entities if row['entity_type'] not in KINDS]
+        args = (row_dict(case), entities, alerts, notes, attribution)
         if format_name == "pdf":
             return case_pdf(*args), "application/pdf"
         if format_name == "html":

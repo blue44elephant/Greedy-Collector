@@ -1,6 +1,8 @@
 from html import escape
 from io import BytesIO
 import json
+from .attribution.reporting import attribution_lines, DISCLAIMER as ATTRIBUTION_DISCLAIMER
+from .attribution.handoff import safe_snapshot
 
 
 DISCLAIMER = (
@@ -9,7 +11,7 @@ DISCLAIMER = (
 )
 
 
-def case_markdown(case: dict, entities: list[dict], alerts: list[dict], notes: list[dict]) -> str:
+def case_markdown(case: dict, entities: list[dict], alerts: list[dict], notes: list[dict], attribution: dict | None = None) -> str:
     lines = [
         f"# {case['title']}",
         "",
@@ -30,12 +32,13 @@ def case_markdown(case: dict, entities: list[dict], alerts: list[dict], notes: l
     )
     lines.extend(["", "## Analyst Notes", ""])
     lines.extend(f"- {item['body']}" for item in notes)
+    lines.extend(attribution_lines(attribution))
     lines.extend(["", "## Disclaimer", "", DISCLAIMER])
     return "\n".join(lines)
 
 
-def case_html(case: dict, entities: list[dict], alerts: list[dict], notes: list[dict]) -> str:
-    markdown = case_markdown(case, entities, alerts, notes)
+def case_html(case: dict, entities: list[dict], alerts: list[dict], notes: list[dict], attribution: dict | None = None) -> str:
+    markdown = case_markdown(case, entities, alerts, notes, attribution)
     body = "\n".join(
         f"<p>{escape(line)}</p>" if line else "<br>" for line in markdown.splitlines()
     )
@@ -48,7 +51,7 @@ def case_html(case: dict, entities: list[dict], alerts: list[dict], notes: list[
     )
 
 
-def case_json(case: dict, entities: list[dict], alerts: list[dict], notes: list[dict]) -> str:
+def case_json(case: dict, entities: list[dict], alerts: list[dict], notes: list[dict], attribution: dict | None = None) -> str:
     return json.dumps(
         {
             "case": case,
@@ -56,13 +59,14 @@ def case_json(case: dict, entities: list[dict], alerts: list[dict], notes: list[
             "alerts": alerts,
             "notes": notes,
             "disclaimer": DISCLAIMER,
+            **({"attribution": {**safe_snapshot(attribution), "disclaimer": ATTRIBUTION_DISCLAIMER}} if attribution is not None else {}),
         },
         default=str,
         indent=2,
     )
 
 
-def case_pdf(case: dict, entities: list[dict], alerts: list[dict], notes: list[dict]) -> bytes:
+def case_pdf(case: dict, entities: list[dict], alerts: list[dict], notes: list[dict], attribution: dict | None = None) -> bytes:
     from reportlab.lib.pagesizes import A4
     from reportlab.lib.styles import getSampleStyleSheet
     from reportlab.lib.units import mm
@@ -106,6 +110,8 @@ def case_pdf(case: dict, entities: list[dict], alerts: list[dict], notes: list[d
     story.extend(
         Paragraph(escape(item["body"]), styles["BodyText"]) for item in notes
     )
+    for line in attribution_lines(attribution):
+        story.append(Paragraph(escape(line), styles["BodyText"]) if line else Spacer(1,6))
     story.extend(
         [
             Spacer(1, 12),
