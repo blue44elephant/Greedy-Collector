@@ -1,3 +1,4 @@
+import {discoveryAction,graphWalletEligible} from "./discovery_handoff.js";
 import {attributionSummary,graphSubjectIsUnambiguous} from "./attribution_summary.js";
 import {attributionOverlay} from "./attribution_overlay.js";
 import {addToCaseButton} from "./case_actions.js";
@@ -94,6 +95,7 @@ export function renderGraph(host, graph, chain, labels = null) {
         action("Investigate wallet", () => investigate(node.chain || chain, node.id)),
         addToCaseButton("wallet", node.chain || chain, node.id), labelCards(annotations));
       const subject={...node,chain:node.chain||chain};
+      if(graphWalletEligible(graph,subject)) detail.append(discoveryAction({chain:subject.chain,address:subject.id}, 'graph', () => group.isConnected && group.classList.contains('selected')));
       if(graphSubjectIsUnambiguous(graph,subject)){
         overlay.source(subject,position);const epoch=selectionEpoch;
         attributionHost.replaceChildren(attributionSummary({chain:subject.chain,address:subject.id,graph:true,onPage:rows=>{if(epoch===selectionEpoch)overlay.claims(rows);}}));

@@ -12,19 +12,20 @@ import {initAttribution} from "./attribution.js";
 
 import {initDiscovery} from "./discovery.js";
 
-function navigate(name, id) {
+function navigate(name, id, restore = false) {
   if (!byId(`${name}-workspace`)) return;
   document.querySelectorAll(".workspace").forEach(node => { node.hidden = node.id !== `${name}-workspace`; });
   document.querySelectorAll("[data-workspace]").forEach(node => { node.setAttribute("aria-current", String(node.dataset.workspace === name)); });
-  discovery.setVisible(name === "discovery");
+  if (name === "discovery" && id) discovery.openWallet(id);
+  else discovery.setVisible(name === "discovery");
   if (name === "monitoring") loadMonitoring();
   if (name === "alerts") loadAlerts(id);
   if (name === "cases") loadCases(id);
   if (name === "labels") loadLabels(id);
   if (name === "research") loadResearch();
   if (name === "attribution") loadAttribution(id);
-  if (name === "wallet" && !byId("results").hidden) refreshAttribution(byId("wallet-workspace"));
-  if (name === "graph") queueMicrotask(() => {
+  if (!restore && name === "wallet" && !byId("results").hidden) refreshAttribution(byId("wallet-workspace"));
+  if (!restore && name === "graph") queueMicrotask(() => {
     // A handoff can immediately submit a replacement graph after navigation.
     if (byId("graph-workspace").querySelector("form").dataset.busy !== "true") refreshAttribution(byId("graph-workspace"));
   });
@@ -38,6 +39,10 @@ const loadLabels = initLabels();
 const loadResearch = initResearch();
 const loadAttribution = initAttribution();
 const discovery = initDiscovery();
+document.addEventListener("open-discovery", event => navigate("discovery", event.detail));
+document.addEventListener("return-discovery", event => {
+  if (["wallet","graph"].includes(event.detail?.workspace)) navigate(event.detail.workspace, undefined, true);
+});
 document.addEventListener("open-attribution", event => navigate("attribution", event.detail));
 document.addEventListener("open-label", event => navigate("labels", event.detail.id));
 document.addEventListener("open-case", event => navigate("cases", event.detail.id));

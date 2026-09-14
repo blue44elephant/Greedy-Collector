@@ -1,4 +1,5 @@
 import {api} from './api.js';
+import {walletContext,returnFromDiscovery} from './discovery_handoff.js';
 import {byId, element, panel, table, fields, details, dateText, UserError} from './ui.js';
 import {discoveryRequest as request, activeRun, createRunPoller} from './discovery_api.js';
 
@@ -28,6 +29,8 @@ export function initDiscovery() {
   let plan = null, intent = null, runKey = null, current = null, result = null, observation = null;
   let resultsOffset = 0, historyOffset = 0, observationsOffset = 0, reviewsOffset = 0;
   const choices = [];
+  let entry = null, pendingHandoff = null;
+  const entryPanel = element('section',undefined,'panel'); entryPanel.id = 'discovery-entry'; entryPanel.hidden = true;
   const top = element('div', undefined, 'workspace-heading');
   top.append(element('h1', 'Discovery'), element('span', 'Public-source pivots & candidate evidence', 'muted'));
   const message = element('p', '', 'operation-status'); message.setAttribute('role', 'status'); message.id = 'discovery-message';
@@ -53,14 +56,14 @@ export function initDiscovery() {
   filters.append(fields([{name:'status', label:'Status', options:[['','All statuses'], ...['queued','running','completed','partial','failed','cancelled','interrupted'].map(v => [v,label(v)])]}, {name:'subject_id',label:'Subject ID (optional)'}, {name:'include_archived',label:'Include archived',type:'checkbox'}]));
   const filterButton = element('button', 'Load history'); filterButton.type = 'submit'; filters.append(filterButton);
   const historyRows = element('div'); historyRows.id = 'discovery-history-rows'; history.append(filters, historyRows);
-  host.append(top, message, query, pivots, sourcePanel, planning, currentPanel, results, detail, history);
+  host.append(top, message, entryPanel, query, pivots, sourcePanel, planning, currentPanel, results, detail, history);
 
   function showError(e) { message.textContent = e instanceof UserError ? e.message : 'The Discovery operation could not be completed. Try again.'; message.className = 'operation-status error'; message.setAttribute('role','alert'); }
   async function perform(fn) {
     if (busy) return;
     busy = true; host.dataset.busy = 'true'; host.setAttribute('aria-busy','true'); message.textContent = 'Working…'; message.className = 'operation-status'; message.setAttribute('role','status'); poller.stop(); syncButtons();
     try { await fn(); message.textContent = ''; } catch (e) { showError(e); }
-    finally { busy = false; host.dataset.busy = 'false'; host.setAttribute('aria-busy','false'); syncButtons(); resume(); }
+    finally { busy = false; host.dataset.busy = 'false'; host.setAttribute('aria-busy','false'); syncButtons(); if (pendingHandoff) queueMicrotask(() => openWallet(pendingHandoff, false)); else resume(); }
   }
   function button(text, fn) { const b = element('button', text, 'secondary'); b.type = 'button'; b.addEventListener('click', () => perform(fn)); return b; }
   const planButton = button('Plan selected pivots', () => makePlan()); planButton.id = 'discovery-plan-button';
@@ -86,8 +89,8 @@ export function initDiscovery() {
     options.querySelectorAll('input').forEach(n => { n.disabled = busy; });
   }
   function invalidate() { plan = intent = runKey = null; planned.replaceChildren(element('p', 'Prepare a plan after selecting eligible pivots.', 'muted')); syncButtons(); }
-  form.elements.address.addEventListener('input', () => { subject = null; detected.textContent = 'Check this subject before planning.'; choices.forEach(c => { c.check.checked = false; }); invalidate(); });
-  form.addEventListener('submit', event => { event.preventDefault(); perform(async () => {
+  form.elements.address.addEventListener('input', () => { entry = null; renderEntry(); subject = null; detected.textContent = 'Check this subject before planning.'; choices.forEach(c => { c.check.checked = false; }); invalidate(); });
+  async function checkSubject(expectedChain) {
     invalidate(); subject = null;
     const value = form.elements.address.value.trim();
     if (!value) throw new UserError('Enter a public Bitcoin or Ethereum wallet address.');
@@ -96,9 +99,15 @@ export function initDiscovery() {
     catch { throw new UserError('Could not identify a supported Bitcoin or Ethereum wallet address.'); }
     if (resolved.kind === 'unknown') throw new UserError('Could not identify a supported Bitcoin or Ethereum wallet address.');
     if (resolved.kind !== 'address' || !['bitcoin','ethereum'].includes(resolved.chain)) throw new UserError('Discovery currently accepts Bitcoin and Ethereum wallet addresses only.');
-    subject = {chain:resolved.chain,address:resolved.normalized};
+    if (expectedChain && resolved.chain !== expectedChain) throw new UserError('The wallet handoff does not match its chain. Open the wallet again.');
+    // After backend validation, mirror Discovery's canonical case convention
+    // (the general resolver preserves ETH input case). Base58 stays exact.
+    const address = resolved.chain === 'ethereum' || /^bc1/i.test(resolved.normalized) ? resolved.normalized.toLowerCase() : resolved.normalized;
+    subject = {chain:resolved.chain,address};
+    form.elements.address.value = subject.address;
     detected.textContent = `${label(subject.chain)} · ${subject.address} · Format checked locally; the Discovery planner remains authoritative.`;
-  }); });
+  }
+  form.addEventListener('submit', event => { event.preventDefault(); perform(() => checkSubject()); });
   options.addEventListener('change', invalidate);
   async function capabilities() {
     [transforms, sources] = await Promise.all([request('/transforms'), request('/sources')]); loaded = true; choices.length = 0;
@@ -162,7 +171,37 @@ export function initDiscovery() {
     const row = await request('/runs',{body:{...intent,expected_plan_fingerprint:plan.fingerprint},key:runKey});
     invalidate(); await selectRun(row.id, row); await loadHistory(0);
   }
+  function renderEntry() {
+    entryPanel.hidden = !entry;
+    entryPanel.replaceChildren();
+    if (!entry) return;
+    entryPanel.append(element('h2',`From ${label(entry.origin)}`),element('p',`${label(entry.chain)} · ${entry.address}`,'full-address'),
+      element('p','Subject prefill only. Select pivots, Plan, then Run explicitly. Existing runs remain in global history.','muted small'),
+      button(entry.origin === 'graph' ? 'Back to graph' : 'Back to wallet', () => returnFromDiscovery(entry)));
+    if (activeRun(current) && (current.subject.namespace !== entry.chain || current.subject.canonical_value !== subject?.address)) {
+      entryPanel.append(element('p','You have an active run for another subject. It remains selected below and is not cancelled. A new run must wait for it to finish or be explicitly cancelled.','bounded-note'));
+    }
+  }
+  function openWallet(value, activate = true) {
+    if (activate) visible = true;
+    pendingHandoff = value;
+    if (busy) return;
+    return perform(async () => {
+      const incoming = pendingHandoff; pendingHandoff = null;
+      entry = walletContext(incoming);
+      subject = null; choices.forEach(c => { c.check.checked = false; c.budget.value = '0'; });
+      options.querySelector('[name=refresh]').checked = false; invalidate(); renderEntry();
+      if (!entry) throw new UserError('Discovery handoff requires a supported wallet and origin workspace.');
+      if (entry.isCurrent && !entry.isCurrent()) throw new UserError('The selected wallet view has changed. Select it again before opening Discovery.');
+      form.elements.address.value = entry.address;
+      await checkSubject(entry.chain); entry.address = subject.address; renderEntry();
+      await capabilities();
+      // Read global history only; never auto-open a previous run or execute a pivot.
+      await loadHistory(historyOffset);
+    }).then(() => { if (visible && !busy) form.elements.address.focus(); });
+  }
   function renderRun() {
+    renderEntry();
     currentPanel.replaceChildren(element('h2','Current run'));
     if (!current) { currentPanel.append(element('p','No run selected.','empty')); return; }
     currentPanel.dataset.status = current.status; currentPanel.dataset.runId = current.id;
@@ -258,11 +297,11 @@ export function initDiscovery() {
     for (let i = 0; i < page.items.length; i += 4) {
       rows.push(...await Promise.all(page.items.slice(i,i+4).map(r => request(`/runs/${encode(r.id)}`))));
     }
-    historyRows.replaceChildren(table(['Subject','Created','Status','Records / pivots','Archived','Action'],rows.map(r => [`${label(r.subject.namespace)} · ${r.subject.canonical_value}`,dateText(r.created_at),label(r.status),`${r.returned_count} / ${r.sources.length}`,r.archived_at ? 'Archived' : 'No',button('Open run', () => selectRun(r.id))]),'No Discovery runs are stored in this history view.'),pager(page,loadHistory));
+    historyRows.replaceChildren(table(['Subject','Created','Status','Records / pivots','Archived','Action'],rows.map(r => [`${subject?.chain === r.subject.namespace && subject?.address === r.subject.canonical_value ? "Current subject · " : ""}${label(r.subject.namespace)} · ${r.subject.canonical_value}`,dateText(r.created_at),label(r.status),`${r.returned_count} / ${r.sources.length}`,r.archived_at ? 'Archived' : 'No',button('Open run', () => selectRun(r.id))]),'No Discovery runs are stored in this history view.'),pager(page,loadHistory));
   }
   filters.addEventListener('submit',e => { e.preventDefault(); perform(() => loadHistory(0)); });
   invalidate();
-  return {setVisible(value) {
+  return {openWallet,setVisible(value) {
     const entering = value && !visible; visible = value;
     if (!visible) { poller.stop(); return; }
     if (entering) perform(async () => { if (!loaded) await capabilities(); if (current) await selectRun(current.id); await loadHistory(historyOffset); });

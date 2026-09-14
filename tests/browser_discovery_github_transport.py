@@ -13,6 +13,9 @@ def install(work):
         calls.write_text(str(int(calls.read_text())+1 if calls.exists() else 1))
         modefile=work/'github-mode'
         mode=modefile.read_text() if modefile.exists() else 'success'
+        if mode=='slow':
+            import asyncio
+            await asyncio.sleep(6)
         if mode=='rate':return httpx.Response(429,json={'message':'ed3-test-only-secret'},headers={'retry-after':'60','x-ratelimit-resource':'code_search'})
         if mode=='empty':return httpx.Response(200,json={'total_count':0,'incomplete_results':False,'items':[]})
         address='0x'+'ab'*20

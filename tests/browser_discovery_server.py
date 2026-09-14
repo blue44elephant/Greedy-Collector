@@ -10,9 +10,9 @@ if not work.name.startswith('gc-discovery-browser-') or work==ROOT:
 sys.path.insert(0,str(ROOT))
 os.environ.update(PYTHON_DOTENV_DISABLED='1',GREEDY_COLLECTOR_DATABASE_URL='sqlite:///'+(work/'discovery-test.db').as_posix(),GREEDY_COLLECTOR_GRAPH_BACKEND='sqlite',GREEDY_COLLECTOR_MONITORING_BACKEND='apscheduler',DISCOVERY_GITHUB_TOKEN='ed3-test-only-secret')
 mode=sys.argv[2]
-if mode in ('production','unmigrated'):os.environ.pop('DISCOVERY_GITHUB_TOKEN',None)
-if mode not in ('production','executor','unmigrated','github'):raise RuntimeError('Unknown test mode')
-if mode!='unmigrated':
+if mode in ('production','unmigrated','handoff','handoff_unmigrated'):os.environ.pop('DISCOVERY_GITHUB_TOKEN',None)
+if mode not in ('production','executor','unmigrated','github','handoff','handoff_github','handoff_unmigrated'):raise RuntimeError('Unknown test mode')
+if mode not in ('unmigrated','handoff_unmigrated'):
     from alembic import command
     from alembic.config import Config
     cfg=Config(str(ROOT/'alembic.ini'));cfg.set_main_option('script_location',str(ROOT/'migrations'))
@@ -29,11 +29,16 @@ httpx.Client.request=blocked
 httpx.AsyncClient.request=blocked
 requests.Session.request=blocked
 
-if mode=='github':
+if mode in ('github','handoff_github'):
     from tests.browser_discovery_github_transport import install
     install(work)
 
 import main
+if mode.startswith('handoff'):
+    from tests.browser_discovery_handoff_fixture import install
+    main.start_monitoring=lambda:None
+    main.stop_monitoring=lambda:None
+    install(main.app,work)
 if mode=='executor':
     import asyncio
     from datetime import datetime,timezone

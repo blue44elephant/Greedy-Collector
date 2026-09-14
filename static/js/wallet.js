@@ -1,3 +1,4 @@
+import {discoveryAction} from "./discovery_handoff.js";
 import {attributionSummary} from "./attribution_summary.js";
 import {addToCaseButton} from "./case_actions.js";
 import {readLabels, labelsFor, labelCards} from "./label_ui.js";
@@ -113,6 +114,9 @@ function renderLookup(data, stored = false, labels = [], labelsUnavailable = fal
   }
   byId("counterparties").replaceChildren(counterpartyNodes);
   byId("counterparties-empty").hidden = counterparties.length !== 0;
+  byId("wallet-discovery").replaceChildren(element("h3", "Discovery"),
+    element("p", "Public-source pivots and candidate clues. Choose pivots explicitly in Discovery.", "muted small"),
+    discoveryAction({chain:profile.chain,address:profile.address}, "wallet", () => !byId("results").hidden && byId("lookup-form").dataset.busy !== "true"));
   byId("wallet-attribution").replaceChildren(attributionSummary({chain:profile.chain,address:profile.address}));
   byId("results").hidden = false;
 }

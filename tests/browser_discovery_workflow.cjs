@@ -16,7 +16,9 @@ module.exports=async({evaluate,call,work,mode,httpPort,traffic})=>{
   assert.equal(await evaluate(`document.querySelectorAll('[data-workspace]').length`),9);
   assert.ok((await text()).includes('Public-source pivots & candidate evidence'));
   assert.equal(await evaluate(`document.querySelector('#discovery-workspace h1').textContent`),'Discovery');
-  if(mode==='unmigrated'){
+  if(mode.startsWith('handoff')){
+    await require('./browser_discovery_handoff.cjs')({evaluate,call,work,mode,httpPort,traffic});
+  }else if(mode==='unmigrated'){
     assert.ok((await text()).includes('Discovery storage is not initialized for this database.'));
     assert.equal((await api('/runs')).status,503);
     await setSubject();await click('Why unavailable — diagnostic plan');assert.ok((await text()).includes('No selected pivots are currently executable.'));
