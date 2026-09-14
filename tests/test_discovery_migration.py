@@ -130,8 +130,8 @@ with patch.object(httpx.HTTPTransport,'handle_request',prohibited), patch.object
         for route in ['/','/health','/docs','/openapi.json','/static/js/app.js','/static/app.css']:
             assert client.get(route).status_code==200,route
         html=client.get('/').text
-        assert html.count('data-workspace=')==8
-        assert 'data-workspace="discovery"' not in html
+        assert html.count('data-workspace=')==9
+        assert 'data-workspace="discovery"' in html
         paths=client.get('/openapi.json').json()['paths']
         assert '/api/greedy-collector/discovery/runs' in paths
         assert client.get('/api/greedy-collector/discovery/runs').status_code==(200 if MIGRATED else 503)

@@ -1,4 +1,4 @@
-"""Single-process, one-active-run Discovery orchestration. No production adapters."""
+"""Single-process, one-active-run Discovery orchestration with local/manual pivots."""
 import asyncio
 from contextlib import contextmanager
 from datetime import datetime,timedelta,timezone
@@ -9,11 +9,12 @@ from sqlalchemy.exc import SQLAlchemyError
 from . import schemas as s,enums as e
 from .domain import canonical_subject,query_fingerprint,Conflict,SchemaUnavailable,DiscoveryError
 from ..attribution.domain import fingerprint,canonical_json
-from .executors import PRODUCTION_EXECUTORS,ExecutionContext,ExecutionSignal
+from .executors import production_executors,ExecutionContext,ExecutionSignal
 from .execution_service import ExecutionService
 
 class DiscoveryRuntime:
-    def __init__(self,sessions,executors=PRODUCTION_EXECUTORS,*,metadata_only=False):
+    def __init__(self,sessions,executors=None,*,metadata_only=False):
+        if executors is None:executors=production_executors(sessions)
         self.sessions=sessions;self.executors=executors;self.registry=executors.descriptors
         self.metadata_only=metadata_only;self._gate=asyncio.Lock();self._tasks={};self._cancel={};self._stopping=False
 
@@ -25,6 +26,10 @@ class DiscoveryRuntime:
     def _configured(self,source):return bool(os.getenv(source.credential_env,'')) if source.credential_env else True
 
     def eligibility(self,transform,source,budget):
+        manual=self.executors.manual(transform.id,source.id)
+        if manual:
+            if (manual.transform_version,manual.source_version)!=(transform.version,source.version):return 'not_implemented'
+            return 'eligible' if budget.allow_free_local else 'budget_exhausted'
         binding=self.executors.get(transform.id,source.id)
         if not binding:return 'not_implemented'
         if (binding.transform_version,binding.source_version)!=(transform.version,source.version):return 'not_implemented'
@@ -44,7 +49,7 @@ class DiscoveryRuntime:
             sources.append(s.SourceCapability(**source.model_dump(exclude={'credential_env'}),configured=self._configured(source),credential_required=bool(source.credential_env),executable=executable).model_dump(mode='json'))
         for t in self.registry.transforms.values():
             states=[self.eligibility(t,self.registry.sources[x],s.Budget()) for x in t.source_ids]
-            values=t.model_dump();values.update(implemented=any(self.executors.get(t.id,x) is not None for x in t.source_ids),executable='eligible' in states,
+            values=t.model_dump();values.update(implemented=any(self.executors.get(t.id,x) is not None or self.executors.manual(t.id,x) is not None for x in t.source_ids),executable='eligible' in states,
                 configured=all(self._configured(self.registry.sources[x]) for x in t.source_ids),unavailable_reason=None if 'eligible' in states else states[0])
             transforms.append(s.TransformCapability.model_validate(values).model_dump(mode='json'))
         return {'sources':sources,'transforms':transforms}
@@ -56,7 +61,7 @@ class DiscoveryRuntime:
         subject=canonical_subject('blockchain_address',request.subject.chain,request.subject.address)
         selected=[];seen=set()
         # Configuration identity is code/operator-owned, never selection-owned.
-        config={source_id:{t.id:(binding.quota.model_dump() if (binding:=self.executors.get(t.id,source_id)) else {'unimplemented':True})
+        config={source_id:{t.id:(binding.quota.model_dump() if (binding:=self.executors.get(t.id,source_id)) else {'manual_version':manual.transform_version} if (manual:=self.executors.manual(t.id,source_id)) else {'unimplemented':True})
             for t in self.registry.transforms.values() if source_id in t.source_ids} for source_id in self.registry.sources}
         for item in request.selections:
             transform=self.registry.transforms.get(item.transform_id)
@@ -145,6 +150,15 @@ class DiscoveryRuntime:
             return
         binding=self.executors.get(t.id,descriptor.id)
         try:
+            manual=self.executors.manual(t.id,descriptor.id)
+            if manual:
+                actions=[s.ManualAction.model_validate(a).model_dump(mode='json') for a in manual.actions(subject)]
+                if len(actions)!=1 or any(a['source_id']!=descriptor.id for a in actions):raise ExecutionSignal('invalid_provider_response')
+                if event.is_set():raise asyncio.CancelledError()
+                with self.service() as svc:
+                    row=svc.get_run(run_id)
+                    svc.transition_source(sid,'manual_ready',expected_run_version=row['version'],quota_snapshot={'manual_actions':actions})
+                return
             with self.service() as svc:
                 row=svc.get_run(run_id)
                 if svc.cache_candidate(sid):

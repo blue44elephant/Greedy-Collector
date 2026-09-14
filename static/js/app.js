@@ -10,10 +10,13 @@ import {initResearch} from "./research.js";
 
 import {initAttribution} from "./attribution.js";
 
+import {initDiscovery} from "./discovery.js";
+
 function navigate(name, id) {
   if (!byId(`${name}-workspace`)) return;
   document.querySelectorAll(".workspace").forEach(node => { node.hidden = node.id !== `${name}-workspace`; });
   document.querySelectorAll("[data-workspace]").forEach(node => { node.setAttribute("aria-current", String(node.dataset.workspace === name)); });
+  discovery.setVisible(name === "discovery");
   if (name === "monitoring") loadMonitoring();
   if (name === "alerts") loadAlerts(id);
   if (name === "cases") loadCases(id);
@@ -34,6 +37,7 @@ const loadCases = initCases();
 const loadLabels = initLabels();
 const loadResearch = initResearch();
 const loadAttribution = initAttribution();
+const discovery = initDiscovery();
 document.addEventListener("open-attribution", event => navigate("attribution", event.detail));
 document.addEventListener("open-label", event => navigate("labels", event.detail.id));
 document.addEventListener("open-case", event => navigate("cases", event.detail.id));

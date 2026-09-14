@@ -11,7 +11,7 @@ import main
 from greedy_collector.database import create_fk_enabled_engine
 from greedy_collector.discovery.router import get_runtime
 from greedy_collector.discovery.runtime import DiscoveryRuntime
-from greedy_collector.discovery.executors import PRODUCTION_EXECUTORS
+from greedy_collector.discovery.executors import ExecutorRegistry
 from greedy_collector.models import DiscoveryRun,DiscoveryObservation
 from tests.test_discovery_execution import h,Harness,SyntheticExecutor,material,ETH
 
@@ -55,8 +55,8 @@ def result(client,row):return ok(client.get(PREFIX+'/runs/'+row['id']+'/results'
 @pytest.mark.parametrize('route',['/','/health','/docs','/openapi.json','/static/js/app.js','/static/app.css'])
 def test_existing_routes(api,route):
     client,_=api;assert client.get(route).status_code==200
-    assert client.get('/').text.count('data-workspace=')==8
-    assert 'data-workspace="discovery"' not in client.get('/').text
+    assert client.get('/').text.count('data-workspace=')==9
+    assert 'data-workspace="discovery"' in client.get('/').text
 
 def test_capabilities_safe_and_no_execution(api,monkeypatch):
     client,h=api;monkeypatch.setenv('DISCOVERY_GITHUB_TOKEN','test-only-capability-secret')
@@ -78,9 +78,9 @@ def test_plan_is_local_and_create_dispatches(api):
     assert done['subject']['canonical_value']==ETH
     assert 'request_snapshot' not in done
 
-def test_requested_unimplemented_production_descriptors(api):
+def test_requested_descriptors_without_registered_implementations(api):
     client,h=api
-    runtime=DiscoveryRuntime(h.sessions,PRODUCTION_EXECUTORS,metadata_only=True)
+    runtime=DiscoveryRuntime(h.sessions,ExecutorRegistry(),metadata_only=True)
     main.app.dependency_overrides[get_runtime]=lambda:runtime
     data=payload();data['selections']=[{'transform_id':x} for x in ('wallet.local_labels','wallet.manual_exact_web','wallet.public_code_mentions')]
     row=ok(create(client,data),202);done=terminal(client,row['id'])

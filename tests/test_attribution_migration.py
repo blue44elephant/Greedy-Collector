@@ -109,7 +109,7 @@ with patch.object(httpx.AsyncClient,'request',side_effect=AssertionError('No ext
         for route in ['/','/health','/docs','/openapi.json']:
             assert client.get(route).status_code==200
         html=client.get('/').text
-        assert html.count('data-workspace=')==8
+        assert html.count('data-workspace=')==9
         assert 'data-workspace="attribution"' in html
         paths=client.get('/openapi.json').json()['paths']
         assert '/api/greedy-collector/attribution/entities' in paths

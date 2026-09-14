@@ -492,7 +492,7 @@ def test_current_routes_and_attribution_workspace_without_seed_records(api):
     for path in ('/', '/health', '/docs', '/openapi.json', '/static/js/app.js', '/static/app.css'):
         assert client.get(path).status_code == 200
     html = client.get('/').text
-    assert html.count('data-workspace=') == 8 and 'data-workspace="attribution"' in html
+    assert html.count('data-workspace=') == 9 and 'data-workspace="attribution"' in html
     assert counts(engine) == [0]*5
 
 
@@ -553,7 +553,7 @@ with patch.object(httpx.AsyncClient, 'request', side_effect=AssertionError('No p
         for path in ['/', '/health', '/docs', '/openapi.json']:
             assert client.get(path).status_code == 200
         assert client.get('/api/greedy-collector/attribution/entities').json()['total'] == 0
-        assert client.get('/').text.count('data-workspace=') == 8
+        assert client.get('/').text.count('data-workspace=') == 9
 assert not scheduler.running
 with engine.connect() as connection:
     assert connection.execute(text('SELECT version_num FROM alembic_version')).scalar_one() == before_revision

@@ -13,7 +13,7 @@ from greedy_collector.database import create_fk_enabled_engine
 from greedy_collector.models import Base,DiscoveryRun,DiscoveryRunSource,DiscoveryResult,DiscoveryObservation,DiscoveryRunItem,AttributionEntity,RiskResult,Case,Label,KycScreeningRun
 from greedy_collector.discovery import schemas as s
 from greedy_collector.discovery.registry import REGISTRY,Registry
-from greedy_collector.discovery.executors import ExecutorRegistry,Binding,QuotaPolicy,ExecutionSignal,PRODUCTION_EXECUTORS
+from greedy_collector.discovery.executors import ExecutorRegistry,Binding,QuotaPolicy,ExecutionSignal,production_executors
 from greedy_collector.discovery.runtime import DiscoveryRuntime
 from greedy_collector.discovery.execution_service import ExecutionService
 from greedy_collector.discovery.domain import DiscoveryError,Conflict
@@ -108,7 +108,9 @@ def test_multiple_success_and_provenance(h):
     assert h.count(DiscoveryResult)==1 and h.count(DiscoveryObservation)==2
 
 def test_unimplemented_and_production_registry(h):
-    assert not PRODUCTION_EXECUTORS._bindings
+    production=production_executors(h.sessions)
+    assert set(production._bindings)=={('wallet.local_labels','gc_labels')}
+    assert set(production._manual)=={('wallet.manual_exact_web','google')}
     row=asyncio.run(job(h));assert row['status']=='failed'
     assert row['sources'][0]['status']=='unavailable'
     assert row['sources'][0]['quota_snapshot']['eligibility']=='not_implemented'

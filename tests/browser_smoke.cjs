@@ -47,7 +47,7 @@ const failures = [];
   await evaluate(`document.querySelector('#graph-workspace form').requestSubmit(); waitFor(()=>!!document.querySelector('#graph-workspace svg .graph-node'))`);
   await evaluate(`document.querySelector('#graph-workspace .graph-node').dispatchEvent(new MouseEvent('click',{bubbles:true}))`);
   assert.ok(await evaluate("!!button('#graph-workspace','Investigate wallet')"));
-  assert.deepEqual(await evaluate("[...document.querySelectorAll('[data-workspace]')].map(n=>n.dataset.workspace)"), ['wallet', 'graph', 'monitoring', 'alerts', 'cases', 'labels', 'research', 'attribution']);
+  assert.deepEqual(await evaluate("[...document.querySelectorAll('[data-workspace]')].map(n=>n.dataset.workspace)"), ['wallet', 'graph', 'monitoring', 'alerts', 'cases', 'labels', 'research', 'attribution', 'discovery']);
   assert.ok(await evaluate("!!document.querySelector('#graph-workspace [marker-end]')"));
   const initialGraphView = await evaluate("document.querySelector('#graph-workspace svg').getAttribute('viewBox')");
   await evaluate(`button('#graph-workspace','Zoom in').click()`);

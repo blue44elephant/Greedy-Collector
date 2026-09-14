@@ -301,4 +301,9 @@ No migration, report archive, repinning/removal workflow, provider request or ri
 
 ## Discovery API foundation (ED-2)
 
-Developer APIs under `/api/greedy-collector/discovery` provide local capabilities/planning, explicit bounded runs, stored history and review. Use one application worker. All production transforms remain unimplemented; no Discovery provider is queried and no Discovery workspace is available yet. Storage requires the existing explicit ED-1 migration (`20260913_01`); startup does not migrate it. See [ED-2 contracts, budgets, cancellation and limitations](docs/EVIDENCE_DISCOVERY_ED2.md). Existing workspaces remain unchanged.
+Developer APIs under `/api/greedy-collector/discovery` provide local capabilities/planning, explicit bounded runs, stored history and review. Use one application worker. ED-2 supplied the execution framework; the ninth workspace and first local/manual pivots are now available as described below. No remote Discovery provider is queried. Storage requires the existing explicit ED-1 migration (`20260913_01`); startup does not migrate it. See [ED-2 contracts, budgets, cancellation and limitations](docs/EVIDENCE_DISCOVERY_ED2.md). Existing workspaces remain unchanged.
+
+
+### ED-3 Discovery workspace
+
+Discovery is the ninth workspace: local subject checking, source/pivot capabilities, explicit planning, run history, candidate observations and relevance reviews. ED-4A adds its first real local/manual pivots: always-fresh stored Label annotations and an exact-wallet Google search link generated for explicit analyst use. Greedy Collector does not query the search engine or collect webpages. GitHub code search remains unavailable. Uninitialized Discovery storage shows a safe message and is never automatically migrated. See [ED-4A details](docs/EVIDENCE_DISCOVERY_ED4A.md) and [workspace behavior](docs/EVIDENCE_DISCOVERY_ED3.md).

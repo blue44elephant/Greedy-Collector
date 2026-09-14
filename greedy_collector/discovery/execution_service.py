@@ -49,6 +49,9 @@ class ExecutionService(DiscoveryService):
         source.requests_reserved=requests;source.units_reserved=units
         source.quota_window_start=day
         source.quota_snapshot={'policy':policy.model_dump(mode='json'),'eligibility':'eligible','remaining':None}
+        # transition_source reloads this row with populate_existing. Preserve the
+        # reservation first even when the application Session disables autoflush.
+        self.db.flush()
         # The transition joins this reservation transaction.
         return self.transition_source(source.id,'running',expected_run_version=run.version)
 
@@ -115,6 +118,8 @@ class ExecutionService(DiscoveryService):
 
     def read_run(self,identifier):
         row=self.get_run(identifier)
+        for source in row['sources']:
+            source['manual_actions']=source['quota_snapshot'].get('manual_actions',[]) if source['status']=='manual_ready' else []
         return {**row,'subject':self.get_subject(row['subject_id']),
             'budget':row['request_snapshot'].get('execution_policy',{}).get('budget',{}),
             'returned_count':sum(s['returned_count'] for s in row['sources'])}

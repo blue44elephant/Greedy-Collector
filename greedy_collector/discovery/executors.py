@@ -1,4 +1,4 @@
-"""Code-owned async executor bindings. Production deliberately registers none."""
+"""Code-owned execution bindings and separate manual-action generators."""
 from dataclasses import dataclass
 from datetime import datetime
 import inspect
@@ -58,9 +58,17 @@ class Binding:
     executor:TransformExecutor
     quota:QuotaPolicy
 
+@dataclass(frozen=True)
+class ManualBinding:
+    transform_id:str
+    source_id:str
+    transform_version:int
+    source_version:int
+    actions:Callable
+
 class ExecutorRegistry:
     def __init__(self,descriptors=REGISTRY):
-        self.descriptors=descriptors;self._bindings={}
+        self.descriptors=descriptors;self._bindings={};self._manual={}
     def register(self,binding:Binding):
         if not isinstance(binding,Binding):raise DiscoveryError('Only code bindings may be registered')
         transform,source=self.descriptors.pair(binding.transform_id,binding.source_id)
@@ -73,5 +81,22 @@ class ExecutorRegistry:
         self._bindings[key]=binding
     def get(self,transform_id,source_id):return self._bindings.get((transform_id,source_id))
 
-# Never populated by imports, environment variables, database rows or API input.
-PRODUCTION_EXECUTORS=ExecutorRegistry()
+    def register_manual(self,binding):
+        if not isinstance(binding,ManualBinding) or not callable(binding.actions) or inspect.iscoroutinefunction(binding.actions):raise DiscoveryError('A code-owned local manual handler is required')
+        transform,source=self.descriptors.pair(binding.transform_id,binding.source_id)
+        if (transform.version,source.version)!=(binding.transform_version,binding.source_version):raise DiscoveryError('Manual descriptor version mismatch')
+        if source.mode!='manual' or source.cost_class!='FREE_LOCAL' or transform.max_requests!=0:raise DiscoveryError('Manual generation must be free local with zero requests')
+        key=(binding.transform_id,binding.source_id)
+        if key in self._manual:raise DiscoveryError('Duplicate manual handler')
+        self._manual[key]=binding
+
+    def manual(self,transform_id,source_id):return self._manual.get((transform_id,source_id))
+
+def production_executors(sessions):
+    # Bound to the application's chosen database; construction neither queries
+    # Labels nor performs Discovery. Tests can supply isolated sessions.
+    from .local import LocalLabelsExecutor,exact_web_actions
+    registry=ExecutorRegistry()
+    registry.register(Binding('wallet.local_labels','gc_labels',1,1,LocalLabelsExecutor(sessions),QuotaPolicy(daily_units=0,monthly_units=0)))
+    registry.register_manual(ManualBinding('wallet.manual_exact_web','google',1,1,exact_web_actions))
+    return registry

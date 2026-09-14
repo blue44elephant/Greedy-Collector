@@ -142,7 +142,16 @@ class Accounting(BaseModel):
     cost_unit:str
     quota_snapshot:dict[str,JsonValue]
 
+class ManualAction(Input):
+    source_id:Literal['google']
+    source_name:Literal['Google']
+    query:str=Field(min_length=3,max_length=130)
+    url:str=Field(pattern=r'^https://www\.google\.com/search\?q=',max_length=512)
+    status:Literal['manual_action_available']
+    note:str=Field(min_length=1,max_length=1000)
+
 class SourceRead(Accounting):
+    manual_actions:list[ManualAction]=Field(default_factory=list,max_length=1)
     id:str
     transform_id:str
     transform_version:int

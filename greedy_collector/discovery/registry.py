@@ -1,4 +1,4 @@
-"""Typed, code-owned descriptors only. ED-1 has no executable transforms."""
+"""Typed descriptors; runtime implementation state is determined by code bindings."""
 import os,re
 from pydantic import BaseModel,ConfigDict,Field,model_validator
 from .domain import DiscoveryError,choice
@@ -50,7 +50,7 @@ class TransformDescriptor(BaseModel):
     implemented:bool=False
     @model_validator(mode='after')
     def validate_descriptor(self):
-        if self.implemented:raise DiscoveryError('ED-1 transforms are descriptor-only')
+        if self.implemented:raise DiscoveryError('Implementation state is binding-owned, not a descriptor assertion')
         if self.input_types!=('blockchain_address',):raise DiscoveryError('Only wallet input is enabled')
         if not self.source_ids or len(set(self.source_ids))!=len(self.source_ids):raise DiscoveryError('Unique source references required')
         if not self.chains or not self.display_name.strip() or not self.description.strip():raise DiscoveryError('Descriptor contract required')
@@ -99,7 +99,7 @@ REGISTRY=Registry([
     dict(id='google',display_name='Manual exact web search',category='web',mode='manual',cost_class='FREE_LOCAL',retention_policy_id='manual-navigation-v1',provenance_note='Not queried by Greedy Collector'),
     dict(id='github',display_name='Public GitHub code',category='code',mode='automated',cost_class='LIMITED_FREE',credential_env='DISCOVERY_GITHUB_TOKEN',rate_limit_per_minute=10,retention_policy_id='github-pending-review-v1',provenance_note='Public-only; source retention policy requires verification before execution'),
 ],[
-    dict(id='wallet.local_labels',display_name='Stored Label context',description='Future local exact-address annotation context',source_ids=('gc_labels',),output_types=('annotation',),result_kinds=('candidate_evidence',),predicates=('locally_labeled_as',),observation_kinds=('local_label_snapshot',),mode='local',cost_class='FREE_LOCAL',max_requests=0),
-    dict(id='wallet.manual_exact_web',display_name='Manual exact web search',description='Future manual navigation only; no captured results',source_ids=('google',),output_types=(),result_kinds=(),predicates=(),observation_kinds=(),mode='manual',cost_class='FREE_LOCAL',max_requests=0),
+    dict(id='wallet.local_labels',display_name='Stored Label context',description='Read current exact-address local annotations. No external collection or ownership inference.',source_ids=('gc_labels',),output_types=('annotation',),result_kinds=('candidate_evidence',),predicates=('locally_labeled_as',),observation_kinds=('local_label_snapshot',),mode='local',cost_class='FREE_LOCAL',max_requests=0),
+    dict(id='wallet.manual_exact_web',display_name='Manual exact web search',description='Generate an exact-wallet search link for explicit analyst use. The search engine is not queried by Greedy Collector.',source_ids=('google',),output_types=(),result_kinds=(),predicates=(),observation_kinds=(),mode='manual',cost_class='FREE_LOCAL',max_requests=0),
     dict(id='wallet.public_code_mentions',display_name='Public code mentions',description='Future exact-address public code context',source_ids=('github',),output_types=('repository',),result_kinds=('candidate_evidence','candidate_relationship'),predicates=('repository_contains',),observation_kinds=('code_search_result',),mode='automated',cost_class='LIMITED_FREE',cache_seconds=86400),
 ])
