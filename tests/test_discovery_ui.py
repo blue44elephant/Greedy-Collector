@@ -15,7 +15,7 @@ def test_discovery_ninth_workspace(ui_client):
     assert html.count('data-workspace=')==9
     assert 'data-workspace="discovery"' in html and 'id="discovery-workspace"' in html
     app=ui_client[0].get('/static/js/app.js').text
-    assert 'initDiscovery' in app and 'discovery.setVisible(name === "discovery")' in app
+    assert 'initDiscovery' in app and 'discovery.setVisible(name === "discovery", restore)' in app
 
 @pytest.mark.parametrize('value',['Public-source pivots & candidate evidence','Available pivots','Source capabilities','Not implemented','Not executable','No automated Discovery pivots are executable','Plan selected pivots','Diagnostic plan','No selected pivots are currently executable','expected_plan_fingerprint','new_material_since_review','expected_source_fingerprint','Cached observation','Refresh sources','Archive run','Restore run'])
 def test_discovery_surface_contract(value):

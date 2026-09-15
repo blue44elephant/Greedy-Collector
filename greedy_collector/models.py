@@ -3,6 +3,7 @@ import uuid
 
 from sqlalchemy import (
     Boolean,
+    FetchedValue,
     DateTime,
     Float,
     ForeignKey,
@@ -298,6 +299,8 @@ class AttributionClaim(Base):
 
 class AttributionEvidence(Base):
     __tablename__ = 'attribution_evidence'
+    # Deferred server-owned extension: legacy captures omit this column on old schemas.
+    __mapper_args__ = {'eager_defaults': False}
     id = mapped_column(String(36), nullable=False, primary_key=True, default=new_id)
     evidence_type = mapped_column(String(32), nullable=False)
     title = mapped_column(String(255), nullable=False)
@@ -321,15 +324,16 @@ class AttributionEvidence(Base):
     origin_match_id = mapped_column(String(36), ForeignKey('kyc_matches.id', name='fk_attribution_evidence_origin_match_id', ondelete="RESTRICT"), nullable=True)
     metadata_json = mapped_column(JSON, nullable=False, default=dict, server_default=text("'{}'"))
     content_sha256 = mapped_column(String(64), nullable=False)
+    origin_discovery_observation_id = mapped_column(String(36), ForeignKey('discovery_observations.id', name='fk_attribution_evidence_origin_discovery_observation_id', ondelete='RESTRICT'), nullable=True, deferred=True, server_default=FetchedValue())
     __table_args__ = (
-        CheckConstraint("evidence_type IN ('official_disclosure', 'public_record', 'explorer_annotation', 'public_post', 'repository_record', 'research_snapshot', 'label_snapshot', 'analyst_observation')", name="ck_attribution_evidence_1"),
+        CheckConstraint("evidence_type IN ('official_disclosure', 'public_record', 'explorer_annotation', 'public_post', 'repository_record', 'research_snapshot', 'label_snapshot', 'analyst_observation', 'discovery_snapshot')", name="ck_attribution_evidence_1"),
         CheckConstraint("origin IN ('public_osint', 'analyst_added', 'commercial_proprietary', 'privileged_nonpublic')", name="ck_attribution_evidence_2"),
-        CheckConstraint("collection_method IN ('analyst_entry', 'label_snapshot', 'research_snapshot')", name="ck_attribution_evidence_3"),
+        CheckConstraint("collection_method IN ('analyst_entry', 'label_snapshot', 'research_snapshot', 'discovery_snapshot')", name="ck_attribution_evidence_3"),
         CheckConstraint("source_reliability IN ('unassessed', 'reliable', 'uncertain', 'unreliable')", name="ck_attribution_evidence_4"),
         CheckConstraint('length(trim(title)) > 0 AND length(trim(summary)) > 0 AND length(trim(source_name)) > 0', name="ck_attribution_evidence_5"),
         CheckConstraint('length(content_sha256) = 64', name="ck_attribution_evidence_6"),
         CheckConstraint("source_reliability = 'unassessed' OR length(trim(reliability_rationale)) > 0", name="ck_attribution_evidence_7"),
-        CheckConstraint("(collection_method = 'analyst_entry' AND origin_label_id IS NULL AND origin_match_id IS NULL AND evidence_type NOT IN ('label_snapshot','research_snapshot')) OR (collection_method = 'label_snapshot' AND origin_label_id IS NOT NULL AND origin_match_id IS NULL AND evidence_type = 'label_snapshot') OR (collection_method = 'research_snapshot' AND origin_match_id IS NOT NULL AND origin_label_id IS NULL AND evidence_type = 'research_snapshot')", name="ck_attribution_evidence_8"),
+        CheckConstraint("((collection_method = 'analyst_entry' AND origin_label_id IS NULL AND origin_match_id IS NULL AND evidence_type NOT IN ('label_snapshot','research_snapshot','discovery_snapshot')) OR (collection_method = 'label_snapshot' AND origin_label_id IS NOT NULL AND origin_match_id IS NULL AND evidence_type = 'label_snapshot') OR (collection_method = 'research_snapshot' AND origin_match_id IS NOT NULL AND origin_label_id IS NULL AND evidence_type = 'research_snapshot')) AND origin_discovery_observation_id IS NULL OR (collection_method = 'discovery_snapshot' AND evidence_type = 'discovery_snapshot' AND origin_discovery_observation_id IS NOT NULL AND origin_label_id IS NULL AND origin_match_id IS NULL)", name="ck_attribution_evidence_8"),
         CheckConstraint("(evidence_type = 'analyst_observation' AND length(trim(analyst_note)) > 0) OR (evidence_type != 'analyst_observation' AND (length(trim(coalesce(source_url,''))) > 0 OR length(trim(coalesce(source_locator,''))) > 0))", name="ck_attribution_evidence_9"),
         Index('ix_attribution_evidence_1', 'captured_at', 'id'),
         Index('ix_attribution_evidence_2', 'content_sha256'),
@@ -337,6 +341,7 @@ class AttributionEvidence(Base):
         Index('ix_attribution_evidence_4', 'origin_label_id'),
         Index('ix_attribution_evidence_5', 'origin_match_id'),
         Index('ix_attribution_evidence_6', 'origin_group'),
+        Index('ix_attribution_evidence_7', 'origin_discovery_observation_id'),
     )
 
 
@@ -645,3 +650,40 @@ def _immutable_discovery_row(mapper, connection, target):
 for _model in (DiscoveryObservation, DiscoveryReview, DiscoveryRunItem):
     event.listen(_model, 'before_update', _immutable_discovery_row)
     event.listen(_model, 'before_delete', _immutable_discovery_row)
+
+
+# ED-6 immutable cross-subsystem provenance. Stance/rationale history belongs to
+# the referenced Attribution link and events, not a mutable copy here.
+class DiscoveryPromotion(Base):
+    __tablename__ = 'discovery_promotions'
+    id = mapped_column(String(36), primary_key=True, default=new_id)
+    observation_id = mapped_column(String(36), ForeignKey('discovery_observations.id', name='fk_discovery_promotions_observation_id', ondelete='RESTRICT'), nullable=False)
+    claim_id = mapped_column(String(36), ForeignKey('attribution_claims.id', name='fk_discovery_promotions_claim_id', ondelete='RESTRICT'), nullable=False)
+    evidence_id = mapped_column(String(36), ForeignKey('attribution_evidence.id', name='fk_discovery_promotions_evidence_id', ondelete='RESTRICT'), nullable=False)
+    link_id = mapped_column(String(36), ForeignKey('attribution_claim_evidence.id', name='fk_discovery_promotions_link_id', ondelete='RESTRICT'), nullable=False)
+    source_fingerprint = mapped_column(String(64), nullable=False)
+    capture_fingerprint = mapped_column(String(64), nullable=False)
+    claim_version_before = mapped_column(Integer, nullable=False)
+    claim_version_after = mapped_column(Integer, nullable=False)
+    actor_ref = mapped_column(String(128), nullable=False, default='local_analyst', server_default=text("'local_analyst'"))
+    created_at = mapped_column(DateTime(timezone=True), nullable=False, default=utcnow)
+    __table_args__ = (
+        UniqueConstraint('observation_id','claim_id',name='uq_discovery_promotions_1'),
+        CheckConstraint('length(source_fingerprint) = 64 AND length(capture_fingerprint) = 64',name='ck_discovery_promotions_1'),
+        CheckConstraint('claim_version_before >= 1 AND claim_version_after = claim_version_before + 1',name='ck_discovery_promotions_2'),
+        CheckConstraint("actor_ref = 'local_analyst'",name='ck_discovery_promotions_3'),
+        Index('ix_discovery_promotions_1','claim_id','created_at','id'),
+        Index('ix_discovery_promotions_2','evidence_id'),
+        Index('ix_discovery_promotions_3','link_id'),
+    )
+
+PROMOTION_TRIGGER_SQL = {
+    'discovery_promotions_no_update': "CREATE TRIGGER discovery_promotions_no_update BEFORE UPDATE ON discovery_promotions BEGIN SELECT RAISE(ABORT, 'Discovery promotions are immutable'); END",
+    'discovery_promotions_no_delete': "CREATE TRIGGER discovery_promotions_no_delete BEFORE DELETE ON discovery_promotions BEGIN SELECT RAISE(ABORT, 'Discovery promotions are immutable'); END",
+    'discovery_promotions_no_replace': "CREATE TRIGGER discovery_promotions_no_replace BEFORE INSERT ON discovery_promotions WHEN EXISTS (SELECT 1 FROM discovery_promotions WHERE id = NEW.id OR (observation_id = NEW.observation_id AND claim_id = NEW.claim_id)) BEGIN SELECT RAISE(ABORT, 'Discovery promotions are immutable'); END",
+    'discovery_promotions_valid_link': "CREATE TRIGGER discovery_promotions_valid_link BEFORE INSERT ON discovery_promotions WHEN NOT EXISTS (SELECT 1 FROM attribution_claim_evidence l JOIN attribution_evidence e ON e.id = l.evidence_id WHERE l.id = NEW.link_id AND l.claim_id = NEW.claim_id AND l.evidence_id = NEW.evidence_id AND e.origin_discovery_observation_id = NEW.observation_id AND e.content_sha256 = NEW.capture_fingerprint) BEGIN SELECT RAISE(ABORT, 'Discovery promotion references must agree'); END",
+}
+for _sql in PROMOTION_TRIGGER_SQL.values():
+    event.listen(DiscoveryPromotion.__table__, 'after_create', DDL(_sql).execute_if(dialect='sqlite'))
+event.listen(DiscoveryPromotion, 'before_update', _immutable_discovery_row)
+event.listen(DiscoveryPromotion, 'before_delete', _immutable_discovery_row)

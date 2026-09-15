@@ -254,7 +254,7 @@ export function initAttribution() {
     const row=await request(`/evidence/${encodeId(id)}`);
     host.replaceChildren(element('h4',row.title),element('p',`Origin: ${caption(row.origin)} · Actor: ${row.captured_by}`,'small'));
     if(!origins.includes(row.origin)) {host.append(element('p','Restricted-origin capture. Detailed material is not displayed in this workspace.'));return;}
-    if(['label_snapshot','research_snapshot'].includes(row.collection_method))host.append(snapshotProvenance(row.metadata_json));
+    if(['label_snapshot','research_snapshot','discovery_snapshot'].includes(row.collection_method))host.append(snapshotProvenance(row.metadata_json));
     host.append(element('p',row.summary,'prose'),element('p',row.excerpt||'No excerpt captured.','prose'),metadata([
       ['Source',row.source_name],['Locator',row.source_locator||'Not supplied'],['Published',row.published_on||'Unknown'],['Observed',row.observed_on||'Unknown'],
       ['Captured',dateText(row.captured_at)],['Source reliability',caption(row.source_reliability)],['Evidence ID',row.id],['Fingerprint',row.content_sha256],

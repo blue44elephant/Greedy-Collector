@@ -155,6 +155,7 @@ class EvidenceRead(BaseModel):
     origin_group: str | None
     origin_label_id: str | None
     origin_match_id: str | None
+    origin_discovery_observation_id: str | None = None
     metadata_json: dict[str, JsonValue]
     content_sha256: str
 

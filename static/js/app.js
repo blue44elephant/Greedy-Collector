@@ -17,7 +17,7 @@ function navigate(name, id, restore = false) {
   document.querySelectorAll(".workspace").forEach(node => { node.hidden = node.id !== `${name}-workspace`; });
   document.querySelectorAll("[data-workspace]").forEach(node => { node.setAttribute("aria-current", String(node.dataset.workspace === name)); });
   if (name === "discovery" && id) discovery.openWallet(id);
-  else discovery.setVisible(name === "discovery");
+  else discovery.setVisible(name === "discovery", restore);
   if (name === "monitoring") loadMonitoring();
   if (name === "alerts") loadAlerts(id);
   if (name === "cases") loadCases(id);
@@ -49,3 +49,5 @@ document.addEventListener("open-case", event => navigate("cases", event.detail.i
 document.addEventListener("open-alert", event => navigate("alerts", event.detail.id));
 document.querySelectorAll("[data-workspace]").forEach(button => button.addEventListener("click", () => navigate(button.dataset.workspace)));
 navigate("wallet");
+
+document.addEventListener("return-discovery-promotion", () => navigate("discovery", undefined, true));

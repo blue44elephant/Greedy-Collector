@@ -39,13 +39,13 @@ def discovery_schema(engine):
             'checks':sorted((i['name'],i['sqltext']) for i in view.get_check_constraints(table)),
         }
     with engine.connect() as connection:
-        result['triggers']=dict(connection.execute(text("SELECT name,sql FROM sqlite_master WHERE type='trigger' AND name LIKE 'discovery_%'")).all())
+        result['triggers']=dict(connection.execute(text("SELECT name,sql FROM sqlite_master WHERE type='trigger' AND name LIKE 'discovery_%' AND name NOT LIKE 'discovery_promotions_%'")).all())
     return result
 
 def test_clean_upgrade_equivalence_and_successor_services(tmp_path,monkeypatch):
     url='sqlite:///'+(tmp_path/'migrated.db').as_posix();cfg=config(url,monkeypatch)
-    command.upgrade(cfg,'head');command.current(cfg);command.heads(cfg)
-    assert cfg.stdout.getvalue().count(REVISION)==2
+    command.upgrade(cfg,REVISION);command.current(cfg);command.heads(cfg)
+    assert cfg.stdout.getvalue().splitlines()==[REVISION,'20260915_01 (head)']
     migrated=create_fk_enabled_engine(url)
     metadata=create_fk_enabled_engine('sqlite:///'+(tmp_path/'metadata.db').as_posix())
     try:
@@ -72,7 +72,7 @@ def test_upgrade_preserves_attribution_and_legacy_rows(tmp_path,monkeypatch):
             connection.execute(text("INSERT INTO labels (id,address,chain,label,type,source,confidence,last_updated) VALUES ('test-label','test-address','any','Synthetic annotation','Unknown','Test only',0.7,'2026-09-12 00:00:00')"))
             before={table:connection.execute(text('SELECT * FROM '+table)).all() for table in ('labels','attribution_entities','attribution_events')}
         old=set(inspect(engine).get_table_names());old_schema=attribution_schema(engine)
-        command.upgrade(cfg,'head')
+        command.upgrade(cfg,REVISION)
         assert set(inspect(engine).get_table_names())-old==set(TABLES)
         assert attribution_schema(engine)==old_schema
         with engine.connect() as connection:
@@ -84,7 +84,7 @@ def test_upgrade_preserves_attribution_and_legacy_rows(tmp_path,monkeypatch):
 
 def test_empty_downgrade_and_populated_history_guard(tmp_path,monkeypatch):
     url='sqlite:///'+(tmp_path/'down.db').as_posix();cfg=config(url,monkeypatch)
-    command.upgrade(cfg,'head');command.downgrade(cfg,PARENT);command.upgrade(cfg,'head')
+    command.upgrade(cfg,REVISION);command.downgrade(cfg,PARENT);command.upgrade(cfg,REVISION)
     engine=create_fk_enabled_engine(url)
     try:
         with Session(engine) as db:DiscoveryService(db).get_or_create_subject('blockchain_address','ethereum','0x'+'ab'*20)

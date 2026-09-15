@@ -16,7 +16,9 @@ module.exports=async({evaluate,call,work,mode,httpPort,traffic})=>{
   assert.equal(await evaluate(`document.querySelectorAll('[data-workspace]').length`),9);
   assert.ok((await text()).includes('Public-source pivots & candidate evidence'));
   assert.equal(await evaluate(`document.querySelector('#discovery-workspace h1').textContent`),'Discovery');
-  if(mode.startsWith('handoff')){
+  if(mode.startsWith('promotion')){
+    await require('./browser_discovery_promotion.cjs')({evaluate,call,work,mode,httpPort,traffic});
+  }else if(mode.startsWith('handoff')){
     await require('./browser_discovery_handoff.cjs')({evaluate,call,work,mode,httpPort,traffic});
   }else if(mode==='unmigrated'){
     assert.ok((await text()).includes('Discovery storage is not initialized for this database.'));
@@ -83,7 +85,8 @@ module.exports=async({evaluate,call,work,mode,httpPort,traffic})=>{
     await call('Page.captureScreenshot',{format:'png'}).then(r=>fs.writeFileSync(path.join(work,'discovery.png'),Buffer.from(r.data,'base64')));
   }
   assert.equal((await text()).includes('ed3-test-only-secret'),false);
-  assert.ok(traffic.every(url=>url.startsWith(`http://127.0.0.1:${httpPort}/`)),traffic.filter(url=>!url.startsWith(`http://127.0.0.1:${httpPort}/`)));
+  // Native date inputs may load Chromium's inline calendar icon; no network.
+  assert.deepEqual(traffic.filter(url=>!url.startsWith(`http://127.0.0.1:${httpPort}/`)&&!url.startsWith('data:image/svg+xml;base64,')),[]);
   assert.equal(fs.existsSync(path.join(work,'external-request-attempted')),false);
   console.log('ED-3 browser workflow passed:',mode);
 };

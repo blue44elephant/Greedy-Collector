@@ -1,3 +1,5 @@
+import {discoveryRequest} from './discovery_api.js';
+import {discoveryProvenance} from './discovery_promotion.js';
 import {element, fields, table, details, dateText, run, UserError} from './ui.js';
 import {request, readPage, encodeId, caption, options, relationships} from './attribution_api.js';
 import {linkFields, linkData} from './attribution_forms.js';
@@ -10,6 +12,7 @@ export function evidenceHandoffButton(kind,id) {
 }
 
 export function snapshotProvenance(snapshot) {
+  if(snapshot.source_subsystem==='Greedy Collector Discovery')return discoveryProvenance(snapshot);
   const node=element('section',undefined,'attr-source-provenance'),row=snapshot.record||{};
   node.append(element('h3',snapshot.source_subsystem||'Source snapshot'));
   const pairs=snapshot.source_subsystem==='Greedy Collector Label'
@@ -22,7 +25,7 @@ export function snapshotProvenance(snapshot) {
 
 export function initEvidenceHandoff(parent,{createClaim,openClaim}) {
   const host=element('section',undefined,'panel');host.id='attr-source-handoff';host.hidden=true;parent.append(host);
-  let source=null,preview=null,target=null,awaitingClaim=false;
+  let source=null,preview=null,target=null,awaitingClaim=false,promotionConsent=null;
   const status=element('p',undefined,'operation-status');status.setAttribute('role','status');
   const sourceView=element('div'),list=element('div'),chosen=element('div'),success=element('div');
   const filters=element('form',undefined,'attr-form');filters.id='attr-handoff-filter';
@@ -41,14 +44,20 @@ export function initEvidenceHandoff(parent,{createClaim,openClaim}) {
     if(!preview)throw new UserError('Load and review the stored source snapshot first.');
     awaitingClaim=true;target=null;form.hidden=true;chosen.replaceChildren();
     const row=preview.snapshot.record;
+    if(source.kind==='discovery'){await createClaim({chain:preview.chain,address:preview.address});return;}
     await createClaim(source.kind==='label'&&['bitcoin','ethereum'].includes(row.chain)?{chain:row.chain,address:row.address}:null);
   });
   host.append(element('h2','Use as attribution evidence'),status,sourceView,
     button('Reload source snapshot',async()=>{await loadSource();target=null;form.hidden=true;chosen.replaceChildren();}),
-    create,button('Cancel handoff',()=>{source=null;preview=null;target=null;awaitingClaim=false;host.hidden=true;}),
+    create,button('Back to Discovery',()=>{if(source?.kind==='discovery')document.dispatchEvent(new CustomEvent('return-discovery-promotion'));}),button('Cancel handoff',()=>{source=null;preview=null;target=null;awaitingClaim=false;host.hidden=true;}),
     filters,list,chosen,form,success);
   async function loadSource() {
-    preview=await request(`/evidence/sources/${source.kind}/${encodeId(source.id)}`);
+    if(source.kind==='discovery') {
+      preview=await discoveryRequest(`/observations/${encodeId(source.id)}/promotion-preview`);
+      if(!preview.eligible)throw new UserError('Review the selected material as Relevant before promotion.');
+      preview.snapshot=preview.evidence.metadata_json;
+      filters.elements.chain.value=preview.chain;filters.elements.subject_ref.value=preview.address;
+    } else preview=await request(`/evidence/sources/${source.kind}/${encodeId(source.id)}`);
     sourceView.replaceChildren(snapshotProvenance(preview.snapshot),details('Snapshot to capture',preview.snapshot),
       element('p','Confirming captures this stored version. If the source changes before capture, reload and review it again.','muted small'));
   }
@@ -67,16 +76,41 @@ export function initEvidenceHandoff(parent,{createClaim,openClaim}) {
   }
   async function chooseClaim(id) {
     success.replaceChildren();
+    const keepChoices=awaitingClaim&&source?.kind==='discovery';
     target=await request(`/claims/${encodeId(id)}`);awaitingClaim=false;
     chosen.replaceChildren(element('h3','Selected claim'),element('p',`${target.chain} · ${target.subject_ref} · ${caption(target.relationship)} · ${target.entity.canonical_name}`,'full-address'),
       element('p',`Claim ID: ${target.id} · Version ${target.version}`,'small'));
-    form.reset();form.hidden=false;form.scrollIntoView({block:'center'});
+    if(!keepChoices)form.reset();promotionConsent=null;capture.hidden=source.kind==='discovery';promotionPreview.hidden=source.kind!=='discovery';form.hidden=false;form.scrollIntoView({block:'center'});
   }
+  const promotionPreview=button('Preview promotion',async()=>{
+    // run() disables controls while the request is pending; FormData omits
+    // disabled controls. Read the explicit choices directly before validating.
+    const choices={stance:form.elements.stance.value,directness:form.elements.directness.value,
+      rationale:form.elements.rationale.value,confirmed:form.elements.confirmed.checked?'on':undefined};
+    if(!target||!choices.stance||!choices.directness||!choices.rationale.trim()||!choices.confirmed)throw new UserError('Choose a claim, stance and directness, enter a rationale, and confirm review.');
+    await loadSource();
+    if(target.chain!==preview.chain||target.subject_ref!==preview.address)throw new UserError('Select a claim for this exact wallet and chain.');
+    if(preview.context_only&&(form.elements.stance.value!=='context'||form.elements.directness.value!=='context'))throw new UserError('This material can only provide Context with context directness.');
+    promotionConsent={...choices,claim_id:target.id,expected_claim_version:target.version,source_fingerprint:preview.source_fingerprint};
+    sourceView.append(element('p',`Ready to promote selected observation ${source.id} to claim ${target.id}, version ${target.version}. Stance: ${promotionConsent.stance}; directness: ${promotionConsent.directness}.`,'bounded-note'));
+    capture.hidden=false;
+  });promotionPreview.hidden=true;form.append(promotionPreview);
+  form.addEventListener('input',()=>{if(source?.kind==='discovery'){promotionConsent=null;capture.hidden=true;}});
   filters.addEventListener('submit',event=>{event.preventDefault();perform(()=>loadClaims());});
   form.addEventListener('submit',event=>{
     event.preventDefault();const data=Object.fromEntries(new FormData(form));
     perform(async()=>{
       if(!target||!preview||!data.confirmed||!data.stance||!data.directness||!data.rationale.trim())throw new UserError('Choose a claim, stance and directness, enter a rationale, and confirm review.');
+      if(source.kind==='discovery') {
+        if(!promotionConsent||promotionConsent.claim_id!==target.id||['stance','directness','rationale','confirmed'].some(k=>promotionConsent[k]!==data[k]))throw new UserError('Preview the selected promotion before confirming.');
+        const saved=await discoveryRequest(`/observations/${encodeId(source.id)}/promote`,{body:{
+          result_id:preview.result_id,claim_id:target.id,expected_claim_version:target.version,
+          expected_source_fingerprint:promotionConsent.source_fingerprint,link:linkData(data)
+        }});
+        target=null;promotionConsent=null;form.hidden=true;
+        success.replaceChildren(element('p','Promoted to immutable evidence. Relevance remains separate; claim assessment was not changed and requires review.'),
+          button('Open attribution',async()=>{host.hidden=true;source=null;await openClaim(saved.claim.id);}));return;
+      }
       const saved=await request(`/claims/${encodeId(target.id)}/evidence/from-${source.kind}/${encodeId(source.id)}`,{method:'POST',body:{
         expected_version:target.version,expected_source_fingerprint:preview.source_fingerprint,link:linkData(data)
       }});
@@ -86,11 +120,13 @@ export function initEvidenceHandoff(parent,{createClaim,openClaim}) {
   });
   return {
     async open(context) {
-      if(!['label','research'].includes(context.source_kind)||typeof context.source_id!=='string')return;
+      if(!['label','research','discovery'].includes(context.source_kind)||typeof context.source_id!=='string')return;
       source={kind:context.source_kind,id:context.source_id};preview=null;target=null;awaitingClaim=false;
       host.hidden=false;form.hidden=true;sourceView.replaceChildren();list.replaceChildren();chosen.replaceChildren();success.replaceChildren();filters.reset();status.textContent='';
       // Called inside Attribution's existing operation boundary, never nested run().
-      await loadSource();await loadClaims();host.scrollIntoView({block:'start'});
+      capture.textContent=source.kind==='discovery'?'Confirm promotion':'Confirm capture';
+      [...host.querySelectorAll('button')].find(b=>b.textContent==='Back to Discovery').hidden=source.kind!=='discovery';
+      promotionConsent=null;promotionPreview.hidden=true;await loadSource();await loadClaims();host.scrollIntoView({block:'start'});
     },
     async claimCreated(id){if(source&&awaitingClaim)await chooseClaim(id);}
   };

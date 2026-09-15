@@ -1,6 +1,10 @@
 import {UserError} from './ui.js';
 
 const messages = {
+  promotion_schema_unavailable: 'Discovery promotion storage is not initialized for this database.',
+  attribution_schema_unavailable: 'Attribution storage is not initialized for this database.',
+  promotion_conflict: 'This observation was already promoted, or the preview or claim changed. Reload and review before confirming; no automatic retry was made.',
+  promotion_ineligible: 'Promotion requires a Relevant review of this material, a claim for the exact wallet, and valid stance, directness and rationale.',
   schema_unavailable: 'Discovery storage is not initialized for this database.',
   storage_unavailable: 'Discovery storage is temporarily unavailable. Try again later.',
   conflict: 'Discovery conflict: reload the record or make a fresh plan. Another run may be active, or the plan or record version has changed.',

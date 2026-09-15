@@ -1,3 +1,4 @@
+import {promotionDetail} from './discovery_promotion.js';
 import {api} from './api.js';
 import {walletContext,returnFromDiscovery} from './discovery_handoff.js';
 import {byId, element, panel, table, fields, details, dateText, UserError} from './ui.js';
@@ -281,6 +282,7 @@ export function initDiscovery() {
       await request(`/results/${encode(result.id)}/review`,{body:{expected_version:result.version,observation_id:o.id,expected_source_fingerprint:o.content_sha256,status,reason}});
       await loadResults(resultsOffset); await openResult(result.id,o.id);
     }); }); target.append(review);
+    await promotionDetail(target,o);
   }
   async function loadReviews(offset) {
     const page = await request(`/results/${encode(result.id)}/reviews?limit=20&offset=${offset}`); reviewsOffset = offset;
@@ -301,9 +303,9 @@ export function initDiscovery() {
   }
   filters.addEventListener('submit',e => { e.preventDefault(); perform(() => loadHistory(0)); });
   invalidate();
-  return {openWallet,setVisible(value) {
+  return {openWallet,setVisible(value, restore = false) {
     const entering = value && !visible; visible = value;
     if (!visible) { poller.stop(); return; }
-    if (entering) perform(async () => { if (!loaded) await capabilities(); if (current) await selectRun(current.id); await loadHistory(historyOffset); });
+    if (entering && !restore) perform(async () => { if (!loaded) await capabilities(); if (current) await selectRun(current.id); await loadHistory(historyOffset); });
   }};
 }

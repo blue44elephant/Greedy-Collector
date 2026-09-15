@@ -22,7 +22,7 @@ TABLES = (Entity.__tablename__, Claim.__tablename__, Evidence.__tablename__, Lin
 
 
 def row_data(row):
-    return json_safe({column.name: getattr(row, column.name) for column in row.__table__.columns})
+    return json_safe({column.name: (None if column.name == "origin_discovery_observation_id" and row.collection_method != "discovery_snapshot" else getattr(row, column.name)) for column in row.__table__.columns})
 
 
 def atomic(method):
@@ -65,7 +65,10 @@ class AttributionService:
             raise SchemaUnavailable("Attribution requires alembic upgrade head")
         for model in (Entity, Claim, Evidence, Link, Event):
             actual = {column['name'] for column in inspect(connection).get_columns(model.__tablename__)}
-            if actual != set(model.__table__.columns.keys()):
+            expected = set(model.__table__.columns.keys())
+            if model is Evidence and "origin_discovery_observation_id" not in actual and not supports_revision(connection, "20260915_01"):
+                expected.remove("origin_discovery_observation_id")
+            if actual != expected:
                 raise SchemaUnavailable("Attribution schema columns are incompatible; migrate before use")
         installed = dict(connection.execute(text("SELECT name, sql FROM sqlite_master WHERE type='trigger'")).all())
         normalize = lambda sql: " ".join(sql.strip().rstrip(";").split()).lower()
@@ -124,7 +127,10 @@ class AttributionService:
     def _page(self, model, query, *, limit=50, offset=0):
         if type(limit) is not int or not 1 <= limit <= 200 or type(offset) is not int or offset < 0:
             raise AttributionError("Invalid page bounds")
-        total = self.db.scalar(select(func.count()).select_from(query.subquery()))
+        # A Core subquery includes even deferred ORM columns. Count identities
+        # so legacy evidence lists do not read the ED-6-only origin column.
+        identities = query.with_only_columns(model.id, maintain_column_froms=True).order_by(None)
+        total = self.db.scalar(select(func.count()).select_from(identities.subquery()))
         rows = self.db.scalars(query.limit(limit).offset(offset)).all()
         return {"items": [row_data(row) for row in rows], "total": total,
                 "next_offset": offset + len(rows) if offset + len(rows) < total else None}

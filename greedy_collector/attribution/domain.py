@@ -218,7 +218,7 @@ class EvidenceInput(EvidenceContentInput):
     """Manual capture cannot impersonate a server-read source snapshot."""
     @model_validator(mode="after")
     def manual_only(self):
-        if self.evidence_type in ("label_snapshot", "research_snapshot"):
+        if self.evidence_type in ("label_snapshot", "research_snapshot", "discovery_snapshot"):
             raise AttributionError("Use the explicit source snapshot handoff")
         return self
 

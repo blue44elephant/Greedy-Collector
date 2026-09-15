@@ -10,6 +10,9 @@ from sqlalchemy.exc import SQLAlchemyError
 from . import schemas as s
 from .domain import DiscoveryError,NotFound,Conflict,SchemaUnavailable
 from .runtime import DiscoveryRuntime
+from .promotion import PromotionService, PromotionUnavailable
+from . import promotion_schemas as ps
+from ..attribution import domain as ad
 
 def error(status,code,message):
     return JSONResponse(status_code=status,content={'detail':{'code':code,'message':message}})
@@ -33,6 +36,14 @@ class DiscoveryRoute(APIRoute):
                         if len(body)>32768:return error(422,'invalid_request','Discovery request exceeds its size limit.')
                     request._body=bytes(body)
                 return await handler(request)
+            except PromotionUnavailable:return error(503,'promotion_schema_unavailable','Discovery promotion storage is not initialized for this database.')
+            except ad.SchemaUnavailable:return error(503,'attribution_schema_unavailable','Attribution storage is not initialized for this database.')
+            except ad.NotFound:return error(404,'not_found','Attribution record not found.')
+            except ad.Conflict as exc:
+                detail={'code':'promotion_conflict','message':'Promotion conflict. Reload and review the selected material and claim; existing promotions remain retained.'}
+                if exc.existing_id: detail['existing_id']=exc.existing_id
+                return JSONResponse(status_code=409,content={'detail':detail})
+            except ad.AttributionError:return error(422,'promotion_ineligible','Promotion requires reviewed eligible material, a compatible claim, and explicit valid link decisions.')
             except NotFound:return error(404,'not_found','Discovery record not found.')
             except Conflict:return error(409,'conflict','Discovery conflict. Reload the record or create a fresh plan; duplicate intent, active runs and stale versions cannot be resubmitted.')
             except SchemaUnavailable:return error(503,'schema_unavailable','Discovery storage or executor is unavailable. Explicit migration may be required.')
@@ -112,3 +123,19 @@ def reviews(result_id:str,runtime:Runtime,limit:Limit=20,offset:Offset=0):
 @router.post('/results/{result_id}/review',response_model=s.ReviewResult)
 def review(result_id:str,payload:s.ReviewInput,runtime:Runtime):
     with runtime.service() as svc:return svc.review(result_id,payload.observation_id,payload.status.value,payload.reason,expected_version=payload.expected_version,expected_source_fingerprint=payload.expected_source_fingerprint)
+
+
+@router.get('/observations/{observation_id}/promotion-preview',response_model=ps.PromotionPreview)
+def promotion_preview(observation_id:str,runtime:Runtime):
+    with runtime.sessions() as db:
+        return PromotionService(db,metadata_only=runtime.metadata_only,registry=runtime.registry).preview(observation_id)
+
+@router.post('/observations/{observation_id}/promote',response_model=ps.PromotionResult,status_code=201)
+def promote(observation_id:str,payload:ps.PromotionInput,runtime:Runtime):
+    with runtime.sessions() as db:
+        return PromotionService(db,metadata_only=runtime.metadata_only,registry=runtime.registry).promote(observation_id,payload)
+
+@router.get('/results/{result_id}/promotions',response_model=s.Page[ps.PromotionRead])
+def promotions(result_id:str,runtime:Runtime,limit:Limit=20,offset:Offset=0):
+    with runtime.sessions() as db:
+        return PromotionService(db,metadata_only=runtime.metadata_only,registry=runtime.registry).history(result_id,limit=limit,offset=offset)
