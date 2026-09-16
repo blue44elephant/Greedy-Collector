@@ -1,4 +1,5 @@
 import {promotionDetail} from './discovery_promotion.js';
+import {initDiscoveryGraph} from './discovery_graph.js';
 import {api} from './api.js';
 import {walletContext,returnFromDiscovery} from './discovery_handoff.js';
 import {byId, element, panel, table, fields, details, dateText, UserError} from './ui.js';
@@ -57,7 +58,14 @@ export function initDiscovery() {
   filters.append(fields([{name:'status', label:'Status', options:[['','All statuses'], ...['queued','running','completed','partial','failed','cancelled','interrupted'].map(v => [v,label(v)])]}, {name:'subject_id',label:'Subject ID (optional)'}, {name:'include_archived',label:'Include archived',type:'checkbox'}]));
   const filterButton = element('button', 'Load history'); filterButton.type = 'submit'; filters.append(filterButton);
   const historyRows = element('div'); historyRows.id = 'discovery-history-rows'; history.append(filters, historyRows);
-  host.append(top, message, entryPanel, query, pivots, sourcePanel, planning, currentPanel, results, detail, history);
+  const graphPanel=element('section',undefined,'panel discovery-graph');graphPanel.id='discovery-graph-panel';graphPanel.hidden=true;
+  const graph=initDiscoveryGraph(graphPanel,{openResult:async(id,observationId)=>{await perform(()=>openResult(id,observationId));detail.scrollIntoView({block:'start'});}});
+  const views=element('div',undefined,'toolbar');views.setAttribute('aria-label','Discovery result views');
+  const resultView=button('Results',()=>setResultView(false)),graphView=button('Graph',()=>setResultView(true));
+  views.append(resultView,graphView);
+  async function setResultView(showGraph){results.hidden=showGraph;resultView.setAttribute('aria-pressed',String(!showGraph));graphView.setAttribute('aria-pressed',String(showGraph));await graph.show(showGraph);}
+  resultView.setAttribute('aria-pressed','true');graphView.setAttribute('aria-pressed','false');
+  host.append(top, message, entryPanel, query, pivots, sourcePanel, planning, currentPanel, views, results, graphPanel, detail, history);
 
   function showError(e) { message.textContent = e instanceof UserError ? e.message : 'The Discovery operation could not be completed. Try again.'; message.className = 'operation-status error'; message.setAttribute('role','alert'); }
   async function perform(fn) {
@@ -189,6 +197,7 @@ export function initDiscovery() {
     if (busy) return;
     return perform(async () => {
       const incoming = pendingHandoff; pendingHandoff = null;
+      await setResultView(false);
       entry = walletContext(incoming);
       subject = null; choices.forEach(c => { c.check.checked = false; c.budget.value = '0'; });
       options.querySelector('[name=refresh]').checked = false; invalidate(); renderEntry();
@@ -242,6 +251,7 @@ export function initDiscovery() {
       const r = item.result, o = item.observation;
       return [`${o.title} · ${label(r.kind)} · ${r.predicate}`,reference(o.source_url || o.source_locator),`${item.inclusion_kind === 'cache' ? 'Cached observation · ' : ''}Retrieved ${dateText(o.retrieved_at)} · Observed ${o.observed_on || dateText(o.observed_at)} · ${o.source_id}`,reviewText(r),`${item.provenance_count} observations`,button('Inspect result', () => openResult(r.id, o.id))];
     }), activeRun(current) ? 'This run is active. No candidate records are stored yet.' : 'No candidate results were returned for this run.'),pager(page,loadResults));
+    await graph.setRun(current.id);
   }
   async function openResult(id, selectedObservation) {
     result = await request(`/results/${encode(id)}`); observation = null; detail.hidden = false;
@@ -249,7 +259,7 @@ export function initDiscovery() {
     if (result.new_material_since_review && result.reviewed_material_revision > 0) detail.append(element('p','Source material changed since the previous review. Renewed review is needed.','bounded-note'));
     detail.append(details('Normalized candidate and directed subject references', {id:result.id, fact_key:result.fact_key,from_subject_id:result.from_subject_id,to_subject_id:result.to_subject_id,first_seen_at:result.first_seen_at,last_seen_at:result.last_seen_at,material_revision:result.material_revision,reviewed_material_revision:result.reviewed_material_revision}));
     const observations = element('div'); observations.id = 'discovery-observations'; const selected = element('div'); selected.id = 'discovery-observation'; const reviews = element('div'); reviews.id = 'discovery-reviews';
-    detail.append(button('Reload result', () => openResult(id, observation?.id)),observations,selected,reviews);
+    detail.append(button('Reload result', () => openResult(id, observation?.id)),button('Back to Discovery graph',async()=>{await setResultView(true);graphPanel.scrollIntoView({block:'start'});}),observations,selected,reviews);
     await loadObservations(0); await loadReviews(0); if (selectedObservation) await openObservation(selectedObservation);
   }
   async function loadObservations(offset) {
@@ -305,7 +315,8 @@ export function initDiscovery() {
   invalidate();
   return {openWallet,setVisible(value, restore = false) {
     const entering = value && !visible; visible = value;
-    if (!visible) { poller.stop(); return; }
+    if (!visible) { poller.stop(); graph.pause(); return; }
+    if (entering && restore && graph.active) perform(()=>graph.refresh());
     if (entering && !restore) perform(async () => { if (!loaded) await capabilities(); if (current) await selectRun(current.id); await loadHistory(historyOffset); });
   }};
 }

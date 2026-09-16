@@ -199,8 +199,9 @@ def test_schema_unavailable_preserves_capabilities_and_existing_ui(api,tmp_path)
 def test_openapi_contracts(api):
     client,_=api;spec=ok(client.get('/openapi.json'))
     paths={path:value for path,value in spec['paths'].items() if path.startswith(PREFIX)}
-    assert len(paths)==17
-    assert not any('/executor' in path or '/graph' in path for path in paths)
+    assert len(paths)==18
+    assert not any('/executor' in path for path in paths)
+    assert [path for path in paths if path.endswith('/graph')]==[PREFIX+'/runs/{run_id}/graph']
     assert PREFIX+'/observations/{observation_id}/promote' in paths
     assert PREFIX+'/observations/{observation_id}/promotion-preview' in paths
     assert PREFIX+'/results/{result_id}/promotions' in paths

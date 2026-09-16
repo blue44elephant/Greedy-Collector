@@ -11,12 +11,12 @@ sys.path.insert(0,str(ROOT))
 os.environ.update(PYTHON_DOTENV_DISABLED='1',GREEDY_COLLECTOR_DATABASE_URL='sqlite:///'+(work/'discovery-test.db').as_posix(),GREEDY_COLLECTOR_GRAPH_BACKEND='sqlite',GREEDY_COLLECTOR_MONITORING_BACKEND='apscheduler',DISCOVERY_GITHUB_TOKEN='ed3-test-only-secret')
 mode=sys.argv[2]
 if mode in ('production','unmigrated','handoff','handoff_unmigrated','promotion_partial','promotion_unmigrated'):os.environ.pop('DISCOVERY_GITHUB_TOKEN',None)
-if mode not in ('production','executor','unmigrated','github','handoff','handoff_github','handoff_unmigrated','promotion','promotion_partial','promotion_unmigrated'):raise RuntimeError('Unknown test mode')
-if mode not in ('unmigrated','handoff_unmigrated','promotion_unmigrated'):
+if mode not in ('production','executor','unmigrated','github','handoff','handoff_github','handoff_unmigrated','promotion','promotion_partial','promotion_unmigrated','graph','graph_partial','graph_unmigrated'):raise RuntimeError('Unknown test mode')
+if mode not in ('unmigrated','handoff_unmigrated','promotion_unmigrated','graph_unmigrated'):
     from alembic import command
     from alembic.config import Config
     cfg=Config(str(ROOT/'alembic.ini'));cfg.set_main_option('script_location',str(ROOT/'migrations'))
-    command.upgrade(cfg,'20260915_01' if mode=='promotion' else '20260913_01')
+    command.upgrade(cfg,'20260915_01' if mode in ('promotion','graph') else '20260913_01')
 
 import httpx
 import requests
@@ -29,7 +29,7 @@ httpx.Client.request=blocked
 httpx.AsyncClient.request=blocked
 requests.Session.request=blocked
 
-if mode in ('github','handoff_github','promotion'):
+if mode in ('github','handoff_github','promotion','graph','graph_partial'):
     from tests.browser_discovery_github_transport import install
     install(work)
 

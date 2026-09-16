@@ -1,0 +1,12 @@
+const {test}=require('node:test');
+const assert=require('node:assert/strict');
+const {pathToFileURL}=require('node:url');
+const path=require('node:path');
+const load=()=>import(pathToFileURL(path.join(__dirname,'../static/js/discovery_graph_layout.js')));
+const fixture=(count=15)=>({root:{id:'discovery:subject:test'},items:Array.from({length:count},(_,i)=>({id:'discovery:result:'+String(i).padStart(3,'0'),type:i%2?'label_annotation':'code_location'}))});
+test('deterministic positions independent of input ordering',async()=>{const {discoveryLayout}=await load();const g=fixture();assert.deepEqual(discoveryLayout(g),discoveryLayout({...g,items:[...g.items].reverse()}));});
+test('wallet stays at origin, source types grouped on distinct sides',async()=>{const {discoveryLayout}=await load();const g=fixture(),p=discoveryLayout(g).positions;assert.deepEqual(p.get(g.root.id),{x:0,y:0});for(const n of g.items)assert.equal(p.get(n.id).x>0,n.type==='label_annotation');});
+test('bounded large page keeps all namespaced IDs without node collisions',async()=>{const {discoveryLayout,CARD}=await load();const g=fixture(100),p=discoveryLayout(g).positions;assert.equal(p.size,101);const values=[...p.values()];for(let i=0;i<values.length;i++)for(let j=i+1;j<values.length;j++)assert.ok(Math.abs(values[i].x-values[j].x)>CARD.width||Math.abs(values[i].y-values[j].y)>CARD.height);});
+test('empty graph has finite root viewport',async()=>{const {discoveryLayout}=await load();const l=discoveryLayout(fixture(0));assert.equal(l.positions.size,1);assert.ok(l.bounds.every(Number.isFinite));assert.ok(l.bounds[2]>0&&l.bounds[3]>0);});
+test('literal edge direction sets its source and target path endpoints',async()=>{const {discoveryLayout,discoveryPath}=await load();const g=fixture(2),l=discoveryLayout(g);const path=discoveryPath({source:g.items[0].id,target:g.root.id},l);assert.ok(path.startsWith('M -365 '));assert.ok(path.endsWith('-155 0'));});
+test('zoom changes scale without moving viewport center and is bounded',async()=>{const {zoomView}=await load();const a=[-500,-300,1000,600],b=zoomView(a,.8);assert.equal(b[0]+b[2]/2,0);assert.equal(b[1]+b[3]/2,0);assert.deepEqual(zoomView(b,1.25),a);assert.equal(zoomView(a,100).at(2),15000);});

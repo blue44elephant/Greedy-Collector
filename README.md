@@ -315,3 +315,9 @@ Discovery is the ninth workspace: local subject checking, source/pivot capabilit
 Reviewed Discovery observations can be explicitly promoted into Attribution evidence. Select the specific Relevant observation, choose an existing claim (or create one explicitly), choose Supports/Contradicts/Context and directness, enter a rationale, preview provenance, then confirm. Local Labels retain their annotation provenance; GitHub captures retain the stored public code context. Manual search links have no captured observation and are not promotable. Promotion performs no external requests and does not infer entities, create claims automatically, change assessment or add risk points.
 
 The new optional promotion surface requires explicit migration to `20260915_01`; startup never migrates. Databases at `20260913_01` retain existing Discovery and Attribution behavior while promotion reports not initialized. Historical captures remain immutable after refresh or Label edits. See [ED-6 semantics, workflow and compatibility](docs/EVIDENCE_DISCOVERY_ED6.md).
+
+### ED-7 typed Discovery graph
+
+Discovery runs can be visualized as a typed OSINT graph using the Results / Graph controls inside Discovery. Wallet, Label annotation and GitHub code-location cards retain literal source relationships and the selected run's original observations. Current review and promotion badges are shown separately. Pan, zoom, node/edge detail and explicit result/Attribution navigation use local stored data only. Graph display makes no provider request, infers no ownership and remains separate from the blockchain Graph workspace.
+
+Graphs are paged at 100 results with visible totals. They work on ED-1 Discovery storage even without ED-6 promotion metadata. ED-7 adds no migration; head remains `20260915_01`. See [ED-7 scope, history, layout and limitations](docs/EVIDENCE_DISCOVERY_ED7.md).

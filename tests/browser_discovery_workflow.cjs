@@ -16,7 +16,9 @@ module.exports=async({evaluate,call,work,mode,httpPort,traffic})=>{
   assert.equal(await evaluate(`document.querySelectorAll('[data-workspace]').length`),9);
   assert.ok((await text()).includes('Public-source pivots & candidate evidence'));
   assert.equal(await evaluate(`document.querySelector('#discovery-workspace h1').textContent`),'Discovery');
-  if(mode.startsWith('promotion')){
+  if(mode.startsWith('graph')){
+    await require('./browser_discovery_graph.cjs')({evaluate,call,work,mode,httpPort,traffic});
+  }else if(mode.startsWith('promotion')){
     await require('./browser_discovery_promotion.cjs')({evaluate,call,work,mode,httpPort,traffic});
   }else if(mode.startsWith('handoff')){
     await require('./browser_discovery_handoff.cjs')({evaluate,call,work,mode,httpPort,traffic});

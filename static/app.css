@@ -249,3 +249,20 @@ input[type="checkbox"] { width:20px; height:20px; min-height:20px; }
 #discovery-workspace blockquote { white-space:pre-wrap; margin:16px 0; }
 #discovery-workspace pre { white-space:pre-wrap; overflow-wrap:anywhere; }
 #discovery-workspace .form-field:has(input[type=checkbox]) { display:flex; flex-direction:row; align-items:center; }
+.discovery-graph-canvas { width:100%; height:560px; min-height:320px; border:1px solid #cbd5df; border-radius:8px; background:#f8fafc; touch-action:none; }
+.discovery-graph-node { cursor:pointer; }
+.discovery-graph-node rect { fill:#fff; stroke:#889caf; stroke-width:2; }
+.discovery-graph-node.wallet rect { fill:#e2eef8; stroke:#36698f; stroke-width:3; }
+.discovery-graph-node.code_location rect { fill:#f2f0fa; }
+.discovery-graph-node.label_annotation rect { fill:#f9f5e9; }
+.discovery-graph-node text { fill:#243749; font:13px system-ui,sans-serif; pointer-events:none; }
+.discovery-graph-node .kind { font-weight:700; }
+.discovery-graph-node .status { font-size:11px; }
+.discovery-graph-node.selected rect,.discovery-graph-node:focus rect { stroke:#ad6611; stroke-width:4; }
+.discovery-graph-edge path { fill:none; stroke:#7e91a3; stroke-width:1.5; }
+.discovery-graph-edge .hit { stroke:transparent; stroke-width:16; cursor:pointer; }
+.discovery-graph-edge .predicate { fill:#42576a; font:11px system-ui,sans-serif; paint-order:stroke; stroke:#f8fafc; stroke-width:4px; pointer-events:none; }
+.discovery-graph-edge.selected path:not(.hit),.discovery-graph-edge:focus path:not(.hit) { stroke:#ad6611; stroke-width:4; }
+.discovery-graph-detail { padding:16px; border-left:3px solid #889caf; margin:16px 0; overflow-wrap:anywhere; }
+.discovery-graph-detail td { white-space:normal; overflow-wrap:anywhere; }
+@media(max-width:700px) { .discovery-graph-canvas { height:420px; } }

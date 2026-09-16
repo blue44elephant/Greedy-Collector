@@ -12,6 +12,7 @@ from .domain import DiscoveryError,NotFound,Conflict,SchemaUnavailable
 from .runtime import DiscoveryRuntime
 from .promotion import PromotionService, PromotionUnavailable
 from . import promotion_schemas as ps
+from .graph import GraphRead, graph_summary
 from ..attribution import domain as ad
 
 def error(status,code,message):
@@ -103,6 +104,10 @@ def restore(run_id:str,payload:s.VersionInput,runtime:Runtime):
 @router.get('/runs/{run_id}/results',response_model=s.Page[s.RunResult])
 def run_results(run_id:str,runtime:Runtime,limit:Limit=20,offset:Offset=0):
     with runtime.service() as svc:return svc.result_page(run_id,limit=limit,offset=offset)
+
+@router.get('/runs/{run_id}/graph',response_model=GraphRead)
+def graph(run_id:str,runtime:Runtime,limit:Limit=100,offset:Offset=0):
+    with runtime.service() as svc:return graph_summary(svc,run_id,limit=limit,offset=offset,metadata_only=runtime.metadata_only)
 
 @router.get('/results/{result_id}',response_model=s.ResultRead)
 def result(result_id:str,runtime:Runtime):

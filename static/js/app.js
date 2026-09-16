@@ -51,3 +51,7 @@ document.querySelectorAll("[data-workspace]").forEach(button => button.addEventL
 navigate("wallet");
 
 document.addEventListener("return-discovery-promotion", () => navigate("discovery", undefined, true));
+document.addEventListener('open-discovery-blockchain-graph',event=>{
+  navigate('graph',undefined,true);
+  document.dispatchEvent(new CustomEvent('wallet-selected',{detail:event.detail}));
+});
