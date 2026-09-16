@@ -70,3 +70,6 @@ alembic/versions/__pycache__/
 # OS
 .DS_Store
 Thumbs.db
+
+# Repository-local ENS normalizer dependency
+node_modules/

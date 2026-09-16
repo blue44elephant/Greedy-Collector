@@ -1,4 +1,4 @@
-"""Strict local identities and sanitized material. No transport or execution."""
+"""Strict local identities and sanitized material. No provider transport."""
 from datetime import date,datetime,timezone
 import os,re,unicodedata
 from urllib.parse import urlsplit,urlunsplit,quote,quote_plus
@@ -50,14 +50,25 @@ def public_url(value):
 def canonical_ens_subject(namespace,value):
     """Internal canonical-input boundary, NOT an ENSIP-15 normalizer.
 
-    A future ENS executor must normalize and verify names before supplying them.
+    Raw names must enter through ens_normalization.normalize_ens_subject.
+    A future ENS executor must also verify names before supplying them.
     Preserve the supplied Unicode spelling; never apply lowercase or DNS/IDNA.
     No public API accepts this output-only kind as a run root.
     """
     if namespace!='ethereum' or not isinstance(value,str) or not 1<=len(value)<=2048:
         raise DiscoveryError('A canonical Ethereum ENS endpoint is required')
-    if value!=value.strip() or any(c.isspace() or unicodedata.category(c).startswith('C') for c in value):
+    if value!=value.strip() or any(c.isspace() for c in value):
         raise DiscoveryError('A canonical Ethereum ENS endpoint is required')
+    if any(unicodedata.category(c).startswith('C') for c in value):
+        # ENSIP-15 permits some format characters inside emoji sequences.
+        # Only the reference implementation may validate this exception; do
+        # not broadly allow ZWJ/tag/control characters or normalize in storage.
+        from .ens_normalization import normalize_ens_name, EnsNormalizationError
+        try:
+            if normalize_ens_name(value)!=value:
+                raise DiscoveryError('A canonical Ethereum ENS endpoint is required')
+        except EnsNormalizationError:
+            raise DiscoveryError('A canonical Ethereum ENS endpoint is required') from None
     identity={'kind':'ens_name','namespace':namespace,'canonical_value':value}
     return {**identity,'display_value':value,'normalization_version':1,'identity_sha256':fingerprint(identity)}
 

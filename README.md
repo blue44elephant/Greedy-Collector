@@ -324,4 +324,18 @@ Graphs are paged at 100 results with visible totals. They work on ED-1 Discovery
 
 ### ENS Discovery status (ED-8A)
 
-ED-8A0 supplies output-only ENS endpoint storage at migration head `20260916_01`. ENS primary-name Discovery is not enabled: ED-8A stopped at its required ENSIP-15 normalization dependency check. The Universal Resolver verifies the forward address but does not guarantee that its returned name is normalized. See [the verified protocol assumptions, dependency blocker and continuation checkpoint](docs/EVIDENCE_DISCOVERY_ED8A.md). Existing Discovery pivots remain available.
+ED-8A0 supplies output-only ENS endpoint storage at migration head `20260916_01`. ED-8A1 supplies local backend ENSIP-15 normalization using the pinned `@adraffy/ens-normalize` version `1.11.1` (Unicode 17). ENS primary-name Discovery, RPC execution, ENS graph presentation and promotion are still unimplemented. See [the normalization bridge, security bounds and tests](docs/EVIDENCE_DISCOVERY_ED8A1.md) and [the ED-8A continuation checkpoint](docs/EVIDENCE_DISCOVERY_ED8A.md). Existing Discovery pivots remain available.
+
+### Optional ENS normalization setup (ED-8A1)
+
+The local normalization capability requires Node.js 24 or newer and the repository-local locked dependency. From this source checkout:
+
+```powershell
+cd "C:\Tools\Inventions\greedy-collector"
+npm ci
+npm test
+```
+
+Node is a narrow normalization runtime, not a frontend server; no `npm run dev` is needed. Application startup never installs packages, runs npx, or probes ENS. Missing Node/dependency makes normalization unavailable without blocking the other workspaces. The helper performs no network requests and inherits no provider credentials. `probe_ens_normalizer()` provides a cached internal capability check; use `refresh=True` after changing the local installation. This prerequisite does not enable ENS Discovery.
+
+If PowerShell blocks `npm.ps1`, use `npm.cmd ci` and `npm.cmd test`; runtime normalization invokes Node directly.

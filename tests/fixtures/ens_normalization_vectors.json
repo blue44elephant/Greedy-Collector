@@ -1,0 +1,165 @@
+{
+  "source": "https://github.com/adraffy/ens-normalize.js/blob/19daa8507f95d9432fcf1e59c9ac76131630c6da/validate/tests.json",
+  "source_sha256": "7b20fb69f190c07f8b59ff30aea4efcdc0fa592667ff1f7a2a1f7122743d089d",
+  "license": "MIT; see ENS_NORMALIZE_LICENSE.txt",
+  "upstream_metadata": {
+    "name": "version",
+    "validated": "2025-09-14T17:56:31.472Z",
+    "built": "2025-09-14T17:56:24.099Z",
+    "cldr": "47 (2025-08-02T20:26:29.295Z)",
+    "derived": "2025-09-14T17:56:22.939Z",
+    "ens_hash_base64": "92cbf3a1af3c3c0a91aee0dc542072775f4ebbbc526a84189a12da2d56f5accd",
+    "nf_hash_base64": "9ef43cc7215aa7a53e4ed9afa3b4f2f8ce00a2c708b9eb96aa409ae6fa3fb6af",
+    "spec_hash": "4febc8f5d285cbf80d2320fb0c1777ac25e378eb72910c34ec963d0a4e319c84",
+    "unicode": "17.0.0 (2025-09-10T16:58:18.331Z)",
+    "version": "1.11.1"
+  },
+  "gc_policy": "The empty root is valid upstream, but is not an endpoint and is rejected by GC.",
+  "vectors": [
+    {
+      "index": 1,
+      "name": "",
+      "comment": "Empty"
+    },
+    {
+      "index": 2,
+      "name": " ",
+      "error": true,
+      "comment": "Empty: Whitespace"
+    },
+    {
+      "index": 4,
+      "name": ".",
+      "error": true,
+      "comment": "Null Labels"
+    },
+    {
+      "index": 5,
+      "name": ".eth",
+      "error": true,
+      "comment": "Null 2LD"
+    },
+    {
+      "index": 6,
+      "name": "eth.",
+      "error": true,
+      "comment": "Null TLD"
+    },
+    {
+      "index": 11,
+      "name": "vitalik.eth",
+      "comment": "Trivial Name"
+    },
+    {
+      "index": 14,
+      "name": "bRAnTlY.eTh",
+      "norm": "brantly.eth",
+      "comment": "Mixed-case"
+    },
+    {
+      "index": 15,
+      "name": "BRANTLYMILLEGAN.COM",
+      "norm": "brantlymillegan.com",
+      "comment": "Uppercase"
+    },
+    {
+      "index": 19,
+      "name": "\u00d6bb.at",
+      "norm": "\u00f6bb.at",
+      "comment": "IDNATestV2"
+    },
+    {
+      "index": 21,
+      "name": "\u00df",
+      "comment": "IDNA deviation"
+    },
+    {
+      "index": 22,
+      "name": "\u03c2",
+      "comment": "IDNA deviation"
+    },
+    {
+      "index": 23,
+      "name": "\u2167",
+      "norm": "viii",
+      "comment": "Mapping: roman numeral"
+    },
+    {
+      "index": 38,
+      "name": "test\u200d",
+      "error": true,
+      "comment": "ZWJ: trailing"
+    },
+    {
+      "index": 43,
+      "name": "a'a\u2019a",
+      "norm": "a\u2019a\u2019a",
+      "comment": "Apostrophe"
+    },
+    {
+      "index": 47,
+      "name": "0\ufe0f\u20e31\ufe0f\u20e32\ufe0f\u20e33\ufe0f\u20e34\ufe0f\u20e35\ufe0f\u20e36\ufe0f\u20e37\ufe0f\u20e38\ufe0f\u20e39\ufe0f\u20e3",
+      "norm": "0\u20e31\u20e32\u20e33\u20e34\u20e35\u20e36\u20e37\u20e38\u20e39\u20e3",
+      "comment": "Emoji: Keycaps"
+    },
+    {
+      "index": 51,
+      "name": "a_b",
+      "error": true,
+      "comment": "Non-leading Underscore"
+    },
+    {
+      "index": 53,
+      "name": "\u0303",
+      "error": true,
+      "comment": "Leading CM"
+    },
+    {
+      "index": 79,
+      "name": "\ud83d\udca9",
+      "comment": "Emoji: unstyled"
+    },
+    {
+      "index": 80,
+      "name": "\ud83d\udca9\ufe0f",
+      "norm": "\ud83d\udca9",
+      "comment": "Emoji: emoji-styled"
+    },
+    {
+      "index": 83,
+      "name": "\ud83d\udca9\u200d\ud83d\udca9",
+      "error": true,
+      "comment": "Poop Joiner"
+    },
+    {
+      "index": 88,
+      "name": "\ud83c\udff4\udb40\udc77\udb40\udc74\udb40\udc66\udb40\udc7f",
+      "error": true,
+      "comment": "Invalid Emoji Tag Sequence"
+    },
+    {
+      "index": 94,
+      "name": "\u0430\u0440\u0440\u04cf\u0435",
+      "error": true,
+      "comment": "confuse"
+    },
+    {
+      "index": 99,
+      "name": "0\u0445",
+      "error": true,
+      "comment": "confuse"
+    },
+    {
+      "index": 2345,
+      "name": "\ud83e\udeea"
+    },
+    {
+      "index": 2758,
+      "name": "\ud83d\udeb4\u200d\u2642"
+    },
+    {
+      "index": 3540,
+      "name": "\ud83c\udff4\udb40\udc67\udb40\udc62\udb40\udc65\udb40\udc6e\udb40\udc67\udb40\udc7f"
+    }
+  ]
+}

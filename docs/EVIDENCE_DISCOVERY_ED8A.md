@@ -1,6 +1,8 @@
 # ED-8A: ENS primary-name Discovery prerequisite review
 
-Status: **ED8A_ENS_NORMALIZATION_DEPENDENCY_BLOCKER**.
+Historical status: **ED8A_ENS_NORMALIZATION_DEPENDENCY_BLOCKER**.
+
+ED-8A1 update (2026-09-17): the separately implemented and verified [local reference-library bridge](EVIDENCE_DISCOVERY_ED8A1.md) resolves the normalization prerequisite when Node and the pinned local dependency are installed. The rest of ED-8A remains unimplemented. The findings below preserve the original stop decision; resume from RPC/executor integration, using the bridge and checking that a returned primary name already equals its normalized form.
 
 Reviewed 2026-09-16/17. Implementation stopped at the task's explicit normalization gate. ENS Discovery is **not implemented or enabled**. This document records verified assumptions and a continuation checkpoint, not completed functionality.
 
@@ -45,7 +47,7 @@ After resolving the normalization gate:
 - Register an explicitly selected Ethereum-only remote pivot using existing LIMITED_FREE accounting and an initial one-hour cache TTL; Refresh bypasses cache.
 - Obtain UR forward verification without another forward lookup. Empty primary is zero-result success. Mismatch produces no endpoint, graph node or promotion candidate and a safe diagnostic. Bound and classify remaining resolver/RPC failures.
 - Persist `ens_name / ethereum / canonical name --resolves_to--> blockchain_address / ethereum / wallet`, with `name_service_record`, existing `technical_verified` metadata, verification method, resolver addresses, source versions and retrieval time. No new enum or migration is planned.
-- Review `canonical_ens_subject`'s conservative category-C restriction against valid ENS emoji sequences; it currently rejects format characters that can occur in normalized names. Do not substitute an improvised normalizer.
+- ED-8A1 now handles protocol-valid format characters through the authoritative normalizer. Use its raw-name integration helper; the low-level canonical-input function still does not normalize ordinary strings.
 - Preserve historical observations and run membership when names change. Require Relevant review and ED-6 promotion with explicit claim, stance, directness and rationale; use public_osint origin.
 - Add actual result presentation and deterministic ENS graph cards without moving existing node groups. ENS remains output-only. Opening Discovery makes no RPC call.
 - Complete the requested mocked protocol, semantic, cache, graph, promotion and isolated browser tests. No ownership inference, text-record collection, name enumeration, or automatic Entities, Claims, Labels, risk or Cases.
