@@ -321,3 +321,7 @@ The new optional promotion surface requires explicit migration to `20260915_01`;
 Discovery runs can be visualized as a typed OSINT graph using the Results / Graph controls inside Discovery. Wallet, Label annotation and GitHub code-location cards retain literal source relationships and the selected run's original observations. Current review and promotion badges are shown separately. Pan, zoom, node/edge detail and explicit result/Attribution navigation use local stored data only. Graph display makes no provider request, infers no ownership and remains separate from the blockchain Graph workspace.
 
 Graphs are paged at 100 results with visible totals. They work on ED-1 Discovery storage even without ED-6 promotion metadata. ED-7 adds no migration; head remains `20260915_01`. See [ED-7 scope, history, layout and limitations](docs/EVIDENCE_DISCOVERY_ED7.md).
+
+### ENS Discovery status (ED-8A)
+
+ED-8A0 supplies output-only ENS endpoint storage at migration head `20260916_01`. ENS primary-name Discovery is not enabled: ED-8A stopped at its required ENSIP-15 normalization dependency check. The Universal Resolver verifies the forward address but does not guarantee that its returned name is normalized. See [the verified protocol assumptions, dependency blocker and continuation checkpoint](docs/EVIDENCE_DISCOVERY_ED8A.md). Existing Discovery pivots remain available.
