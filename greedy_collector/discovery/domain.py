@@ -47,8 +47,24 @@ def public_url(value):
         return urlunsplit((parts.scheme.lower(),netloc,parts.path or '/',parts.query,parts.fragment))
     except (ValueError,UnicodeError):raise DiscoveryError('A safe public citation URL is required') from None
 
+def canonical_ens_subject(namespace,value):
+    """Internal canonical-input boundary, NOT an ENSIP-15 normalizer.
+
+    A future ENS executor must normalize and verify names before supplying them.
+    Preserve the supplied Unicode spelling; never apply lowercase or DNS/IDNA.
+    No public API accepts this output-only kind as a run root.
+    """
+    if namespace!='ethereum' or not isinstance(value,str) or not 1<=len(value)<=2048:
+        raise DiscoveryError('A canonical Ethereum ENS endpoint is required')
+    if value!=value.strip() or any(c.isspace() or unicodedata.category(c).startswith('C') for c in value):
+        raise DiscoveryError('A canonical Ethereum ENS endpoint is required')
+    identity={'kind':'ens_name','namespace':namespace,'canonical_value':value}
+    return {**identity,'display_value':value,'normalization_version':1,'identity_sha256':fingerprint(identity)}
+
+
 def canonical_subject(kind,namespace,value):
     choice(kind,e.SUBJECT_KINDS)
+    if kind=='ens_name':return canonical_ens_subject(namespace,value)
     if not isinstance(value,str) or not isinstance(namespace,str):raise DiscoveryError('Invalid subject')
     value=value.strip();namespace=namespace.strip()
     if not value or len(value)>2048 or not namespace or len(namespace)>128 or any(unicodedata.category(c).startswith('C') for c in value+namespace):raise DiscoveryError('Invalid subject')
@@ -80,6 +96,8 @@ def query_fingerprint(subject,transform,source,parameters,*,config_generation='1
 def result_identity(query,kind,predicate,start,end,fact_key):
     choice(kind,e.RESULT_KINDS);choice(predicate,e.PREDICATES)
     if (start['kind'],end['kind'] if end else None) not in e.PAIRS.get(predicate,()):raise DiscoveryError('Unsupported Discovery relationship type pair')
+    if predicate=='resolves_to' and (start['namespace']!='ethereum' or end['namespace']!='ethereum'):
+        raise DiscoveryError('ENS endpoints resolve only to Ethereum addresses')
     fact=clean(fact_key)
     if not isinstance(fact,dict):raise DiscoveryError('Result fact key must be an object')
     identity={'query':subject_identity(query),'kind':kind,'predicate':predicate,'from':subject_identity(start),'to':subject_identity(end) if end else None,'fact_key':fact}

@@ -1,4 +1,4 @@
-SUBJECT_KINDS = ('blockchain_address','url','domain','repository','annotation')
+SUBJECT_KINDS = ('blockchain_address','url','domain','repository','annotation','ens_name')
 RESULT_KINDS = ('candidate_evidence','candidate_identifier','candidate_relationship')
 PREDICATES = ('mentioned_at','repository_contains','explorer_labeled_as','locally_labeled_as','publicly_listed_by','reverse_name_record','resolves_to','registration_record_for','certificate_names','observed_at','archived_at','uses_tracking_id','advertises_at')
 RUN_STATES = ('queued','running','completed','partial','failed','cancelled','interrupted')
@@ -16,4 +16,5 @@ PAIRS = {'mentioned_at':(('blockchain_address','url'),),
          'publicly_listed_by':(('blockchain_address','url'),),
          'repository_contains':(('repository','blockchain_address'),),
          'locally_labeled_as':(('blockchain_address','annotation'),),
-         'explorer_labeled_as':(('blockchain_address','annotation'),)}
+         'explorer_labeled_as':(('blockchain_address','annotation'),),
+         'resolves_to':(('ens_name','blockchain_address'),)}

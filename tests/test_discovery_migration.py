@@ -45,12 +45,19 @@ def discovery_schema(engine):
 def test_clean_upgrade_equivalence_and_successor_services(tmp_path,monkeypatch):
     url='sqlite:///'+(tmp_path/'migrated.db').as_posix();cfg=config(url,monkeypatch)
     command.upgrade(cfg,REVISION);command.current(cfg);command.heads(cfg)
-    assert cfg.stdout.getvalue().splitlines()==[REVISION,'20260915_01 (head)']
+    assert cfg.stdout.getvalue().splitlines()==[REVISION,'20260916_01 (head)']
     migrated=create_fk_enabled_engine(url)
     metadata=create_fk_enabled_engine('sqlite:///'+(tmp_path/'metadata.db').as_posix())
     try:
         Base.metadata.create_all(metadata)
-        assert discovery_schema(migrated)==discovery_schema(metadata)
+        # ED-1 retains its historical constraint; latest ORM adds ED-8A0 only.
+        expected=discovery_schema(metadata)
+        checks=dict(expected['discovery_subjects']['checks'])
+        assert checks.pop('ck_discovery_subjects_8')=="kind != 'ens_name' OR namespace = 'ethereum'"
+        assert checks['ck_discovery_subjects_1']=="kind IN ('blockchain_address', 'url', 'domain', 'repository', 'annotation', 'ens_name')"
+        checks['ck_discovery_subjects_1']="kind IN ('blockchain_address', 'url', 'domain', 'repository', 'annotation')"
+        expected['discovery_subjects']['checks']=sorted(checks.items())
+        assert discovery_schema(migrated)==expected
         assert len(discovery_schema(migrated)['triggers'])==9
         with migrated.connect() as connection:
             assert connection.execute(text('PRAGMA foreign_key_check')).all()==[]

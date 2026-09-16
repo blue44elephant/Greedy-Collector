@@ -444,13 +444,14 @@ class DiscoverySubject(Base):
         sa.Column('normalization_version', sa.Integer, nullable=False, server_default=sa.text('1')),
         sa.Column('identity_sha256', sa.String(64), nullable=False),
         sa.Column('created_at', sa.DateTime(timezone=True), nullable=False, default=utcnow),
-        sa.CheckConstraint("kind IN ('blockchain_address', 'url', 'domain', 'repository', 'annotation')", name="ck_discovery_subjects_1"),
+        sa.CheckConstraint("kind IN ('blockchain_address', 'url', 'domain', 'repository', 'annotation', 'ens_name')", name="ck_discovery_subjects_1"),
         sa.CheckConstraint('normalization_version >= 1', name="ck_discovery_subjects_2"),
         sa.CheckConstraint('length(identity_sha256) = 64', name="ck_discovery_subjects_3"),
         sa.CheckConstraint('length(canonical_value) BETWEEN 1 AND 2048', name="ck_discovery_subjects_4"),
         sa.CheckConstraint('length(namespace) > 0', name="ck_discovery_subjects_5"),
         sa.CheckConstraint("kind != 'blockchain_address' OR namespace IN ('bitcoin','ethereum')", name="ck_discovery_subjects_6"),
         sa.CheckConstraint("kind != 'blockchain_address' OR namespace != 'ethereum' OR canonical_value = lower(canonical_value)", name="ck_discovery_subjects_7"),
+        sa.CheckConstraint("kind != 'ens_name' OR namespace = 'ethereum'", name="ck_discovery_subjects_8"),
         sa.UniqueConstraint('identity_sha256', name="uq_discovery_subjects_1"),
     )
 sa.Index("ix_discovery_subjects_1", DiscoverySubject.__table__.c.kind, DiscoverySubject.__table__.c.namespace, DiscoverySubject.__table__.c.id)

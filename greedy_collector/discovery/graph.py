@@ -56,6 +56,14 @@ class GraphEdge(BaseModel):
     predicate: Literal['locally_labeled_as','repository_contains']
 
 
+class GraphUnrenderedResult(BaseModel):
+    """Known stored material awaiting a separately implemented presentation."""
+    result_id: str
+    observation_id: str
+    endpoint_type: Literal['ens_name'] = 'ens_name'
+    reason: Literal['presentation_not_implemented'] = 'presentation_not_implemented'
+
+
 class GraphRead(BaseModel):
     run_id: str
     root: GraphRoot
@@ -66,6 +74,7 @@ class GraphRead(BaseModel):
     offset: int
     next_offset: int | None
     promotion_available: bool
+    unrendered_results: list[GraphUnrenderedResult] = Field(default_factory=list,max_length=100)
 
 
 def graph_summary(service, run_id, *, limit=100, offset=0, metadata_only=False):
@@ -103,11 +112,20 @@ def graph_summary(service, run_id, *, limit=100, offset=0, metadata_only=False):
         promotions=dict(db.execute(select(Observation.result_id,func.count(Promotion.id))
             .join(Promotion,Promotion.observation_id==Observation.id)
             .where(Observation.result_id.in_(ids)).group_by(Observation.result_id)).all())
-    nodes=[];edges=[]
+    ens_ids=[r.from_subject_id for r,o,_ in rows if (r.predicate,o.kind)==('resolves_to','name_service_record')]
+    ens_subjects={s.id:s for s in db.scalars(select(Subject).where(Subject.id.in_(ens_ids)))} if ens_ids else {}
+    nodes=[];edges=[];unrendered=[]
     for result,observation,source in rows:
         local=(result.predicate,observation.kind)==('locally_labeled_as','local_label_snapshot')
         code=(result.predicate,observation.kind)==('repository_contains','code_search_result')
-        if not (local or code):raise DiscoveryError('Unsupported Discovery graph relationship')
+        if not (local or code):
+            endpoint=ens_subjects.get(result.from_subject_id)
+            if (result.predicate,observation.kind)==('resolves_to','name_service_record') and endpoint and (endpoint.kind,endpoint.namespace)==('ens_name','ethereum') and subject.namespace=='ethereum' and result.to_subject_id==subject.id:
+                # Retain page membership/counts and inspectable IDs, without
+                # inventing an ENS node or flipping the literal edge direction.
+                unrendered.append(dict(result_id=result.id,observation_id=observation.id))
+                continue
+            raise DiscoveryError('Unsupported Discovery graph relationship')
         snapshot=clean(observation.source_snapshot);record=snapshot.get('record',{})
         count,first,last=included[result.id]
         node=dict(id='discovery:result:'+result.id,type='label_annotation' if local else 'code_location',
@@ -128,4 +146,4 @@ def graph_summary(service, run_id, *, limit=100, offset=0, metadata_only=False):
             source=root['id'] if local else node['id'],target=node['id'] if local else root['id']))
     return GraphRead.model_validate(dict(run_id=run_id,root=clean(root),items=nodes,edges=edges,total=total,
         limit=limit,offset=offset,next_offset=offset+limit if offset+limit<total else None,
-        promotion_available=promotion_available))
+        promotion_available=promotion_available,unrendered_results=unrendered))

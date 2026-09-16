@@ -15,6 +15,7 @@ from .registry import REGISTRY
 from . import enums as e
 
 REVISION='20260913_01'
+ENS_REVISION='20260916_01'
 MODELS=(Subject,Run,RunSource,Result,Observation,RunItem,Review)
 TABLES=tuple(m.__table__.name for m in MODELS)
 
@@ -47,7 +48,7 @@ def atomic(method):
 
 class DiscoveryService:
     def __init__(self,session,*,metadata_only=False,registry=None):
-        self.db=session;self.registry=registry or REGISTRY
+        self.db=session;self.registry=registry or REGISTRY;self._metadata_only=metadata_only
         connection=session.connection();view=inspect(connection)
         if connection.dialect.name!='sqlite' or not set(TABLES)<=set(view.get_table_names()):raise SchemaUnavailable('Discovery storage is not initialized')
         if connection.exec_driver_sql('PRAGMA foreign_keys').scalar_one()!=1:raise SchemaUnavailable('Discovery requires foreign keys')
@@ -81,6 +82,12 @@ class DiscoveryService:
 
     def _subject(self,kind,namespace,value):
         values=canonical_subject(kind,namespace,value)
+        if kind=='ens_name':
+            connection=self.db.connection()
+            checks={c['name']:' '.join(c['sqltext'].split()).lower() for c in inspect(connection).get_check_constraints('discovery_subjects')}
+            required={c.name:' '.join(str(c.sqltext).split()).lower() for c in Subject.__table__.constraints if c.name in ('ck_discovery_subjects_1','ck_discovery_subjects_8')}
+            if any(checks.get(name)!=sql for name,sql in required.items()) or (not self._metadata_only and not supports_revision(connection,ENS_REVISION)):
+                raise SchemaUnavailable('Typed ENS endpoint storage requires the ED-8A0 migration')
         row=self.db.scalar(select(Subject).where(Subject.identity_sha256==values['identity_sha256']))
         if row:
             if subject_identity(row_data(row))!=subject_identity(values):raise Conflict('Subject identity collision')

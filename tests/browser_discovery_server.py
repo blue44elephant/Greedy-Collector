@@ -16,7 +16,7 @@ if mode not in ('unmigrated','handoff_unmigrated','promotion_unmigrated','graph_
     from alembic import command
     from alembic.config import Config
     cfg=Config(str(ROOT/'alembic.ini'));cfg.set_main_option('script_location',str(ROOT/'migrations'))
-    command.upgrade(cfg,'20260915_01' if mode in ('promotion','graph') else '20260913_01')
+    command.upgrade(cfg,'head' if mode in ('promotion','graph') else '20260913_01')
 
 import httpx
 import requests
