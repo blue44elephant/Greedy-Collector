@@ -322,9 +322,20 @@ Discovery runs can be visualized as a typed OSINT graph using the Results / Grap
 
 Graphs are paged at 100 results with visible totals. They work on ED-1 Discovery storage even without ED-6 promotion metadata. ED-7 adds no migration; head remains `20260915_01`. See [ED-7 scope, history, layout and limitations](docs/EVIDENCE_DISCOVERY_ED7.md).
 
+
+### Manual source observation capture (ED-9A)
+
+Analysts can manually preserve where a wallet address was observed, including source context and provenance. **Record source observation** in Wallet or Discovery opens a prefilled form. Preview stores nothing; confirmation saves an immutable, initially Unreviewed observation with separate observed/captured times. GC performs no source fetch, DNS lookup or Tor launch; onion URLs remain copy-only inert references.
+
+The Discovery graph shows `source --mentions_wallet--> wallet`, without ownership inference or clustering. Relevant captures can be explicitly promoted through ED-6 with `analyst_added` origin. Existing Case association is optional. Attachments are analyst-supplied references/hashes only: no byte upload, hash verification or file storage is added. No automatic Entity, Label, risk, assessment or monitoring change occurs.
+
+Capture requires the focused **20260922_01** migration (parent **20260916_01**); startup does not migrate the database. See [ED-9A scope, safety, history and limitations](docs/EVIDENCE_DISCOVERY_ED9A.md). Automated tests disable `.env`, select temporary SQLite before application import and reject connections outside temporary storage. The isolated browser workflow is `node tests/browser_discovery.cjs manual_source`.
+
 ### ENS Discovery status (ED-8A)
 
-ED-8A0 supplies output-only ENS endpoint storage at migration head `20260916_01`. ED-8A1 supplies local backend ENSIP-15 normalization using the pinned `@adraffy/ens-normalize` version `1.11.1` (Unicode 17). ENS primary-name Discovery, RPC execution, ENS graph presentation and promotion are still unimplemented. See [the normalization bridge, security bounds and tests](docs/EVIDENCE_DISCOVERY_ED8A1.md) and [the ED-8A continuation checkpoint](docs/EVIDENCE_DISCOVERY_ED8A.md). Existing Discovery pivots remain available.
+Discovery can retrieve forward-verified Ethereum ENS primary names when Ethereum RPC and the ENS normalizer are available. Explicitly select `wallet.ens_primary_name`, plan, then run. It uses `ALCHEMY_API_KEY` (Etherscan is not used for this transform), one bounded mainnet Universal Resolver call, and a one-hour cache; Refresh bypasses reuse. Missing RPC/normalizer leaves the implemented transform unavailable without blocking startup. Bitcoin and ENS-name roots are incompatible.
+
+Results show a technical `ens_name --resolves_to--> wallet` relationship, not real-world identity or wallet control. Reviewed Relevant observations can be explicitly promoted through the existing Attribution flow; no entity, claim, label, risk change or case inclusion occurs automatically. Graphs preserve historical run material. Empty names produce zero results; mismatches and unsupported CCIP-Read expose safe diagnostics without candidates or gateway requests. No text records, ownership history or name enumeration. See [implementation and limitations](docs/EVIDENCE_DISCOVERY_ED8A.md) and [normalization security bounds](docs/EVIDENCE_DISCOVERY_ED8A1.md).
 
 ### Optional ENS normalization setup (ED-8A1)
 
@@ -336,6 +347,13 @@ npm ci
 npm test
 ```
 
-Node is a narrow normalization runtime, not a frontend server; no `npm run dev` is needed. Application startup never installs packages, runs npx, or probes ENS. Missing Node/dependency makes normalization unavailable without blocking the other workspaces. The helper performs no network requests and inherits no provider credentials. `probe_ens_normalizer()` provides a cached internal capability check; use `refresh=True` after changing the local installation. This prerequisite does not enable ENS Discovery.
+Node is a narrow normalization runtime, not a frontend server; no `npm run dev` is needed. Application startup never installs packages, runs npx, or probes ENS. Missing Node/dependency makes normalization unavailable without blocking the other workspaces. The helper performs no network requests and inherits no provider credentials. `probe_ens_normalizer()` provides a cached internal capability check; use `refresh=True` after changing the local installation. ENS execution additionally requires configured Alchemy RPC and explicit analyst selection; wallet handoff never runs it automatically.
 
 If PowerShell blocks `npm.ps1`, use `npm.cmd ci` and `npm.cmd test`; runtime normalization invokes Node directly.
+
+
+## GraphSense public tags (ED-9B)
+
+Discovery can query GraphSense public TagPacks for source-backed BTC/ETH address annotations. Explicitly select **GraphSense Public Tags**, plan, then run. Configure the existing server-side `DISCOVERY_GITHUB_TOKEN`; this shares the code-mention GitHub account and rate limits. Requires operator-applied Alembic revision `20260922_02`; startup does not migrate the database.
+
+Results are third-party public annotations, not verified owners. Exact address and chain matching, bounded safe YAML retrieval, immutable source/blob provenance, a distinct public-annotation graph lane, and explicit reviewed `public_osint` promotion are supported. Actor/confidence/cluster-definer fields are metadata only: no automatic Labels, Entities, Claims, wallet clustering, risk, Cases or monitoring. Positive cache TTL is 24 hours (empty at most one hour); Refresh bypasses it. Search and file limits mean coverage is incomplete, not an exhaustive tag inventory. See [ED-9B](docs/EVIDENCE_DISCOVERY_ED9B.md) for parsing assumptions, source/license, migration, bounds and tests.

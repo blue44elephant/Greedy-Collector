@@ -44,7 +44,7 @@ module.exports=async({evaluate,call,work,mode,httpPort,traffic})=>{
     assert.ok(traffic.slice(start).every(url=>!url.includes('/lookup/')&&!url.includes('/graph?')));
   }
   async function planRun(source,refresh=false,terminal=true){
-    await evaluate(`document.querySelectorAll('#discovery-transforms input[type=checkbox]').forEach(n=>{n.checked=n.dataset.source===${JSON.stringify(source)};n.dispatchEvent(new Event('change',{bubbles:true}));});document.querySelector('#discovery-plan [name=refresh]').checked=${refresh};document.querySelector('#discovery-plan [name=refresh]').dispatchEvent(new Event('change',{bubbles:true}));`);
+    await evaluate(`document.querySelectorAll('#discovery-transforms input[type=checkbox]').forEach(n=>{n.checked=n.closest('[data-transform]').dataset.transform===${JSON.stringify(source==='github'?'wallet.public_code_mentions':'wallet.local_labels')};n.dispatchEvent(new Event('change',{bubbles:true}));});document.querySelector('#discovery-plan [name=refresh]').checked=${refresh};document.querySelector('#discovery-plan [name=refresh]').dispatchEvent(new Event('change',{bubbles:true}));`);
     const before=state(),counts=counters();await click('#discovery-workspace','Plan selected pivots');assert.deepEqual(state(),before);assert.deepEqual(counters(),counts);
     await click('#discovery-workspace','Run discovery');
     if(terminal)await evaluate(`waitFor(()=>document.getElementById('discovery-run').dataset.status==='completed')`);

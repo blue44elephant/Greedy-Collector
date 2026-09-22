@@ -553,7 +553,7 @@ class DiscoveryResult(Base):
         sa.Column('reviewed_material_revision', sa.Integer, nullable=False, server_default=sa.text('0')),
         sa.Column('version', sa.Integer, nullable=False, server_default=sa.text('1')),
         sa.CheckConstraint("kind IN ('candidate_evidence', 'candidate_identifier', 'candidate_relationship')", name="ck_discovery_results_1"),
-        sa.CheckConstraint("predicate IN ('mentioned_at', 'repository_contains', 'explorer_labeled_as', 'locally_labeled_as', 'publicly_listed_by', 'reverse_name_record', 'resolves_to', 'registration_record_for', 'certificate_names', 'observed_at', 'archived_at', 'uses_tracking_id', 'advertises_at')", name="ck_discovery_results_2"),
+        sa.CheckConstraint("predicate IN ('mentioned_at', 'repository_contains', 'explorer_labeled_as', 'locally_labeled_as', 'publicly_listed_by', 'reverse_name_record', 'resolves_to', 'registration_record_for', 'certificate_names', 'observed_at', 'archived_at', 'uses_tracking_id', 'advertises_at', 'mentions_wallet', 'publicly_labeled_as')", name="ck_discovery_results_2"),
         sa.CheckConstraint("review_status IN ('unreviewed', 'relevant', 'irrelevant')", name="ck_discovery_results_3"),
         sa.CheckConstraint('material_revision >= 1 AND version >= 1', name="ck_discovery_results_4"),
         sa.CheckConstraint('reviewed_material_revision BETWEEN 0 AND material_revision', name="ck_discovery_results_5"),

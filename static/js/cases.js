@@ -58,7 +58,7 @@ export function initCases() {
       element("p", "Cases organize analyst-selected references. References do not establish identity or ownership. Updated time is the stored case timestamp, not a latest-evidence timestamp.", "bounded-note"));
     const entities = panel("Entities", "References do not automatically retrieve or expand blockchain history."); entities.id="case-entities";
     const attachments = row.entities.filter(item => item.entity_type === "attachment");
-    entities.append(table(["Type", "Reference", "Metadata", "Actions"], row.entities.filter(item => !['attachment','entity','attribution_claim'].includes(item.entity_type)).map(item => {
+    entities.append(table(["Type", "Reference", "Metadata", "Actions"], row.entities.filter(item => !['attachment','entity','attribution_claim','discovery_observation'].includes(item.entity_type)).map(item => {
       const controls = element("div", undefined, "toolbar"); const chain=item.metadata_json?.chain;
       if (item.entity_type === "wallet") {
         controls.append(action("Investigate wallet", () => investigate(chain,item.entity_ref)));
@@ -107,7 +107,9 @@ export function initCases() {
       const url=URL.createObjectURL(blob); const link=element("a"); link.href=url; link.download=`case-${row.id}.${extension}`;
       document.body.append(link); link.click(); link.remove(); setTimeout(()=>URL.revokeObjectURL(url),1000);
     }));
-    selected.replaceChildren(overview,entities,caseAttribution(row.id),alerts,notes,files,reports);
+    const sourceObservations=panel('Source observations','Explicit investigation references; not acceptance of an identity claim.');sourceObservations.id='case-source-observations';
+    sourceObservations.append(table(['Source','Wallet',''],row.entities.filter(e=>e.entity_type==='discovery_observation').map(e=>{const m=e.metadata_json||{};return [m.title||m.source_type,m.address,action('Open Discovery observation',()=>document.dispatchEvent(new CustomEvent('open-discovery',{detail:{action:'open_observation',observation_id:e.entity_ref,run_id:m.run_id,result_id:m.result_id}})))];}),'No source observations associated.'));
+    selected.replaceChildren(overview,entities,sourceObservations,caseAttribution(row.id),alerts,notes,files,reports);
   }
   return id => {if(host.dataset.busy === "true") return; if(id) selectedId=id; return perform(refresh);};
 }

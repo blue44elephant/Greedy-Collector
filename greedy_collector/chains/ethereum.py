@@ -3,7 +3,7 @@ from decimal import Decimal
 import asyncio
 import re
 
-from .base import ChainAdapter, ChainDataError
+from .base import ChainAdapter, ChainDataError, RpcReadError
 from ..schemas import NormalizedTransaction
 
 
@@ -41,7 +41,7 @@ class EthereumAdapter(ChainAdapter):
             raise ChainDataError(f"Etherscan returned: {data.get('result')}")
         return data
 
-    async def _alchemy(self, method: str, params: list) -> dict:
+    async def _alchemy(self, method: str, params: list, *, bounded=False) -> dict:
         """Make a JSON-RPC call to Alchemy.
         
         Args:
@@ -54,6 +54,8 @@ class EthereumAdapter(ChainAdapter):
         Raises:
             ChainDataError: If Alchemy request fails or returns error
         """
+        if bounded and not self.settings.alchemy_api_key:
+            raise RpcReadError('configuration_unavailable')
         key = self._require_alchemy_key()
         url = f"{self.alchemy_url}/{key}"
         payload = {
@@ -63,6 +65,21 @@ class EthereumAdapter(ChainAdapter):
             "params": params,
         }
         
+        if bounded:
+            data = await self._post_bounded(url, payload)
+            if not isinstance(data, dict) or data.get('jsonrpc') != '2.0' or type(data.get('id')) is not int or data['id'] != 1:
+                raise RpcReadError('invalid_provider_response')
+            if 'error' in data:
+                error=data['error']
+                if not isinstance(error,dict) or 'result' in data:raise RpcReadError('invalid_provider_response')
+                if error.get('code') == 429:raise RpcReadError('rate_limited')
+                raw=error.get('data')
+                if isinstance(raw,dict):raw=raw.get('data')
+                selector=raw[:10].lower() if isinstance(raw,str) and re.fullmatch(r'0x[0-9a-fA-F]{8,}',raw) else None
+                raise RpcReadError('invalid_provider_response',selector)
+            if 'result' not in data:raise RpcReadError('invalid_provider_response')
+            return data['result']
+
         try:
             data = await self._post(url, json=payload)
         except ChainDataError as exc:

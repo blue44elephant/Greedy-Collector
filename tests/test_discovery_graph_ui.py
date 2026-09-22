@@ -21,6 +21,9 @@ def test_graph_workspace_and_existing_workflows_reused():
     graph=(ROOT/'static/js/discovery_graph.js').read_text(encoding='utf8')
     assert 'Showing ${graph.items.length} of ${graph.total}' in graph
     assert 'Current review' in graph and 'Promoted (current)' in graph
-    assert "a.rel='noopener noreferrer'" in graph and "a.target='_blank'" in graph
+    assert 'sourceReference(node.url)' in graph
+    links=(ROOT/'static/js/discovery_manual_source.js').read_text(encoding='utf8')
+    assert "link.rel='noopener noreferrer'" in links and "link.target='_blank'" in links
+    assert "Copy source URL" in links and "endsWith('.onion')" in links
     assert 'Accessible result list' in graph and 'pointermove' in graph
     assert '/promote`' not in graph and 'fetch(' not in graph and 'POST' not in graph

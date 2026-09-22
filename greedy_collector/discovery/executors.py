@@ -57,6 +57,7 @@ class Binding:
     source_version:int
     executor:TransformExecutor
     quota:QuotaPolicy
+    available:Callable[[],bool]|None=None
 
 @dataclass(frozen=True)
 class ManualBinding:
@@ -66,9 +67,17 @@ class ManualBinding:
     source_version:int
     actions:Callable
 
+@dataclass(frozen=True)
+class CaptureBinding:
+    transform_id:str
+    source_id:str
+    transform_version:int
+    source_version:int
+    service:Callable
+
 class ExecutorRegistry:
     def __init__(self,descriptors=REGISTRY):
-        self.descriptors=descriptors;self._bindings={};self._manual={}
+        self.descriptors=descriptors;self._bindings={};self._manual={};self._captures={}
     def register(self,binding:Binding):
         if not isinstance(binding,Binding):raise DiscoveryError('Only code bindings may be registered')
         transform,source=self.descriptors.pair(binding.transform_id,binding.source_id)
@@ -81,11 +90,21 @@ class ExecutorRegistry:
         self._bindings[key]=binding
     def get(self,transform_id,source_id):return self._bindings.get((transform_id,source_id))
 
+    def register_capture(self,binding):
+        if not isinstance(binding,CaptureBinding) or not callable(binding.service):raise DiscoveryError('Code-owned capture service required')
+        transform,source=self.descriptors.pair(binding.transform_id,binding.source_id)
+        if not transform.capture_only or (transform.version,source.version)!=(binding.transform_version,binding.source_version):raise DiscoveryError('Invalid capture binding')
+        key=(binding.transform_id,binding.source_id)
+        if key in self._captures:raise DiscoveryError('Duplicate capture handler')
+        self._captures[key]=binding
+
+    def capture(self,transform_id,source_id):return self._captures.get((transform_id,source_id))
+
     def register_manual(self,binding):
         if not isinstance(binding,ManualBinding) or not callable(binding.actions) or inspect.iscoroutinefunction(binding.actions):raise DiscoveryError('A code-owned local manual handler is required')
         transform,source=self.descriptors.pair(binding.transform_id,binding.source_id)
         if (transform.version,source.version)!=(binding.transform_version,binding.source_version):raise DiscoveryError('Manual descriptor version mismatch')
-        if source.mode!='manual' or source.cost_class!='FREE_LOCAL' or transform.max_requests!=0:raise DiscoveryError('Manual generation must be free local with zero requests')
+        if transform.capture_only or source.mode!='manual' or source.cost_class!='FREE_LOCAL' or transform.max_requests!=0:raise DiscoveryError('Manual generation must be free local with zero requests')
         key=(binding.transform_id,binding.source_id)
         if key in self._manual:raise DiscoveryError('Duplicate manual handler')
         self._manual[key]=binding
@@ -97,7 +116,13 @@ def production_executors(sessions):
     # Labels nor performs Discovery. Tests can supply isolated sessions.
     from .local import LocalLabelsExecutor,exact_web_actions
     from .github import GitHubCodeExecutor
+    from .graphsense import GraphSenseExecutor
+    from .ens import EnsPrimaryNameExecutor,configured
+    from .manual_source import ManualSourceService
     registry=ExecutorRegistry()
+    registry.register(Binding('wallet.graphsense_public_tags','github',1,1,GraphSenseExecutor(),QuotaPolicy(daily_units=100,monthly_units=3000)))
+    registry.register_capture(CaptureBinding('wallet.manual_source_observation','manual_source',1,1,ManualSourceService))
+    registry.register(Binding('wallet.ens_primary_name','ens_ethereum',1,1,EnsPrimaryNameExecutor(),QuotaPolicy(daily_units=100,monthly_units=3000),available=configured))
     registry.register(Binding('wallet.local_labels','gc_labels',1,1,LocalLabelsExecutor(sessions),QuotaPolicy(daily_units=0,monthly_units=0)))
     registry.register_manual(ManualBinding('wallet.manual_exact_web','google',1,1,exact_web_actions))
     registry.register(Binding('wallet.public_code_mentions','github',1,1,GitHubCodeExecutor(),QuotaPolicy(daily_units=100,monthly_units=3000)))

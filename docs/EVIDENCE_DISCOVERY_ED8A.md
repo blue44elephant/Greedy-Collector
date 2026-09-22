@@ -1,65 +1,147 @@
-# ED-8A: ENS primary-name Discovery prerequisite review
+# ED-8A: Ethereum ENS primary-name Discovery
 
-Historical status: **ED8A_ENS_NORMALIZATION_DEPENDENCY_BLOCKER**.
+Implemented transform: `wallet.ens_primary_name`, source `ens_ethereum`.
+The ED-8A0 storage and ED-8A1 normalization prerequisites remain unchanged.
 
-ED-8A1 update (2026-09-17): the separately implemented and verified [local reference-library bridge](EVIDENCE_DISCOVERY_ED8A1.md) resolves the normalization prerequisite when Node and the pinned local dependency are installed. The rest of ED-8A remains unimplemented. The findings below preserve the original stop decision; resume from RPC/executor integration, using the bridge and checking that a returned primary name already equals its normalized form.
+## Official contract verification (2026-09-17; rechecked 2026-09-22)
 
-Reviewed 2026-09-16/17. Implementation stopped at the task's explicit normalization gate. ENS Discovery is **not implemented or enabled**. This document records verified assumptions and a continuation checkpoint, not completed functionality.
+The [official Universal Resolver guide](https://docs.ens.domains/resolvers/universal/)
+documents mainnet DAO proxy `0xeEeEEEeE14D718C2B47D9923Deab1335E144EeEe`.
+GC stores this in `UNIVERSAL_RESOLVER`; it is not analyst-editable.
+`reverse(bytes lookupAddress,uint256 coinType)` returns
+`(string primary,address resolver,address reverseResolver)`.
+[ENSIP-19](https://docs.ens.domains/ensip/19/) specifies raw 20-byte Ethereum
+addresses and coin type **60**. This is mainnet primary-name discovery, not
+L2/default-EVM resolution or ENSv2-only functionality. Deployment is verified
+against current documentation, not a live RPC probe.
 
-## Official contract verified
+[ENSIP-23](https://docs.ens.domains/ensip/23/) and the
+[official interface](https://github.com/ensdomains/ens-contracts/blob/staging/contracts/universalResolver/IUniversalResolver.sol)
+specify built-in forward verification, an empty primary when unset, and
+`ReverseAddressMismatch` when the forward address does not match. ENSIP-23 is
+marked draft; the public interface guide and contract were also checked.
 
-The [Universal Resolver guide](https://docs.ens.domains/resolvers/universal/) recommends the DAO-owned proxy **`0xeEeEEEeE14D718C2B47D9923Deab1335E144EeEe`**. Its interface is `reverse(bytes lookupAddress, uint256 coinType)`, returning `(string primary, address resolver, address reverseResolver)`. This is the documented address, not a deployment independently checked through live RPC. Recheck before implementation.
+## RPC and fixed ABI
 
-[ENSIP-19](https://docs.ens.domains/ensip/19/) specifies **coin type 60** for Ethereum Mainnet. A primary name must already be normalized and resolve forward to the queried address. No L2/default-EVM primary-name support is intended here.
+Reuse `EthereumAdapter._alchemy` with its existing Alchemy configuration, URL
+and JSON-RPC envelope. Its new opt-in bounded path uses the shared httpx
+transport, timeout at most 20 seconds, a 16 KiB uncompressed response cap, no
+redirects, no automatic retries and no environment proxy. Existing Ethereum
+lookup/balance behavior is unchanged. Only one `eth_call`, at `latest`, is
+charged through Discovery's execution context; no second forward lookup.
 
-[ENSIP-23](https://docs.ens.domains/ensip/23/) documents built-in forward verification, `ReverseAddressMismatch` on mismatch, and an empty name with zero forward resolver when no primary is set. CCIP-Read can be required during either phase. The specification is marked draft; the interface guide and upstream implementation were also inspected.
+No installed ABI utility was available. A narrow codec handles only this fixed
+signature: selector `0x5d78a217`, dynamic bytes offset 64, coin 60, length 20,
+raw address bytes and ABI padding. Return decoding requires offset 96, canonical
+address padding, bounded length, strict UTF-8, zero string padding and exact
+tuple length. Name bytes are capped at ED-8A1's 2048 bytes. Tests pin exact
+calldata, tuple decoding and malformed responses. No new dependency was added.
 
-## Why reverse success is not normalization proof
+## Normalization and technical verification
 
-ENSIP-23 explicitly treats an unnormalized returned name and resolver as invalid. ENSIP-19 requires clients to reject an unnormalized reverse name. These rules do not establish that a successful EVM return guarantees normalization.
+Every nonempty primary passes through the existing backend
+`normalize_ens_name()` bridge (`@adraffy/ens-normalize` 1.11.1, Unicode 17).
+Normalization runs off the async event loop; cancellation is checked before
+storage. Its output must equal the raw returned name. No lowercasing, IDNA,
+punycode, NFC or repair is performed. ENSIP-19 requires the reverse name to be
+already normalized; forward verification of one spelling cannot be transferred
+to a changed spelling. The Universal Resolver's literal name encoding is not a
+replacement for ENSIP-15 validation.
 
-In [AbstractUniversalResolver](https://github.com/ensdomains/ens-contracts/blob/staging/contracts/universalResolver/AbstractUniversalResolver.sol), `reverseNameCallback` decodes the name and passes its literal bytes through `NameCoder.encode`. `reverseAddressCallback` compares the forward address against the query. [NameCoder.encode](https://github.com/ensdomains/ens-contracts/blob/staging/contracts/utils/NameCoder.sol) performs DNS framing and label-size checks, not ENSIP-15 Unicode validation. This source inspection supports the conclusion that GC must separately establish that the returned string is already normalized.
+## Configuration, planning and cache
 
-The eventual boundary must reject a name if normalization would change it. Attaching the original forward verification to a changed name would verify different material. A redundant forward call does not solve the missing normalization implementation.
+Requires `ALCHEMY_API_KEY` and usable ED-8A1 Node/local normalization dependency.
+Etherscan is not needed for this transform. Capability metadata reports
+implemented=true but configured/executable=false if either prerequisite is
+missing. Import/startup does not invoke RPC or the normalizer. Capability checks
+may perform the cached local normalizer self-test; they consume no RPC quota.
 
-## Dependency decision and blocker
+Cost class `LIMITED_FREE`; request unit, maximum one attempt/result per run,
+30-second execution deadline, 10 attempts/minute, local reservations capped at
+100 units/day and 3000/month. These are GC guardrails, not promises about an
+Alchemy subscription. Existing budgets, cancellation, terminal immutability,
+idempotency and remote cache are reused. TTL is **3600 seconds**. Refresh bypasses
+cache. Empty successes are cacheable; mismatches/unsupported resolution are
+incomplete and not cached. Cache hits retain original observation timestamps.
 
-[ENSIP-15](https://docs.ens.domains/ensip/15/) currently specifies **Unicode 17.0.0**. Lowercasing, IDNA/UTS-46, generic NFC and ED-8A0's canonical-input checks do not implement that specification.
+## Safe outcomes
 
-The Python implementation linked by the reference project, [namehash/ens-normalize-python](https://github.com/namehash/ens-normalize-python), was archived on **2026-08-05**. Its README advertises Unicode **16.0** compatibility. [PyPI release 3.0.10](https://pypi.org/project/ens-normalize/3.0.10/) lists Python 3.14 in its classifiers; this does not resolve the independent maintenance and current-specification failures. No package was installed or executed, and Python 3.14 compatibility was not independently tested.
+- Empty primary: bounded successful zero results; “No verified ENS primary name returned.”
+- `ReverseAddressMismatch` (`0xef9c03ce`): zero positive results and safe
+  `reverse_forward_mismatch`; incomplete resolution, not a spoofing judgment.
+- [EIP-3668](https://eips.ethereum.org/EIPS/eip-3668) `OffchainLookup`
+  (`0x556f1830`): `ccip_read_unsupported`; no gateway URLs, callback chains or
+  arbitrary HTTP fetching. Some legitimate ENS records are therefore unavailable.
+- Resolver failures retain only closed diagnostics; malformed ABI/JSON-RPC,
+  rejected/changed names, timeouts, rate limits, missing configuration and
+  transport failures use existing typed execution errors.
 
-The maintained [JavaScript reference](https://github.com/adraffy/ens-normalize.js) advertises Unicode 17.0.0 and full validation-suite coverage. A compliant JavaScript implementation therefore exists. However, a supported Python 3.14 backend integration was not established: this application has no production JavaScript execution boundary. A server-side JS runtime/embedding needs a separate dependency assessment; it was not silently substituted for the requested Python assessment. Browser-only normalization cannot protect server-side persistence.
+Diagnostics occupy the existing source execution metadata (`quota_snapshot`),
+with a closed schema; no new database field or error enum is required. Raw
+provider messages/revert data, request URLs, credentials, headers and helper
+paths are never persisted in results or errors.
 
-No suitable maintained, current-spec Python implementation was verified. Following the explicit stop condition, **no ENS executor, partial normalizer, runtime, ABI dependency or Web3 framework was added**. Resumption requires a compliant maintained backend integration verified against current official vectors on Python 3.14. This is a scoped dependency blocker, not a claim that ENS normalization is impossible in other languages.
+## Stored result and identity
 
-## ENSv2 boundary
+Result kind is the existing `candidate_relationship`; **observation** kind is
+`name_service_record`. Endpoint `ens_name`, namespace `ethereum`, canonical
+value is the verified ENSIP-15 name. Predicate/direction:
 
-The [official overview](https://docs.ens.domains/ensv2/overview/) describes deployment on Sepolia. The [2026-08-12 beta announcement](https://ens.domains/blog/post/ensv2-beta-public-testing) places mainnet after public testing without a fixed launch date. The [2026-02-06 update](https://ens.domains/blog/post/ens-staying-on-ethereum) supersedes the old Namechain/L2 plan: ENSv2 is intended for Ethereum L1. Use the documented Universal Resolver proxy as the compatibility boundary, not ENSv2-only interfaces.
+`ENS name --resolves_to--> Ethereum blockchain_address`
 
-## Repository inspection and continuation
+Fact key is empty; stable relationship identity depends on the canonical name,
+wallet and predicate, not retrieval clocks, display formatting or response order.
+Observation verification uses existing `technical_verified`; match context and
+snapshot record `forward_verified` / `universal_resolver_reverse`.
+Provenance contains name, canonical wallet, namespace, coin type, fixed contract,
+returned resolvers, provider identifier `alchemy`, and source versions plus
+retrieval timestamp in the existing observation/execution model. No confidence
+of 1.0 or ownership inference is added.
 
-The architecture-approved transform ID is **`wallet.ens_binding`**. Reuse existing Discovery planning, capabilities, executors, quota, cancellation, cache, immutable history and run-source state.
+## UI, graph, review and Attribution
 
-The Ethereum adapter already constructs generic Alchemy JSON-RPC POSTs. `.env` uses `override=False`; process environment wins. `ALCHEMY_API_KEY` stays server-side. No credential or RPC URL setting was added. Reuse requires bounded `eth_call` handling and safe errors: the current helper exposes provider error text internally, and the shared HTTP transport follows redirects. Do not persist raw RPC responses or credential URLs. There is no vetted existing CCIP client; future offchain paths must return `ccip_read_unsupported` without fetching resolver-controlled URLs.
+Ethereum wallet handoff only prefills a subject; no pivot is preselected/run.
+Bitcoin is incompatible. ENS roots remain output-only. Result details show name,
+wallet, Forward verified, source/provider, method, resolver addresses and original
+retrieval time. Empty/mismatch/CCIP outcomes display bounded explanations.
 
-After resolving the normalization gate:
+Graph ENS cards show name and Ethereum/Forward verified, with an inbound
+`resolves_to` arrow to the wallet. Details include full immutable provenance,
+run/current observation counts, current review and promotion counts. ENS uses a
+deterministic lower lane sorted by node ID, 410px columns and 190px rows, starting
+260px below the lowest existing node. Existing wallet/label/code positions are
+unchanged; a 100-result page retains every node. Old foundation-only unverified
+ENS material remains explicitly unrendered rather than being called verified.
 
-- Register an explicitly selected Ethereum-only remote pivot using existing LIMITED_FREE accounting and an initial one-hour cache TTL; Refresh bypasses cache.
-- Obtain UR forward verification without another forward lookup. Empty primary is zero-result success. Mismatch produces no endpoint, graph node or promotion candidate and a safe diagnostic. Bound and classify remaining resolver/RPC failures.
-- Persist `ens_name / ethereum / canonical name --resolves_to--> blockchain_address / ethereum / wallet`, with `name_service_record`, existing `technical_verified` metadata, verification method, resolver addresses, source versions and retrieval time. No new enum or migration is planned.
-- ED-8A1 now handles protocol-valid format characters through the authoritative normalizer. Use its raw-name integration helper; the low-level canonical-input function still does not normalize ordinary strings.
-- Preserve historical observations and run membership when names change. Require Relevant review and ED-6 promotion with explicit claim, stance, directness and rationale; use public_osint origin.
-- Add actual result presentation and deterministic ENS graph cards without moving existing node groups. ENS remains output-only. Opening Discovery makes no RPC call.
-- Complete the requested mocked protocol, semantic, cache, graph, promotion and isolated browser tests. No ownership inference, text-record collection, name enumeration, or automatic Entities, Claims, Labels, risk or Cases.
+Opening an old run selects its included observation, never the latest name.
+A changed primary creates a distinct relationship/observation. Current analytic
+status is clearly separate from historical material. A new observation starts
+Unreviewed. Only explicitly Relevant verified production material is eligible
+for ED-6 promotion. Existing claim selection/creation, explicit stance,
+directness, rationale and confirmation remain required; no default Supports.
+Capture origin is `public_osint`; snapshot retains all immutable technical
+provenance and cannot be rewritten by a later name change.
 
-## Verification and checkpoint
+A verified ENS relationship does **not** establish real-world/legal identity,
+wallet operator, beneficial ownership or company ownership. No Entity, Claim,
+Label, assessment, risk change or Case inclusion is automatic.
 
-- Baseline `python -m pytest tests/ -q`: **1075 passed**, 57 warnings, 326.87 seconds, exit 0.
-- Added tests: **0**; runtime code is unchanged. No second suite run was needed after documentation-only edits.
-- `alembic heads`: **20260916_01 (head)**. No migration added or old migration changed.
-- Frontend/browser/workspace checks were not rerun after the explicit pre-implementation stop. No ENS browser success is claimed.
-- No live ENS/Ethereum call was made. Web access was for documentation/source research; tests used existing isolated fixtures.
-- No production ENS data, credentials, real-database inspection/migration or automatic commit was introduced. Epic Archer was not modified.
-- Changes are this document and a README status link. Resume at the normalization gate, not from an assumed implemented transform.
+## Boundaries and verification
 
-Verdict: **ED8A_ENS_PRIMARY_NAME_DISCOVERY_INCOMPLETE**.
+No text records, avatar, contenthash, ownership history, events/logs, enumeration,
+name-owned queries, L2 lookup, signing, wallet connection or transaction/history
+collection. Production contains no sample results or fixture imports.
+
+Tests use mocked RPC, the actual local normalizer, isolated SQLite and normal
+API/services. Coverage includes capability/configuration, exact calldata, safe
+protocol errors, normalization, cache expiry/refresh, provenance, graph direction,
+review, explicit promotion and immutable history. `node tests/browser_discovery.cjs ens`
+uses a migrated isolated database for positive, changed-name, mismatch, empty and
+cached-empty workflows and all nine workspace navigation. No live provider calls.
+
+Alembic remains `20260916_01`. ED-8A adds no migration or user-database migration
+step. Missing schema is handled by existing gates. The ENS HTTP tests also bind
+application startup to their temporary database, independently of route overrides.
+For full-suite verification, explicitly set `PYTHON_DOTENV_DISABLED=1` and
+`GREEDY_COLLECTOR_DATABASE_URL` to a temporary SQLite file before running pytest:
+older test fixtures can otherwise open the configured database during lifespan.

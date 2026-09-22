@@ -255,6 +255,7 @@ input[type="checkbox"] { width:20px; height:20px; min-height:20px; }
 .discovery-graph-node.wallet rect { fill:#e2eef8; stroke:#36698f; stroke-width:3; }
 .discovery-graph-node.code_location rect { fill:#f2f0fa; }
 .discovery-graph-node.label_annotation rect { fill:#f9f5e9; }
+.discovery-graph-node.public_annotation rect { fill:#e9f4f0; stroke:#487a6b; stroke-dasharray:5 3; }
 .discovery-graph-node text { fill:#243749; font:13px system-ui,sans-serif; pointer-events:none; }
 .discovery-graph-node .kind { font-weight:700; }
 .discovery-graph-node .status { font-size:11px; }

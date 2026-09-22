@@ -89,6 +89,7 @@ class SourceCapability(BaseModel):
     provenance_note:str
 
 class TransformCapability(BaseModel):
+    capture_only:bool=False
     id:str
     version:int
     display_name:str
@@ -215,6 +216,7 @@ class ResultRead(BaseModel):
     version:int
 
 class ObservationSummary(BaseModel):
+    created_at:datetime
     id:str
     result_id:str
     execution_id:str
@@ -293,7 +295,16 @@ class Candidate(Input):
     fact_key:dict[str,JsonValue]
     observation:ObservationInput
 
+class GitHubResourceQuota(Input):
+    limit:int|None=Field(default=None,strict=True,ge=0)
+    remaining:int|None=Field(default=None,strict=True,ge=0)
+    reset_at:datetime|None=None
+    retry_after_at:datetime|None=None
+
 class QuotaReport(Input):
+    github_resources:dict[Literal['code_search','search','core'],GitHubResourceQuota]|None=None
+    # Closed source diagnostic persisted in the existing execution metadata.
+    diagnostic:Literal['empty_primary_name','reverse_forward_mismatch','ccip_read_unsupported','resolver_not_found','resolver_not_contract','unsupported_resolver_profile','resolver_error','rpc_error','malformed_abi','invalid_ens_name','normalizer_unavailable','normalizer_timeout','normalizer_protocol_error','ens_configuration_unavailable']|None=None
     limit:int|None=Field(default=None,strict=True,ge=0)
     resource:Literal['code_search','search','core']|None=None
     remaining:int|None=Field(default=None,strict=True,ge=0)

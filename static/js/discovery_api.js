@@ -13,7 +13,7 @@ const messages = {
   origin_rejected: 'Discovery requests must use this application’s local origin.',
 };
 export async function discoveryRequest(path, {body, key, signal} = {}) {
-  if (!/^\/(sources|transforms|plan|runs|results|observations)(\/|\?|$)/.test(path) || path.includes('..')) throw new UserError('Unsupported Discovery operation.');
+  if (!/^\/(sources|transforms|plan|runs|results|observations|manual-source)(\/|\?|$)/.test(path) || path.includes('..')) throw new UserError('Unsupported Discovery operation.');
   const headers = {};
   if (body !== undefined) headers['Content-Type'] = 'application/json';
   if (key) headers['Idempotency-Key'] = key;
@@ -25,7 +25,10 @@ export async function discoveryRequest(path, {body, key, signal} = {}) {
     throw new UserError('Unable to reach Greedy Collector. Check the local server.');
   }
   const data = await response.json().catch(() => null);
-  if (!response.ok) throw new UserError(messages[data?.detail?.code] || 'The Discovery operation could not be completed. Try again.');
+  if (!response.ok) {
+    if(path.startsWith('/manual-source/') && data?.detail?.code==='invalid_request')throw new UserError('Check the source URL/reference, observed time, context and analyst note. Remove credentials, session headers and local paths; respect the displayed length limits.');
+    throw new UserError(messages[data?.detail?.code] || 'The Discovery operation could not be completed. Try again.');
+  }
   if (data === null) throw new UserError('Unexpected Discovery response. Reload and try again.');
   return data;
 }

@@ -45,7 +45,7 @@ def discovery_schema(engine):
 def test_clean_upgrade_equivalence_and_successor_services(tmp_path,monkeypatch):
     url='sqlite:///'+(tmp_path/'migrated.db').as_posix();cfg=config(url,monkeypatch)
     command.upgrade(cfg,REVISION);command.current(cfg);command.heads(cfg)
-    assert cfg.stdout.getvalue().splitlines()==[REVISION,'20260916_01 (head)']
+    assert cfg.stdout.getvalue().splitlines()==[REVISION,'20260922_02 (head)']
     migrated=create_fk_enabled_engine(url)
     metadata=create_fk_enabled_engine('sqlite:///'+(tmp_path/'metadata.db').as_posix())
     try:
@@ -57,6 +57,7 @@ def test_clean_upgrade_equivalence_and_successor_services(tmp_path,monkeypatch):
         assert checks['ck_discovery_subjects_1']=="kind IN ('blockchain_address', 'url', 'domain', 'repository', 'annotation', 'ens_name')"
         checks['ck_discovery_subjects_1']="kind IN ('blockchain_address', 'url', 'domain', 'repository', 'annotation')"
         expected['discovery_subjects']['checks']=sorted(checks.items())
+        expected['discovery_results']['checks']=[(name,sql.replace(", 'mentions_wallet'",'').replace(", 'publicly_labeled_as'",'')) for name,sql in expected['discovery_results']['checks']]
         assert discovery_schema(migrated)==expected
         assert len(discovery_schema(migrated)['triggers'])==9
         with migrated.connect() as connection:

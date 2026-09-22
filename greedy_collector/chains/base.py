@@ -1,5 +1,6 @@
 from abc import ABC, abstractmethod
 import re
+import json
 
 import httpx
 
@@ -9,6 +10,14 @@ from ..schemas import NormalizedTransaction
 
 class ChainDataError(RuntimeError):
     pass
+
+
+class RpcReadError(ChainDataError):
+    """Bounded read failure: no provider message, URL or revert payload retained."""
+    def __init__(self, category, selector=None):
+        self.category = category
+        self.selector = selector
+        super().__init__(category)
 
 
 class ChainAdapter(ABC):
@@ -57,6 +66,30 @@ class ChainAdapter(ABC):
             raise ChainDataError(
                 f"{self.chain} source request failed: {type(exc).__name__}"
             ) from None
+
+    async def _post_bounded(self, url: str, payload: dict, maximum=16384):
+        """Strict read-only RPC transport; existing lookup transport is unchanged."""
+        try:
+            async with httpx.AsyncClient(timeout=min(self.settings.request_timeout, 20),
+                                         follow_redirects=False, trust_env=False) as client:
+                async with client.stream('POST', url, json=payload,
+                        headers={'User-Agent':'Greedy-Collector/0.1','Accept-Encoding':'identity'}) as response:
+                    if response.status_code == 429:raise RpcReadError('rate_limited')
+                    if response.status_code in (401,403):raise RpcReadError('configuration_unavailable')
+                    if response.status_code != 200:raise RpcReadError('transport_failed')
+                    if response.headers.get('content-encoding','identity') != 'identity':
+                        raise RpcReadError('invalid_provider_response')
+                    body=bytearray()
+                    async for chunk in response.aiter_bytes():
+                        if len(body)+len(chunk)>maximum:raise RpcReadError('invalid_provider_response')
+                        body.extend(chunk)
+                    return json.loads(body)
+        except httpx.TimeoutException:
+            raise RpcReadError('timeout') from None
+        except httpx.HTTPError:
+            raise RpcReadError('transport_failed') from None
+        except (ValueError, UnicodeError):
+            raise RpcReadError('invalid_provider_response') from None
 
     @abstractmethod
     async def lookup_address(self, address: str) -> dict:

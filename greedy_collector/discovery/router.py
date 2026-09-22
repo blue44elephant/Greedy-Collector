@@ -144,3 +144,19 @@ def promote(observation_id:str,payload:ps.PromotionInput,runtime:Runtime):
 def promotions(result_id:str,runtime:Runtime,limit:Limit=20,offset:Offset=0):
     with runtime.sessions() as db:
         return PromotionService(db,metadata_only=runtime.metadata_only,registry=runtime.registry).history(result_id,limit=limit,offset=offset)
+
+
+from .manual_source import ManualSourceInput,ManualSourceConfirm,ManualSourcePreview,ManualSourceCaptured,TRANSFORM_ID,SOURCE_ID
+
+def capture_service(runtime,db):
+    binding=runtime.executors.capture(TRANSFORM_ID,SOURCE_ID)
+    if binding is None:raise SchemaUnavailable('Manual capture is not available')
+    return binding.service(db,metadata_only=runtime.metadata_only,registry=runtime.registry)
+
+@router.post('/manual-source/preview',response_model=ManualSourcePreview)
+def manual_source_preview(payload:ManualSourceInput,runtime:Runtime):
+    with runtime.sessions() as db:return capture_service(runtime,db).preview(payload)
+
+@router.post('/manual-source/capture',status_code=201,response_model=ManualSourceCaptured)
+def manual_source_capture(payload:ManualSourceConfirm,runtime:Runtime):
+    with runtime.sessions() as db:return capture_service(runtime,db).capture(payload)

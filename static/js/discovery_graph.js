@@ -1,8 +1,10 @@
+import {graphSenseDetail} from './discovery_graphsense.js';
+import {manualSourceDetail,sourceReference} from './discovery_manual_source.js';
 import {element,table,dateText,run,UserError} from './ui.js';
 import {discoveryRequest as request} from './discovery_api.js';
 import {discoveryLayout,discoveryPath,zoomView,CARD} from './discovery_graph_layout.js';
 
-const kinds={wallet:'Wallet',label_annotation:'Label annotation',code_location:'Code location'};
+const kinds={wallet:'Wallet',label_annotation:'Label annotation',code_location:'Code location',ens_name:'ENS primary name',source_page:'Source observation',public_annotation:'GraphSense public tag'};
 const short=(value,n=36)=>String(value??'Not available').length>n?String(value).slice(0,n-1)+'…':String(value??'Not available');
 const review=node=>node.current_review_required?`Review required · previous ${node.current_review_status}`:node.current_review_status;
 function svgNode(tag,attrs={},text) {
@@ -50,16 +52,16 @@ export function initDiscoveryGraph(host,{openResult}) {
         inspector.append(table(['Field','Value'],[['Chain',node.chain],['Full wallet',node.address]]),button('Copy wallet address',async()=>{try{await navigator.clipboard.writeText(node.address);}catch{throw new UserError('Copy the full wallet address from the detail table.');}}),
           button('Open blockchain graph',()=>document.dispatchEvent(new CustomEvent('open-discovery-blockchain-graph',{detail:{chain:node.chain,address:node.address}}))),element('p','Opens the separate blockchain workspace with this wallet prefilled. Load graph there to read stored transfer relationships.','muted small'));return;
       }
-      inspector.append(element('p',node.predicate==='repository_contains'?'The wallet identifier was observed in this public code location. Code mention does not establish repository owner control of the wallet.':'This wallet had the displayed stored Label annotation. This is secondary annotation metadata.'),
+      inspector.append(element('p',node.type==='public_annotation'?'Third-party public annotation. This does not establish current or legal ownership, wallet control or common ownership.':node.type==='source_page'?'The analyst recorded that this source referenced the wallet. This does not establish source/operator ownership or common ownership.':node.type==='ens_name'?'At observation time, this primary name was forward verified to the wallet. This technical naming relationship does not establish real-world identity or wallet control.':node.predicate==='repository_contains'?'The wallet identifier was observed in this public code location. Code mention does not establish repository owner control of the wallet.':'This wallet had the displayed stored Label annotation. This is secondary annotation metadata.'),
         table(['Field','Value'],[['Predicate',node.predicate],['Result',node.result_id],['Selected run observation',node.observation_id],['Source / transform',`${node.source_id} / ${node.transform_id}`],
-          ...(node.type==='label_annotation'?[['Label',node.title],['Label type',node.label_type],['Original source',node.annotation_source],['Annotation confidence (metadata)',node.confidence]]:[['Repository',node.repository],['File',node.path],['Blob SHA',node.blob_sha]]),
+          ...(node.type==='source_page'?[['Provenance','Manual analyst capture'],['Source type',node.manual_source?.source_type]]:node.type==='ens_name'?[['ENS primary name',node.primary_name],['Namespace',node.namespace],['Wallet',node.wallet],['Verification','Forward verified'],['Verification method',node.verification_method],['Universal Resolver',node.universal_resolver],['Resolver',node.resolver],['Reverse resolver',node.reverse_resolver]]:node.type==='label_annotation'?[['Label',node.title],['Label type',node.label_type],['Original source',node.annotation_source],['Annotation confidence (metadata)',node.confidence]]:[['Repository',node.repository],['File',node.path],['Blob SHA',node.blob_sha]]),
           ['Current review',review(node)],['Observations in this run',node.run_observation_count],['Observations across runs (current)',node.current_observation_count],['First included retrieval (original)',dateText(node.first_retrieved_at)],['Last included retrieval (original)',dateText(node.last_retrieved_at)],['Promoted (current)',node.promotion_count??'Unavailable']]),
         element('p',node.summary),...(node.excerpt?[element('blockquote',node.excerpt)]:[]),
         button('Open result',()=>openResult(node.result_id,node.observation_id)),button('View observations',()=>openResult(node.result_id,node.observation_id)),
         element('p','Review and promotion use the existing result inspector and its selected-observation checks.','muted small'));
-      if(node.url) {
-        try {const url=new URL(node.url);if(['https:','http:'].includes(url.protocol)&&!url.username&&!url.password){const a=element('a','Open source');a.href=url.href;a.target='_blank';a.rel='noopener noreferrer';a.referrerPolicy='no-referrer';inspector.append(a);}}catch{}
-      }
+      if(node.type==='public_annotation')inspector.append(graphSenseDetail(node.public_annotation||{},node.first_retrieved_at));
+      if(node.type==='source_page')inspector.append(manualSourceDetail(node.manual_source||{},node.captured_at));
+      else if(node.url)inspector.append(sourceReference(node.url));
       if(node.promotion_count>0) {
         const links=element('div');inspector.append(button('Open attribution',()=>promotions(0)),links);
         const selected=state.selected;
@@ -98,7 +100,7 @@ export function initDiscoveryGraph(host,{openResult}) {
     for(const type of ['pointerup','pointercancel','lostpointercapture'])svg.addEventListener(type,()=>{drag=null;});
     svg.addEventListener('wheel',e=>{e.preventDefault();state.view=zoomView(state.view,e.deltaY>0?1.12:1/1.12);views();},{passive:false});
     svg.addEventListener('keydown',e=>{if(e.key==='Escape')select(graph.root.id);});
-    host.append(element('p','Labels: wallet → annotation. Code: code location → wallet. Select a connection for its literal predicate and provenance. Drag empty space to pan.','muted small'),svg,inspector);
+    host.append(element('p','Labels: wallet → annotation. Code: code location → wallet. ENS: name → wallet. Manual: source → mentions_wallet → wallet. Select a connection for its literal predicate and provenance. Drag empty space to pan.','muted small'),svg,inspector);
     if(!graph.total)host.append(element('p','No Discovery results were returned for this run.','empty'));
     const fallback=element('details');fallback.append(element('summary','Accessible result list for this graph page'),table(['Type','Result','Predicate','Current review','Promoted',''],graph.items.map(n=>[kinds[n.type],n.title,n.predicate,review(n),n.promotion_count??'Unavailable',button('Select result',()=>select(n.id))]),'No Discovery results were returned for this run.'));host.append(fallback);
     views();const chosen=state.selected;if(chosen&&(chosen.id===graph.root.id||graph.items.some(n=>chosen.edge?n.result_id===chosen.id:n.id===chosen.id)))select(chosen.id,chosen.edge);else select(graph.root.id);

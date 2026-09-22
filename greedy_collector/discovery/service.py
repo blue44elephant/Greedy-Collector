@@ -212,7 +212,7 @@ class DiscoveryService:
         source,run=self._active_source(source_id,expected_run_version)
         if source.status!='running':raise Conflict('Source must be running before material is recorded')
         descriptor=source.descriptor_snapshot['transform'];source_descriptor=source.descriptor_snapshot['source']
-        if source_descriptor['mode']=='manual':raise DiscoveryError('Manual navigation is not a finding')
+        if source_descriptor['mode']=='manual' and not descriptor.get('capture_only'):raise DiscoveryError('Manual navigation is not a finding')
         if not source_descriptor['storage_allowed']:raise DiscoveryError('Source retention is not approved')
         choice(coverage,e.COVERAGE)
         if not isinstance(records,list) or len(records)>source.parameters['max_results']:raise DiscoveryError('Batch exceeds declared result limit')
@@ -251,7 +251,7 @@ class DiscoveryService:
                     self._bump(result,result.version,material_revision=result.material_revision+(0 if known else 1),first_seen_at=min(aware(result.first_seen_at),now),last_seen_at=max(aware(result.last_seen_at),now))
                 observation=Observation(result_id=result.id,execution_id=source.id,content_sha256=content_hash,**values)
                 self.db.add(observation);self.db.flush()
-            self._attach(source,observation,'local' if source_descriptor['mode']=='local' else 'retrieved')
+            self._attach(source,observation,'local' if source_descriptor['mode']=='local' or descriptor.get('capture_only') else 'retrieved')
             written.append(observation.id)
         source.status='succeeded';source.completed_at=utcnow();source.coverage=coverage;source.provider_total=provider_total
         source.returned_count=self.db.scalar(select(func.count()).select_from(RunItem).where(RunItem.run_source_id==source.id))

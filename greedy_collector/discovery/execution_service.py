@@ -19,6 +19,9 @@ class ExecutionService(DiscoveryService):
         if existing:return existing
         # The selected architecture permits one active run, even for different queries.
         if self.db.scalar(select(Run.id).where(Run.status.in_(('queued','running'))).limit(1)):raise Conflict('Another Discovery run is active')
+        if any(s['transform_id']=='wallet.graphsense_public_tags' for s in selections):
+            from .graphsense import require_schema
+            require_schema(self.db,self._metadata_only)
         canonical=self.get_or_create_subject('blockchain_address',subject['chain'],subject['address'])
         return self.create_run(canonical['id'],selections,idempotency_key=key,refresh=refresh,execution_policy=policy,config_generation=config_generation)
 

@@ -143,6 +143,56 @@ def candidate(item, subject, incomplete, retrieved):
             'source_snapshot': snapshot}}
 
 
+async def api_json(context, url, *, params=None, max_bytes=MAX_BYTES, accept='application/vnd.github+json'):
+    """Shared charged GitHub API transport. Callers own fixed endpoint allowlists."""
+    if not url.startswith('https://api.github.com/'):
+        raise ExecutionSignal('invalid_provider_response')
+    token = os.getenv('DISCOVERY_GITHUB_TOKEN', '').strip()
+    if not token:raise ExecutionSignal('configuration_unavailable')
+    async def request():
+        headers = {'Accept': accept,
+            'X-GitHub-Api-Version': API_VERSION, 'Authorization': 'Bearer ' + token,
+            'User-Agent': 'Greedy-Collector'}
+        async with httpx.AsyncClient(timeout=15, follow_redirects=False, trust_env=False) as client:
+            async with client.stream('GET', url, params=params, headers=headers) as response:
+                quota = quota_headers(response.headers)
+                body = bytearray()
+                async for chunk in response.aiter_bytes():
+                    context.checkpoint()
+                    if len(body) + len(chunk) > max_bytes:
+                        raise ExecutionSignal('invalid_provider_response', quota)
+                    body.extend(chunk)
+                status = response.status_code
+                # Error text is used only for classifying documented secondary
+                # limits; never saved, logged or returned to the client.
+                secondary = False
+                if status == 403:
+                    try:
+                        error = json.loads(body)
+                        message = error.get('message', '') if isinstance(error, dict) else ''
+                        secondary = isinstance(message, str) and 'rate limit' in message.lower()
+                    except (ValueError, UnicodeError):
+                        pass
+                if status == 429 or status == 403 and (quota.get('remaining') == 0 or 'retry_after_at' in quota or secondary):
+                    quota.setdefault('retry_after_at', datetime.now(timezone.utc) + timedelta(minutes=1))
+                    raise ExecutionSignal('rate_limited', quota)
+                if status != 200:
+                    category = 'configuration_unavailable' if status == 401 else 'entitlement_unavailable' if status == 403 else 'transport_failed' if status >= 500 else 'invalid_provider_response'
+                    raise ExecutionSignal(category, quota)
+                try:
+                    data = json.loads(body)
+                except (ValueError, UnicodeError):
+                    raise ExecutionSignal('invalid_provider_response', quota) from None
+                return data, quota
+
+    try:
+        return await context.request(request)
+    except httpx.TimeoutException:
+        raise ExecutionSignal('timeout') from None
+    except httpx.HTTPError:
+        raise ExecutionSignal('transport_failed') from None
+
+
 class GitHubCodeExecutor:
     async def execute(self, context):
         subject = canonical_subject('blockchain_address', context.subject['namespace'], context.subject['canonical_value'])
@@ -153,51 +203,8 @@ class GitHubCodeExecutor:
         if not token:
             raise ExecutionSignal('configuration_unavailable')
 
-        async def search():
-            # REST uses legacy search syntax. Quotes express exact intent, but
-            # punctuation may be ignored; fragment verification is authoritative.
-            params = {'q': '"' + subject['canonical_value'] + '" in:file', 'per_page': maximum, 'page': 1}
-            headers = {'Accept': 'application/vnd.github.text-match+json',
-                'X-GitHub-Api-Version': API_VERSION, 'Authorization': 'Bearer ' + token,
-                'User-Agent': 'Greedy-Collector'}
-            async with httpx.AsyncClient(timeout=15, follow_redirects=False, trust_env=False) as client:
-                async with client.stream('GET', SEARCH_URL, params=params, headers=headers) as response:
-                    quota = quota_headers(response.headers)
-                    body = bytearray()
-                    async for chunk in response.aiter_bytes():
-                        context.checkpoint()
-                        if len(body) + len(chunk) > MAX_BYTES:
-                            raise ExecutionSignal('invalid_provider_response', quota)
-                        body.extend(chunk)
-                    status = response.status_code
-                    # Error text is used only for classifying documented secondary
-                    # limits; never saved, logged or returned to the client.
-                    secondary = False
-                    if status == 403:
-                        try:
-                            error = json.loads(body)
-                            message = error.get('message', '') if isinstance(error, dict) else ''
-                            secondary = isinstance(message, str) and 'rate limit' in message.lower()
-                        except (ValueError, UnicodeError):
-                            pass
-                    if status == 429 or status == 403 and (quota.get('remaining') == 0 or 'retry_after_at' in quota or secondary):
-                        quota.setdefault('retry_after_at', datetime.now(timezone.utc) + timedelta(minutes=1))
-                        raise ExecutionSignal('rate_limited', quota)
-                    if status != 200:
-                        category = 'configuration_unavailable' if status == 401 else 'entitlement_unavailable' if status == 403 else 'transport_failed' if status >= 500 else 'invalid_provider_response'
-                        raise ExecutionSignal(category, quota)
-                    try:
-                        data = json.loads(body)
-                    except (ValueError, UnicodeError):
-                        raise ExecutionSignal('invalid_provider_response', quota) from None
-                    return data, quota
-
-        try:
-            data, quota = await context.request(search)
-        except httpx.TimeoutException:
-            raise ExecutionSignal('timeout') from None
-        except httpx.HTTPError:
-            raise ExecutionSignal('transport_failed') from None
+        params = {'q': '"' + subject['canonical_value'] + '" in:file', 'per_page': maximum, 'page': 1}
+        data, quota = await api_json(context, SEARCH_URL, params=params, accept='application/vnd.github.text-match+json')
         if not isinstance(data, dict) or type(data.get('total_count')) is not int or data['total_count'] < 0 or type(data.get('incomplete_results')) is not bool or not isinstance(data.get('items'), list) or len(data['items']) > maximum or data['total_count'] < len(data['items']):
             raise ExecutionSignal('invalid_provider_response', quota)
         records, seen = [], set()

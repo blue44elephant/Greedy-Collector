@@ -92,7 +92,7 @@ def canonical_subject(kind,namespace,value):
     elif kind=='repository':
         if namespace!='github' or not re.fullmatch(r'[1-9][0-9]{0,19}',value):raise DiscoveryError('Repository subject requires stable GitHub numeric ID')
     elif kind=='annotation':
-        if namespace not in ('gc-label','explorer') or not re.fullmatch(r'[a-zA-Z0-9:_-]{1,255}',value):raise DiscoveryError('Invalid annotation reference')
+        if not (namespace=='graphsense' and len(value)<=255) and (namespace not in ('gc-label','explorer','manual-source') or not re.fullmatch(r'[a-zA-Z0-9:_-]{1,255}',value)):raise DiscoveryError('Invalid annotation reference')
     identity={'kind':kind,'namespace':namespace,'canonical_value':value}
     return {**identity,'display_value':value,'normalization_version':1,'identity_sha256':fingerprint(identity)}
 
@@ -106,9 +106,13 @@ def query_fingerprint(subject,transform,source,parameters,*,config_generation='1
 
 def result_identity(query,kind,predicate,start,end,fact_key):
     choice(kind,e.RESULT_KINDS);choice(predicate,e.PREDICATES)
+    if predicate=='mentions_wallet' and start['kind']=='annotation' and start['namespace']!='manual-source':
+        raise DiscoveryError('Manual source references require an explicit namespace')
     if (start['kind'],end['kind'] if end else None) not in e.PAIRS.get(predicate,()):raise DiscoveryError('Unsupported Discovery relationship type pair')
     if predicate=='resolves_to' and (start['namespace']!='ethereum' or end['namespace']!='ethereum'):
         raise DiscoveryError('ENS endpoints resolve only to Ethereum addresses')
+    if predicate=='publicly_labeled_as' and end['namespace']!='graphsense':
+        raise DiscoveryError('Public tags require the GraphSense annotation namespace')
     fact=clean(fact_key)
     if not isinstance(fact,dict):raise DiscoveryError('Result fact key must be an object')
     identity={'query':subject_identity(query),'kind':kind,'predicate':predicate,'from':subject_identity(start),'to':subject_identity(end) if end else None,'fact_key':fact}

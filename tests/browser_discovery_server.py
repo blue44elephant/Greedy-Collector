@@ -10,13 +10,14 @@ if not work.name.startswith('gc-discovery-browser-') or work==ROOT:
 sys.path.insert(0,str(ROOT))
 os.environ.update(PYTHON_DOTENV_DISABLED='1',GREEDY_COLLECTOR_DATABASE_URL='sqlite:///'+(work/'discovery-test.db').as_posix(),GREEDY_COLLECTOR_GRAPH_BACKEND='sqlite',GREEDY_COLLECTOR_MONITORING_BACKEND='apscheduler',DISCOVERY_GITHUB_TOKEN='ed3-test-only-secret')
 mode=sys.argv[2]
+if mode=='ens':os.environ['ALCHEMY_API_KEY']='ed8a-browser-test-only'
 if mode in ('production','unmigrated','handoff','handoff_unmigrated','promotion_partial','promotion_unmigrated'):os.environ.pop('DISCOVERY_GITHUB_TOKEN',None)
-if mode not in ('production','executor','unmigrated','github','handoff','handoff_github','handoff_unmigrated','promotion','promotion_partial','promotion_unmigrated','graph','graph_partial','graph_unmigrated'):raise RuntimeError('Unknown test mode')
+if mode not in ('production','executor','unmigrated','github','handoff','handoff_github','handoff_unmigrated','promotion','promotion_partial','promotion_unmigrated','graph','graph_partial','graph_unmigrated','ens','manual_source','graphsense'):raise RuntimeError('Unknown test mode')
 if mode not in ('unmigrated','handoff_unmigrated','promotion_unmigrated','graph_unmigrated'):
     from alembic import command
     from alembic.config import Config
     cfg=Config(str(ROOT/'alembic.ini'));cfg.set_main_option('script_location',str(ROOT/'migrations'))
-    command.upgrade(cfg,'head' if mode in ('promotion','graph') else '20260913_01')
+    command.upgrade(cfg,'head' if mode in ('promotion','graph','ens','manual_source','graphsense') else '20260913_01')
 
 import httpx
 import requests
@@ -33,8 +34,19 @@ if mode in ('github','handoff_github','promotion','graph','graph_partial'):
     from tests.browser_discovery_github_transport import install
     install(work)
 
+if mode=='ens':
+    from tests.browser_discovery_ens_transport import install
+    install(work)
+
+if mode=='graphsense':
+    from tests.browser_discovery_graphsense_transport import install
+    install(work)
+
 import main
-if mode.startswith('handoff'):
+if mode in ('ens','graphsense'):
+    main.start_monitoring=lambda:None
+    main.stop_monitoring=lambda:None
+if mode.startswith('handoff') or mode=='manual_source':
     from tests.browser_discovery_handoff_fixture import install
     main.start_monitoring=lambda:None
     main.stop_monitoring=lambda:None

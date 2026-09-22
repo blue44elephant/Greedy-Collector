@@ -14,7 +14,7 @@ module.exports=async({evaluate,call,work,httpPort,traffic})=>{
   const catalog=await api('/transforms');const github=catalog.find(t=>t.id==='wallet.public_code_mentions');
   assert.ok(github.implemented&&github.configured&&github.executable);assert.equal(github.max_results,30);
   async function run(refresh=false,status='completed'){
-    await evaluate(`document.querySelectorAll('#discovery-transforms input[type=checkbox]').forEach(n=>{n.checked=n.dataset.source==='github';n.dispatchEvent(new Event('change',{bubbles:true}));});document.querySelector('#discovery-plan [name=refresh]').checked=${refresh};document.querySelector('#discovery-plan [name=refresh]').dispatchEvent(new Event('change',{bubbles:true}));`);
+    await evaluate(`document.querySelectorAll('#discovery-transforms input[type=checkbox]').forEach(n=>{n.checked=n.closest('[data-transform]').dataset.transform==='wallet.public_code_mentions';n.dispatchEvent(new Event('change',{bubbles:true}));});document.querySelector('#discovery-plan [name=refresh]').checked=${refresh};document.querySelector('#discovery-plan [name=refresh]').dispatchEvent(new Event('change',{bubbles:true}));`);
     const before=count();await click('Plan selected pivots');assert.equal(count(),before);
     await click('Run discovery');await evaluate(`waitFor(()=>document.getElementById('discovery-run').dataset.status===${JSON.stringify(status)})`);
     return evaluate(`document.getElementById('discovery-run').dataset.runId`);
@@ -43,7 +43,7 @@ module.exports=async({evaluate,call,work,httpPort,traffic})=>{
   fs.writeFileSync(path.join(work,'github-mode'),'rate');
   await run(true,'failed');assert.equal(count(),4);assert.ok((await text()).includes('Rate limited'));
   const created=await fetch(`http://127.0.0.1:${httpPort}/api/greedy-collector/labels/manual`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({chain:'ethereum',address,label:'Test-only mixed annotation',type:'Unknown',source:'Browser fixture'})});assert.ok(created.ok);
-  await evaluate(`document.querySelectorAll('#discovery-transforms input[type=checkbox]').forEach(n=>{n.checked=['gc_labels','github'].includes(n.dataset.source);n.dispatchEvent(new Event('change',{bubbles:true}));})`);
+  await evaluate(`document.querySelectorAll('#discovery-transforms input[type=checkbox]').forEach(n=>{n.checked=['wallet.local_labels','wallet.public_code_mentions'].includes(n.closest('[data-transform]').dataset.transform);n.dispatchEvent(new Event('change',{bubbles:true}));})`);
   await click('Plan selected pivots');await click('Run discovery');await evaluate(`waitFor(()=>document.getElementById('discovery-run').dataset.status==='partial')`);
   const mixed=await api('/runs/'+await evaluate(`document.getElementById('discovery-run').dataset.runId`));
   assert.equal(mixed.sources.find(s=>s.source_id==='gc_labels').returned_count,1);assert.equal(mixed.sources.find(s=>s.source_id==='github').status,'rate_limited');

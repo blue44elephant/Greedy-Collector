@@ -1,3 +1,5 @@
+import {graphSenseDetail} from './discovery_graphsense.js';
+import {manualSourceForm,manualSourceDetail,sourceReference} from './discovery_manual_source.js';
 import {promotionDetail} from './discovery_promotion.js';
 import {initDiscoveryGraph} from './discovery_graph.js';
 import {api} from './api.js';
@@ -13,6 +15,7 @@ const sourceReason = source => source.quota_snapshot?.eligibility === 'not_imple
 const encode = encodeURIComponent;
 function reference(value) {
   if (!value) return element('span', 'No source reference returned');
+  if (/^https?:/i.test(value)) return sourceReference(value);
   // Text remains copyable. Opening a source is always an explicit user action.
   try {
     const url = new URL(value);
@@ -33,6 +36,13 @@ export function initDiscovery() {
   const choices = [];
   let entry = null, pendingHandoff = null;
   const entryPanel = element('section',undefined,'panel'); entryPanel.id = 'discovery-entry'; entryPanel.hidden = true;
+  const capturePanel=element('div');
+  function openCapture(){
+    if(!subject)throw new UserError('Check a supported wallet subject first.');
+    capturePanel.replaceChildren(manualSourceForm(subject,async saved=>{
+      await perform(async()=>{await selectRun(saved.run_id);await openResult(saved.result_id,saved.observation_id);await loadHistory(0);});
+    }));capturePanel.scrollIntoView({block:'start'});
+  }
   const top = element('div', undefined, 'workspace-heading');
   top.append(element('h1', 'Discovery'), element('span', 'Public-source pivots & candidate evidence', 'muted'));
   const message = element('p', '', 'operation-status'); message.setAttribute('role', 'status'); message.id = 'discovery-message';
@@ -65,7 +75,7 @@ export function initDiscovery() {
   views.append(resultView,graphView);
   async function setResultView(showGraph){results.hidden=showGraph;resultView.setAttribute('aria-pressed',String(!showGraph));graphView.setAttribute('aria-pressed',String(showGraph));await graph.show(showGraph);}
   resultView.setAttribute('aria-pressed','true');graphView.setAttribute('aria-pressed','false');
-  host.append(top, message, entryPanel, query, pivots, sourcePanel, planning, currentPanel, views, results, graphPanel, detail, history);
+  host.append(top, message, entryPanel, query, capturePanel, pivots, sourcePanel, planning, currentPanel, views, results, graphPanel, detail, history);
 
   function showError(e) { message.textContent = e instanceof UserError ? e.message : 'The Discovery operation could not be completed. Try again.'; message.className = 'operation-status error'; message.setAttribute('role','alert'); }
   async function perform(fn) {
@@ -126,6 +136,9 @@ export function initDiscovery() {
       const card = element('article', undefined, 'discovery-pivot'); card.dataset.transform = t.id;
       card.append(element('h3', t.display_name), element('p',t.id,'muted small'), element('p',t.description));
       card.append(element('p', `${label(t.mode)} · ${costNames[t.cost_class]} · ${t.implemented ? 'Implemented' : 'Not implemented'} / ${t.executable ? t.mode === 'manual' ? 'Manual action generation available' : 'Executable' : 'Not executable'} · ${t.configured ? 'Configured' : 'Not configured'}`));
+      if(t.capture_only){
+        card.append(element('p','Manual · FREE_LOCAL · No network. Preview and confirm capture; no source retrieval.','bounded-note'),button('Record source observation',openCapture));pivots.append(card);continue;
+      }
       if (t.mode === 'manual') card.append(element('p','Manual pivot: Run generates an outbound search action only. The search engine was not queried by Greedy Collector.','bounded-note'));
       if (t.mode === 'local') card.append(element('p','Always reads current stored annotations; no external requests.','muted small'));
       card.append(element('p', `Result limit ${t.max_results} · Request limit ${t.max_requests} · Cache window ${t.cache_seconds} seconds. Cache compatibility is decided by the backend.`, 'muted small'));
@@ -198,6 +211,13 @@ export function initDiscovery() {
     return perform(async () => {
       const incoming = pendingHandoff; pendingHandoff = null;
       await setResultView(false);
+      if(incoming?.action==='open_observation'){
+        await capabilities();await selectRun(incoming.run_id);
+        subject={chain:current.subject.namespace,address:current.subject.canonical_value};
+        form.elements.address.value=subject.address;entry=null;renderEntry();invalidate();
+        detected.textContent=`${label(subject.chain)} · ${subject.address} · Stored observation wallet.`;
+        await openResult(incoming.result_id,incoming.observation_id);return;
+      }
       entry = walletContext(incoming);
       subject = null; choices.forEach(c => { c.check.checked = false; c.budget.value = '0'; });
       options.querySelector('[name=refresh]').checked = false; invalidate(); renderEntry();
@@ -208,6 +228,7 @@ export function initDiscovery() {
       await capabilities();
       // Read global history only; never auto-open a previous run or execute a pivot.
       await loadHistory(historyOffset);
+      if(incoming.action==='manual_source')openCapture();
     }).then(() => { if (visible && !busy) form.elements.address.focus(); });
   }
   function renderRun() {
@@ -231,6 +252,13 @@ export function initDiscovery() {
     if (current.cancel_requested_at) currentPanel.append(element('p',`Cancellation requested: ${dateText(current.cancel_requested_at)}`));
     currentPanel.append(table(['Pivot / source','Status / reason','Coverage / records','Cache','Accounting'],current.sources.map(s => [`${s.transform_id} / ${s.source_id}`,`${label(s.status)}${s.error_code ? ' · '+sourceReason(s) : ''}${s.retry_after_at ? ' · Retry after '+dateText(s.retry_after_at) : ''}`,`${label(s.coverage)} / ${s.returned_count}${s.provider_total == null ? '' : ' (provider count '+s.provider_total+')'}`,s.cache_from_id ? 'Cached observations — original retrieval times below' : 'No cache reuse',`Requests ${s.requests_attempted} attempted / ${s.requests_reserved} reserved; ${s.units_consumed} ${s.cost_unit} consumed / ${s.units_reserved} reserved; provider quota remaining: ${s.quota_snapshot?.remaining ?? 'Unknown'}`])));
     currentPanel.append(details('Run budget authorization', current.budget)); syncButtons();
+    for(const source of current.sources||[])if(source.transform_id==='wallet.graphsense_public_tags' && ['succeeded','cache_hit'].includes(source.status) && source.returned_count===0)currentPanel.append(element('p','No matching GraphSense public tag was returned within the bounded search.','empty'));
+    const ensDiagnostics={empty_primary_name:'No verified ENS primary name returned.',reverse_forward_mismatch:'Reverse and forward addresses did not match. No verified ENS primary name returned.',ccip_read_unsupported:'This ENS resolution requires CCIP-Read, which is not supported.',invalid_ens_name:'ENS returned a name that could not be accepted by the normalizer.'};
+    for(const source of current.sources) if(source.source_id==='ens_ethereum') {
+      const diagnostic=source.quota_snapshot?.diagnostic;
+      if(diagnostic)currentPanel.append(element('p',(ensDiagnostics[diagnostic]||'ENS resolution could not be completed.')+' ('+diagnostic+')','bounded-note'));
+      else if(['succeeded','cache_hit'].includes(source.status)&&source.returned_count===0)currentPanel.append(element('p','No verified ENS primary name returned.','empty'));
+    }
     for (const source of current.sources) for (const a of source.manual_actions || []) {
       const manual = element('section',undefined,'discovery-pivot'); manual.classList.add('discovery-manual-action');
       manual.append(element('h3','Manual action available — not queried by Greedy Collector'),element('p',`Source: ${a.source_name}`),element('p',a.query,'full-address'),reference(a.url),element('p',a.note,'bounded-note'),element('p','Opening this link leaves GC for the external search site. No web results or observations were collected.','muted small'));
@@ -249,7 +277,7 @@ export function initDiscovery() {
     results.replaceChildren(element('h2','Results'),element('p','Candidate relationships are not ownership claims. Review summaries are current; observations retain their historical material.','muted small'));
     results.append(table(['Candidate / relationship','Reference / source','Original observation times','Review','Provenance','Action'],page.items.map(item => {
       const r = item.result, o = item.observation;
-      return [`${o.title} · ${label(r.kind)} · ${r.predicate}`,reference(o.source_url || o.source_locator),`${item.inclusion_kind === 'cache' ? 'Cached observation · ' : ''}Retrieved ${dateText(o.retrieved_at)} · Observed ${o.observed_on || dateText(o.observed_at)} · ${o.source_id}`,reviewText(r),`${item.provenance_count} observations`,button('Inspect result', () => openResult(r.id, o.id))];
+      return [`${o.title} · ${label(r.kind)} · ${r.predicate}`,reference(o.source_url || o.source_locator),`${item.inclusion_kind === 'cache' ? 'Cached observation · ' : ''}${o.kind==='analyst_capture'?'Captured':'Retrieved'} ${dateText(o.kind==='analyst_capture'?(o.created_at||o.retrieved_at):o.retrieved_at)} · Observed ${o.observed_on || dateText(o.observed_at)} · ${o.source_id}`,reviewText(r),`${item.provenance_count} observations`,button('Inspect result', () => openResult(r.id, o.id))];
     }), activeRun(current) ? 'This run is active. No candidate records are stored yet.' : 'No candidate results were returned for this run.'),pager(page,loadResults));
     await graph.setRun(current.id);
   }
@@ -269,7 +297,13 @@ export function initDiscovery() {
   async function openObservation(id) {
     observation = await request(`/observations/${encode(id)}`); const o = observation;
     const target = byId('discovery-observation');
-    target.replaceChildren(element('h3',o.title),element('p',o.summary),reference(o.source_url || o.source_locator),element('p',`Source ${o.source_id} · Pivot ${o.transform_id} · ${label(o.kind)} · ${label(o.verification)}`),element('p',`Retrieved ${dateText(o.retrieved_at)} · Observed ${o.observed_on || dateText(o.observed_at)} · Published ${o.published_on || dateText(o.published_at)}`));
+    target.replaceChildren(element('h3',o.title),element('p',o.summary),reference(o.source_url || o.source_locator),element('p',`Source ${o.source_id} · Pivot ${o.transform_id} · ${label(o.kind)} · ${label(o.verification)}`),element('p',`${o.kind==='analyst_capture'?'Captured':'Retrieved'} ${dateText(o.kind==='analyst_capture'?(o.created_at||o.retrieved_at):o.retrieved_at)} · Observed ${o.observed_on || dateText(o.observed_at)} · Published ${o.published_on || dateText(o.published_at)}`));
+    if(o.source_snapshot?.provider==='GraphSense' && o.kind==='verified_page_observation')target.append(graphSenseDetail(o.source_snapshot,o.retrieved_at));
+    if(o.kind==='analyst_capture' && o.source_id==='manual_source')target.append(manualSourceDetail(o.source_snapshot,o.created_at));
+    if (o.kind === 'name_service_record' && o.source_id === 'ens_ethereum') {
+      const s=o.source_snapshot||{};
+      target.append(element('h4','ENS primary name'),table(['Field','Observed value'],[['Name',s.primary_name],['Wallet',s.wallet],['Namespace',s.namespace],['Verification',s.verification==='forward_verified'?'Forward verified':'Not verified'],['Method',s.verification_method],['Source','ENS / Ethereum'],['Provider',s.provider],['Universal Resolver',s.universal_resolver],['Resolver',s.resolver],['Reverse resolver',s.reverse_resolver]]),element('p','A technical public naming relationship does not establish real-world identity or wallet control.','bounded-note'));
+    }
     if (o.kind === 'code_search_result' && o.source_id === 'github') {
       const s = o.source_snapshot || {};
       target.append(element('h4','GitHub code mention'),table(['Field','Returned source value'],[['Repository',s.repository_full_name],['File path',s.file_path],['Matched full wallet',o.match_context?.matched_wallet],['GitHub search score',s.github_search_score ?? 'Not returned'],['Blob SHA',s.blob_sha ?? 'Not returned'],['Provider incomplete results',String(s.incomplete_results)]]),element('p','GitHub search score is ranking metadata, not ownership probability, Attribution confidence or a GC risk score. A code mention does not establish wallet control.','bounded-note'));

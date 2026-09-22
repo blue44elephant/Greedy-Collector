@@ -52,7 +52,15 @@ class PromotionService(AttributionService):
             'wallet.local_labels','gc_labels','local_label_snapshot','locally_labeled_as')
         github = (source.transform_id, source.source_id, observation.kind, result.predicate) == (
             'wallet.public_code_mentions','github','code_search_result','repository_contains')
-        eligible_source = bool((local or github) and policy and transform and policy.storage_allowed
+        from .ens import verified_material
+        endpoint=self.db.get(Subject,result.from_subject_id) if result.predicate=='resolves_to' else None
+        ens=verified_material(result,observation,source,subject,endpoint)
+        from .manual_source import is_manual_material
+        manual=is_manual_material(result,observation,source)
+        from .graphsense import public_material
+        endpoint=self.db.get(Subject,result.to_subject_id) if result.predicate=='publicly_labeled_as' else None
+        public=public_material(result,observation,source,subject,endpoint)
+        eligible_source = bool((local or github or ens or manual or public) and policy and transform and policy.storage_allowed
             and policy.retention_policy_id == source.retention_policy_id
             and (policy.version,transform.version) == (source.source_version,source.transform_version)
             and source.descriptor_snapshot.get('source',{}).get('storage_allowed')
@@ -62,7 +70,7 @@ class PromotionService(AttributionService):
         eligible = bool(eligible_source and status == 'relevant')
         reason = None if eligible else ('source_not_promotable' if not eligible_source else 'review_required')
         observation_values = row_data(observation)
-        snapshot = clean({
+        snapshot = {
             'schema_version':1, 'source_subsystem':'Greedy Collector Discovery',
             'discovery_result_id':result.id, 'discovery_observation_id':observation.id,
             'observation_fingerprint':observation.content_sha256,
@@ -73,18 +81,28 @@ class PromotionService(AttributionService):
             'source_id':source.source_id, 'source_version':source.source_version,
             'coverage':source.coverage, 'provider_total':source.provider_total,
             'observation':observation_values,
-        })
-        values = EvidenceContentInput.model_validate(clean(dict(
+        }
+        if manual or public:
+            # A manual capture repeats its quoted context in the observation
+            # excerpt and source snapshot. Sanitize each bounded component;
+            # the Attribution model owns the composite metadata's 32 KiB cap.
+            selected=snapshot.pop('observation')
+            snapshot={**clean(snapshot),'observation':clean(selected)}
+        else:snapshot=clean(snapshot)
+        evidence_fields = dict(
             evidence_type='discovery_snapshot',
-            title='GC Discovery - Local Label' if local else 'GC Discovery - GitHub code mention',
+            title='GC Discovery - Local Label' if local else 'GC Discovery - ENS primary name' if ens else 'GC Discovery - Manual source observation' if manual else 'GC Discovery - GraphSense public tag' if public else 'GC Discovery - GitHub code mention',
             summary=observation.summary, excerpt=observation.excerpt,
-            source_name='Greedy Collector Label via Discovery' if local else 'GitHub via Discovery',
+            source_name='Greedy Collector Label via Discovery' if local else 'ENS / Ethereum via Discovery' if ens else 'Manual analyst capture via Discovery' if manual else 'GraphSense public TagPacks via Discovery' if public else 'GitHub via Discovery',
             source_url=observation.source_url, source_locator='discovery-observation:'+observation.id,
-            source_catalog_id=source.source_id, origin='analyst_added' if local else 'public_osint',
+            source_catalog_id=source.source_id, origin='analyst_added' if local or manual else 'public_osint',
             observed_on=observation.observed_on or (observation.observed_at.date() if observation.observed_at else None),
             published_on=observation.published_on or (observation.published_at.date() if observation.published_at else None),
-            metadata_json=snapshot,
-        ))).model_dump()
+        )
+        values = EvidenceContentInput.model_validate(
+            {**clean(evidence_fields),'metadata_json':snapshot} if manual or public
+            else clean({**evidence_fields,'metadata_json':snapshot})
+        ).model_dump()
         values.update(collection_method='discovery_snapshot',origin_label_id=None,origin_match_id=None,
                       origin_discovery_observation_id=observation.id)
         # Unverified code context is retained only as context. Exact code excerpts

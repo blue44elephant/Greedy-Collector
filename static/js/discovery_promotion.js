@@ -1,3 +1,5 @@
+import {graphSenseDetail} from './discovery_graphsense.js';
+import {manualSourceDetail} from './discovery_manual_source.js';
 import {element,table,details,dateText,UserError} from './ui.js';
 import {discoveryRequest as request} from './discovery_api.js';
 
@@ -8,12 +10,22 @@ export function discoveryProvenance(snapshot) {
     ['Result',snapshot.discovery_result_id],['Selected observation',snapshot.discovery_observation_id],
     ['Material fingerprint',snapshot.observation_fingerprint],['Transform',snapshot.transform_id],
     ['Source',snapshot.source_id],['Predicate',snapshot.predicate],['Wallet',`${snapshot.subject?.chain} · ${snapshot.subject?.address}`],
-    ['Retrieved',dateText(o.retrieved_at)],['Coverage',snapshot.coverage],
+    [o.kind==='analyst_capture'?'Captured':'Retrieved',dateText(o.kind==='analyst_capture'?o.created_at:o.retrieved_at)],['Coverage',snapshot.coverage],
   ]));
+  if(s.provider==='GraphSense' && o.kind==='verified_page_observation')node.append(graphSenseDetail(s,o.retrieved_at));
   if(o.kind==='local_label_snapshot') {
     const r=s.record||{};
     node.append(table(['Underlying Label','Stored annotation'],[['Label',r.label],['Original source',r.source],['Annotation confidence',r.confidence],['Last updated',dateText(r.last_updated)]]),
       element('p','Label confidence is source annotation metadata, not Attribution confidence.','bounded-note'));
+  } else if(o.kind==='analyst_capture' && snapshot.source_id==='manual_source') {
+    node.append(manualSourceDetail(s,o.created_at));
+  } else if(o.kind==='name_service_record' && snapshot.source_id==='ens_ethereum') {
+    node.append(table(['ENS provenance','Observed value'],[
+      ['ENS primary name',s.primary_name],['Namespace',s.namespace],['Wallet',s.wallet],
+      ['Verification',s.verification==='forward_verified'?'Forward verified':'Not verified'],
+      ['Verification method',s.verification_method],['Universal Resolver',s.universal_resolver],
+      ['Resolver',s.resolver],['Reverse resolver',s.reverse_resolver],['Provider',s.provider],
+    ]),element('p','At observation time, ENS primary-name resolution returned this name and verified its address relationship. This technical naming relationship does not establish real-world identity or wallet control.','bounded-note'));
   } else {
     node.append(table(['GitHub provenance','Stored value'],[['Repository',s.repository_full_name],['File',s.file_path||s.path],['Blob SHA',s.blob_sha],['GitHub URL',o.source_url],['GitHub search score',s.github_search_score??'Not recorded']]),
       element('h4','Matched code context'),element('blockquote',o.excerpt||o.summary),

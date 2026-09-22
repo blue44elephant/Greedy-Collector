@@ -23,10 +23,13 @@ class DiscoveryRuntime:
         with self.sessions() as db:
             yield ExecutionService(db,registry=self.registry,metadata_only=self.metadata_only)
 
-    def _configured(self,source):return bool(os.getenv(source.credential_env,'')) if source.credential_env else True
+    def _configured(self,source):
+        checks=[b.available for b in self.executors._bindings.values() if b.source_id==source.id and b.available is not None]
+        if checks:return all(check() for check in checks)
+        return bool(os.getenv(source.credential_env,'')) if source.credential_env else True
 
     def eligibility(self,transform,source,budget):
-        manual=self.executors.manual(transform.id,source.id)
+        manual=self.executors.manual(transform.id,source.id) or self.executors.capture(transform.id,source.id)
         if manual:
             if (manual.transform_version,manual.source_version)!=(transform.version,source.version):return 'not_implemented'
             return 'eligible' if budget.allow_free_local else 'budget_exhausted'
@@ -49,7 +52,7 @@ class DiscoveryRuntime:
             sources.append(s.SourceCapability(**source.model_dump(exclude={'credential_env'}),configured=self._configured(source),credential_required=bool(source.credential_env),executable=executable).model_dump(mode='json'))
         for t in self.registry.transforms.values():
             states=[self.eligibility(t,self.registry.sources[x],s.Budget()) for x in t.source_ids]
-            values=t.model_dump();values.update(implemented=any(self.executors.get(t.id,x) is not None or self.executors.manual(t.id,x) is not None for x in t.source_ids),executable='eligible' in states,
+            values=t.model_dump();values.update(implemented=any(self.executors.get(t.id,x) is not None or self.executors.manual(t.id,x) is not None or self.executors.capture(t.id,x) is not None for x in t.source_ids),executable='eligible' in states,
                 configured=all(self._configured(self.registry.sources[x]) for x in t.source_ids),unavailable_reason=None if 'eligible' in states else states[0])
             transforms.append(s.TransformCapability.model_validate(values).model_dump(mode='json'))
         return {'sources':sources,'transforms':transforms}
@@ -66,6 +69,7 @@ class DiscoveryRuntime:
         for item in request.selections:
             transform=self.registry.transforms.get(item.transform_id)
             if not transform:raise DiscoveryError('Unknown transform')
+            if transform.capture_only:raise DiscoveryError('Use manual source preview and explicit capture')
             source_id=item.source_id or (transform.source_ids[0] if len(transform.source_ids)==1 else None)
             transform,source=self.registry.pair(item.transform_id,source_id)
             if request.subject.chain not in transform.chains:raise DiscoveryError('Unsupported transform subject')

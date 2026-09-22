@@ -84,7 +84,7 @@ def test_only_new_kind_and_pair_enabled():
     assert enums.PAIRS['repository_contains']==(('repository','blockchain_address'),)
     assert enums.RESULT_KINDS==('candidate_evidence','candidate_identifier','candidate_relationship')
     assert 'name_service_record' in enums.OBSERVATION_KINDS
-    assert set(REGISTRY.transforms)=={'wallet.local_labels','wallet.manual_exact_web','wallet.public_code_mentions'}
+    assert set(REGISTRY.transforms)=={'wallet.local_labels','wallet.manual_exact_web','wallet.public_code_mentions','wallet.ens_primary_name','wallet.manual_source_observation','wallet.graphsense_public_tags'}
 
 
 @pytest.mark.parametrize('value',['fixture.eth','é.eth','e\u0301.eth','MiXeD.eth','🦊.eth'])
@@ -199,7 +199,9 @@ def test_wallet_plan_and_openapi_root_contract_unchanged(api,chain,address):
     schema=api.get('/openapi.json').json()['components']['schemas']['SubjectInput']
     assert set(schema['properties'])=={'chain','address'}
     assert schema['properties']['chain']['enum']==['bitcoin','ethereum']
-    assert not any(t['id'].startswith('wallet.ens') for t in api.get(P+'/transforms').json())
+    ens=next(t for t in api.get(P+'/transforms').json() if t['id']=='wallet.ens_primary_name')
+    assert ens['implemented'] and ens['chains']==['ethereum']
+    assert ens['input_types']==['blockchain_address'] # ENS endpoints remain output-only.
 
 
 def legacy_fingerprints():

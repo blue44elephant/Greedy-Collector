@@ -1,6 +1,6 @@
 SUBJECT_KINDS = ('blockchain_address','url','domain','repository','annotation','ens_name')
 RESULT_KINDS = ('candidate_evidence','candidate_identifier','candidate_relationship')
-PREDICATES = ('mentioned_at','repository_contains','explorer_labeled_as','locally_labeled_as','publicly_listed_by','reverse_name_record','resolves_to','registration_record_for','certificate_names','observed_at','archived_at','uses_tracking_id','advertises_at')
+PREDICATES = ('mentioned_at','repository_contains','explorer_labeled_as','locally_labeled_as','publicly_listed_by','reverse_name_record','resolves_to','registration_record_for','certificate_names','observed_at','archived_at','uses_tracking_id','advertises_at','mentions_wallet','publicly_labeled_as')
 RUN_STATES = ('queued','running','completed','partial','failed','cancelled','interrupted')
 SOURCE_STATES = ('queued','running','succeeded','cache_hit','manual_ready','unavailable','rate_limited','budget_exhausted','timeout','failed','cancelled','interrupted')
 REVIEWS = ('unreviewed','relevant','irrelevant')
@@ -12,7 +12,8 @@ ERRORS = ('configuration_unavailable','entitlement_unavailable','retention_not_p
 TERMINAL_RUNS = frozenset(RUN_STATES)-{'queued','running'}
 TERMINAL_SOURCES = frozenset(SOURCE_STATES)-{'queued','running'}
 # Future predicates are reserved in the schema; only these type pairs are active.
-PAIRS = {'mentioned_at':(('blockchain_address','url'),),
+PAIRS = {'publicly_labeled_as':(('blockchain_address','annotation'),),'mentions_wallet':(('url','blockchain_address'),('annotation','blockchain_address')),
+         'mentioned_at':(('blockchain_address','url'),),
          'publicly_listed_by':(('blockchain_address','url'),),
          'repository_contains':(('repository','blockchain_address'),),
          'locally_labeled_as':(('blockchain_address','annotation'),),
