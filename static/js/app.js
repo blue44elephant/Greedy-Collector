@@ -1,3 +1,5 @@
+import {refreshLabelChains} from './label_ui.js';
+import {loadChains} from './chains.js';
 import {refreshAttribution} from "./attribution_summary.js";
 import {byId} from "./ui.js";
 import {initWallet} from "./wallet.js";
@@ -30,6 +32,8 @@ function navigate(name, id, restore = false) {
     if (byId("graph-workspace").querySelector("form").dataset.busy !== "true") refreshAttribution(byId("graph-workspace"));
   });
 }
+await loadChains();
+refreshLabelChains();
 initWallet(navigate);
 initGraph();
 const loadMonitoring = initMonitoring();

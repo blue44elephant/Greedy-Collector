@@ -9,6 +9,7 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from sqlalchemy import select
 
 from .config import get_settings
+from .chains import get_chain_adapter,list_chains,Capability
 from .database import SessionLocal
 from .models import MonitoringRun, WalletAlert, WatchlistWallet
 from .schemas import LookupRequest
@@ -17,12 +18,15 @@ from .services import GreedyCollectorService
 logger = logging.getLogger("GreedyCollector.Monitoring")
 settings = get_settings()
 scheduler = AsyncIOScheduler(timezone="UTC")
-_chain_locks = {"bitcoin": Lock(), "ethereum": Lock()}
+_chain_locks = {d.chain_id:Lock() for d in list_chains() if Capability.MONITORING in d.capabilities}
+_locks_guard = Lock()
 
 
 async def monitor_chain(chain: str, wallet_id: str | None = None) -> dict:
     """Scheduled and manual checks share one path, serialized per local chain."""
-    lock = _chain_locks[chain]
+    get_chain_adapter(chain,Capability.MONITORING)
+    with _locks_guard:
+        lock = _chain_locks.setdefault(chain,Lock())
     if not lock.acquire(blocking=False):
         return {"chain": chain, "processed": 0, "busy": True, "run_ids": []}
     try:
@@ -32,6 +36,7 @@ async def monitor_chain(chain: str, wallet_id: str | None = None) -> dict:
 
 
 async def _monitor_chain(chain: str, wallet_id: str | None = None) -> dict:
+    adapter = get_chain_adapter(chain,Capability.MONITORING)
     service = GreedyCollectorService()
     db = SessionLocal()
     processed = 0
@@ -61,20 +66,8 @@ async def _monitor_chain(chain: str, wallet_id: str | None = None) -> dict:
                     # Determine stable baseline for first-run
                     baseline_tx = None
                     
-                    if chain == "bitcoin":
-                        # Bitcoin: use first CONFIRMED transaction as baseline (skip volatile mempool)
-                        confirmed = [
-                            tx for tx in transactions
-                            if (tx.get("timestamp") if isinstance(tx, dict) else tx.timestamp) is not None
-                        ]
-                        if confirmed:
-                            baseline_tx = confirmed[0]  # First confirmed (newest after adapter sorts)
-                        # If only mempool txs: baseline_tx remains None (don't persist volatile reference)
-                    else:  # ethereum and other chains
-                        # Ethereum: all txs are confirmed, use newest
-                        if transactions:
-                            baseline_tx = transactions[0]
-                    
+                    baseline_tx = adapter.monitoring_baseline(transactions)
+
                     # Establish baseline without alerting
                     wallet.last_checked = datetime.now(timezone.utc)
                     if baseline_tx:
@@ -261,26 +254,11 @@ def start_monitoring() -> None:
             return
     if scheduler.running:
         return
-    scheduler.add_job(
-        monitor_chain,
-        "interval",
-        minutes=settings.ethereum_monitor_minutes,
-        args=["ethereum"],
-        id="greedy-collector-ethereum",
-        replace_existing=True,
-        max_instances=1,
-        coalesce=True,
-    )
-    scheduler.add_job(
-        monitor_chain,
-        "interval",
-        minutes=settings.bitcoin_monitor_minutes,
-        args=["bitcoin"],
-        id="greedy-collector-bitcoin",
-        replace_existing=True,
-        max_instances=1,
-        coalesce=True,
-    )
+    for definition in reversed(list_chains()):
+        if Capability.MONITORING not in definition.capabilities:continue
+        scheduler.add_job(monitor_chain,'interval',minutes=definition.adapter().monitoring_interval(settings),
+                          args=[definition.chain_id],id='greedy-collector-'+definition.chain_id,
+                          replace_existing=True,max_instances=1,coalesce=True)
     scheduler.start()
 
 

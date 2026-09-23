@@ -1,3 +1,4 @@
+from ..chain_types import ChainName
 """Local validation and JSON-safe capture values. Never retrieves source URLs."""
 from datetime import date, datetime, timezone
 from hashlib import sha256
@@ -70,14 +71,14 @@ def fingerprint(value):
 
 
 def normalize_subject(chain, address):
-    choice(chain, ("bitcoin", "ethereum"))
+
     if not isinstance(address, str):
         raise AttributionError("A supported public address is required")
     try:
-        value = get_chain_adapter(chain).validate_address(address)
+        value = get_chain_adapter(chain).normalize_address(address)
     except ValueError:
         raise AttributionError("Address does not match the supported chain format") from None
-    return value.lower() if chain == "ethereum" or value.lower().startswith("bc1") else value
+    return value
 
 
 def name_key(value):
@@ -106,7 +107,7 @@ class EntityInput(Input):
 class ClaimInput(Input):
     entity_id: Annotated[str, StringConstraints(min_length=1, max_length=36)]
     subject_type: Literal["wallet"] = "wallet"
-    chain: Literal["bitcoin", "ethereum"]
+    chain: ChainName
     subject_ref: str
     relationship: str
     valid_from: date | None = None
@@ -120,6 +121,8 @@ class ClaimInput(Input):
 
     @model_validator(mode="after")
     def normalize(self):
+        from ..chains import get_chain,Capability
+        get_chain(self.chain).require(Capability.ATTRIBUTION)
         self.subject_ref = normalize_subject(self.chain, self.subject_ref)
         if self.valid_from and self.valid_to and self.valid_to < self.valid_from:
             raise AttributionError("Claim time bounds are reversed")

@@ -1,4 +1,5 @@
 """Bounded public code mentions. No database access or secondary URL fetching."""
+from ..chains import get_chain_adapter
 from datetime import datetime, timedelta, timezone
 from email.utils import parsedate_to_datetime
 import json
@@ -61,7 +62,7 @@ def github_url(value, prefix):
 
 def exact_fragment(item, subject):
     address = subject['canonical_value']
-    flags = re.IGNORECASE if subject['namespace'] == 'ethereum' or address.startswith('bc1') else 0
+    flags = re.IGNORECASE if get_chain_adapter(subject['namespace']).address_case_insensitive(address) else 0
     # Case folding is ASCII-only inside the address; surrounding boundaries
     # remain Unicode-aware so adjoining identifiers cannot become false hits.
     pattern = re.compile(r'(?<![\w])(?a:' + re.escape(address) + r')(?![\w])', flags)

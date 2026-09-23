@@ -1,21 +1,25 @@
 // Pure presentation layout. No collection, ownership inference, or provider calls.
 const compare = (a, b) => a < b ? -1 : a > b ? 1 : 0;
-export const nodeKey = value => value.toLowerCase();
+import {addressKey} from './chains.js';
+export const nodeKey = (value, chain) => chain ? addressKey(chain,value) : value;
 export const compact = value => value.length > 25 ? `${value.slice(0, 11)}…${value.slice(-9)}` : value;
 
 export function layoutGraph(graph) {
+  const chainIds = new Set(graph.nodes.map(node => node.chain));
+  const chain = chainIds.size === 1 ? [...chainIds][0] : undefined;
+  const identityKey = value => nodeKey(value,chain);
   const unique = new Map();
   [...graph.nodes].sort((a,b) => compare(a.id, b.id)).forEach(node => {
-    if (!unique.has(nodeKey(node.id))) unique.set(nodeKey(node.id), node);
+    if (!unique.has(identityKey(node.id))) unique.set(identityKey(node.id), node);
   });
-  const nodes = [...unique.values()].sort((a,b) => compare(nodeKey(a.id), nodeKey(b.id)));
-  const neighbors = new Map(nodes.map(node => [nodeKey(node.id), new Set()]));
+  const nodes = [...unique.values()].sort((a,b) => compare(identityKey(a.id), identityKey(b.id)));
+  const neighbors = new Map(nodes.map(node => [identityKey(node.id), new Set()]));
   for (const edge of graph.edges) {
-    const a = nodeKey(edge.source), b = nodeKey(edge.target);
+    const a = identityKey(edge.source), b = identityKey(edge.target);
     if (neighbors.has(a) && neighbors.has(b)) { neighbors.get(a).add(b); neighbors.get(b).add(a); }
   }
   // Minimum undirected hop depth from returned focus nodes, solely for placement.
-  const depths = new Map(nodes.filter(node => node.is_focus).map(node => [nodeKey(node.id), 0]));
+  const depths = new Map(nodes.filter(node => node.is_focus).map(node => [identityKey(node.id), 0]));
   const queue = [...depths.keys()];
   for (let index = 0; index < queue.length; index++) {
     const key = queue[index];
@@ -26,7 +30,7 @@ export function layoutGraph(graph) {
   const lastDepth = Math.max(0, ...depths.values());
   const layers = new Map();
   for (const node of nodes) {
-    const key = nodeKey(node.id), depth = depths.get(key) ?? lastDepth + 1;
+    const key = identityKey(node.id), depth = depths.get(key) ?? lastDepth + 1;
     if (!layers.has(depth)) layers.set(depth, []);
     layers.get(depth).push(node);
   }
@@ -35,20 +39,20 @@ export function layoutGraph(graph) {
   for (const [depth, siblings] of [...layers].sort((a,b) => a[0] - b[0])) {
     // Stable parent ordering reduces crossings while keeping siblings stable.
     const order = node => {
-      const parents = [...neighbors.get(nodeKey(node.id))].map(key => positions.get(key)).filter(Boolean);
+      const parents = [...neighbors.get(identityKey(node.id))].map(key => positions.get(key)).filter(Boolean);
       return parents.length ? parents.reduce((sum,p) => sum + p.y, 0) / parents.length : 0;
     };
-    siblings.sort((a,b) => order(a) - order(b) || compare(nodeKey(a.id), nodeKey(b.id)));
+    siblings.sort((a,b) => order(a) - order(b) || compare(identityKey(a.id), identityKey(b.id)));
     const width = Math.max(...siblings.map(node => Math.min(248, Math.max(208, (node.label || node.id).slice(0, 28).length * 7 + 28))));
     const rows = Math.min(12, siblings.length), columns = Math.ceil(siblings.length / rows);
-    layerInfo.push({depth, x, width, disconnected:siblings.every(node => !depths.has(nodeKey(node.id)))});
-    siblings.forEach((node,index) => positions.set(nodeKey(node.id), {x:x + Math.floor(index / rows) * (width + 90), y:(index % rows - (rows - 1) / 2) * 116,
-      width, height:76, depth:depths.get(nodeKey(node.id)) ?? null}));
+    layerInfo.push({depth, x, width, disconnected:siblings.every(node => !depths.has(identityKey(node.id)))});
+    siblings.forEach((node,index) => positions.set(identityKey(node.id), {x:x + Math.floor(index / rows) * (width + 90), y:(index % rows - (rows - 1) / 2) * 116,
+      width, height:76, depth:depths.get(identityKey(node.id)) ?? null}));
     x += columns * (width + 90) + 100;
   }
   const grouped = new Map();
   for (const edge of graph.edges) {
-    const key = JSON.stringify([nodeKey(edge.source), nodeKey(edge.target)]);
+    const key = JSON.stringify([identityKey(edge.source), identityKey(edge.target)]);
     if (!grouped.has(key)) grouped.set(key, {key, source:edge.source, target:edge.target, records:[]});
     grouped.get(key).records.push(edge);
   }

@@ -35,6 +35,7 @@ export function initGraph() {
 }
 
 export function renderGraph(host, graph, chain, labels = null) {
+  const key = value => nodeKey(value,chain);
   host.replaceChildren(element("h2", "Stored relationships"));
   host.append(element("p", `Requested hops: ${graph.requested_hops} · Available: ${graph.available_hops} · ${graph.nodes.length} returned entities · ${graph.edges.length} transaction records`, "muted small"));
   if (!graph.nodes.length && !graph.edges.length) { host.append(element("p", "No stored relationships are available for this address.", "empty")); return; }
@@ -64,7 +65,7 @@ export function renderGraph(host, graph, chain, labels = null) {
     svg.append(svgNode("text", {x:layer.x, y:layout.bounds[1]+50, class:"graph-layer"}, layer.disconnected ? "Other returned entities" : layer.depth === 0 ? "FOCUS" : `HOP ${layer.depth}`));
   }
   for (const group of layout.connections) {
-    const from = layout.positions.get(nodeKey(group.source)), to = layout.positions.get(nodeKey(group.target));
+    const from = layout.positions.get(key(group.source)), to = layout.positions.get(key(group.target));
     if (!from || !to) continue; // Unpositionable edges remain in the complete records table.
     const node = svgNode("g", {class:"graph-edge", "data-edge-key":group.key, "aria-label":`${group.source} to ${group.target}: ${group.records.length} records`});
     const path = connectionPath(from, to, layout.bounds[1]+20);
@@ -77,7 +78,7 @@ export function renderGraph(host, graph, chain, labels = null) {
     svg.append(node);
   }
   for (const node of layout.nodes) {
-    const position = layout.positions.get(nodeKey(node.id));
+    const position = layout.positions.get(key(node.id));
     const annotations = labelsFor(labels || [], node.chain || chain, node.id);
     const displayLabel = annotations[0]?.label || (labels === null ? node.label : node.id);
     const named = displayLabel && displayLabel !== node.id;
@@ -89,7 +90,7 @@ export function renderGraph(host, graph, chain, labels = null) {
     group.append(svgNode("text", {x:13,y:63,class:"entity-chain"}, `${node.chain || chain}${annotations[0] ? " · " + annotations[0].type : ""}${node.is_focus ? " · FOCUS" : ""}`));
     group.append(svgNode("title", {}, `${displayLabel || node.id}\n${node.id}\n${node.chain || chain}`));
     selectable(group, () => {
-      const count = graph.edges.filter(edge => nodeKey(edge.source) === nodeKey(node.id) || nodeKey(edge.target) === nodeKey(node.id)).length;
+      const count = graph.edges.filter(edge => key(edge.source) === key(node.id) || key(edge.target) === key(node.id)).length;
       detail.replaceChildren(element("h3", named ? displayLabel : "Wallet entity"), element("p", node.id, "full-address"),
         element("p", `${node.chain || chain} · ${node.is_focus ? "Focus entity" : "Related entity"} · ${count} stored transaction relationships`),
         action("Investigate wallet", () => investigate(node.chain || chain, node.id)),
@@ -108,7 +109,7 @@ export function renderGraph(host, graph, chain, labels = null) {
     const [x,y,w,h] = overlay?.bounds() || layout.bounds, width = Math.max(w,h*ratio), height=width/ratio;
     return [x+(w-width)/2,y+(h-height)/2,width,height];
   }
-  const focus = layout.positions.get(nodeKey(layout.nodes.find(node => node.is_focus)?.id || layout.nodes[0]?.id || ""));
+  const focus = layout.positions.get(key(layout.nodes.find(node => node.is_focus)?.id || layout.nodes[0]?.id || ""));
   const centered = () => focus ? [focus.x+focus.width/2-450,focus.y+focus.height/2-280,900,560] : fit();
   const initial = layout.nodes.length > 40 ? centered() : fit();
   let view = [...initial];

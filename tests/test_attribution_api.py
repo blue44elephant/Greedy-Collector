@@ -444,7 +444,8 @@ def test_openapi_explicit_models_enums_and_exact_surface(api):
     spec = ok(client.get('/openapi.json'))
     paths = {p: methods for p, methods in spec['paths'].items() if p.startswith(P)}
     legacy_paths = {p for p in spec['paths'] if not p.startswith(API+'/discovery')}
-    assert len(paths) == 25 and len(legacy_paths) == 54
+    assert API+'/chains' in legacy_paths
+    assert len(paths) == 25 and len(legacy_paths - {API+'/chains'}) == 54
     assert sum(len(methods) for methods in paths.values()) == 31
     for path, methods in paths.items():
         assert 'delete' not in methods

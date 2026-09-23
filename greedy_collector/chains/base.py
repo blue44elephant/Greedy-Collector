@@ -1,4 +1,4 @@
-from abc import ABC, abstractmethod
+from abc import ABC
 import re
 import json
 
@@ -23,6 +23,33 @@ class RpcReadError(ChainDataError):
 class ChainAdapter(ABC):
     chain: str
     address_pattern: re.Pattern
+    transaction_pattern: re.Pattern | None = None
+    address_case = 'sensitive'
+
+    def address_key(self, address: str) -> str:
+        """Canonical comparison without validation; also supports stored legacy records."""
+        return address.strip()
+
+    def normalize_address(self, address: str) -> str:
+        return self.address_key(self.validate_address(address))
+
+    def address_case_insensitive(self, address: str) -> bool:
+        return False
+
+    def identify_transaction(self, value: str) -> bool:
+        return bool(self.transaction_pattern and self.transaction_pattern.fullmatch(value))
+
+    def normalize_transaction_id(self, value: str) -> str:
+        value=value.strip()
+        if not self.identify_transaction(value):raise ValueError('Invalid transaction identifier')
+        return value.lower()
+
+    def monitoring_interval(self, settings):
+        from .registry import UnsupportedCapability
+        raise UnsupportedCapability()
+
+    def monitoring_baseline(self, transactions):
+        return transactions[0] if transactions else None
 
     def __init__(self):
         self.settings = get_settings()
@@ -91,14 +118,14 @@ class ChainAdapter(ABC):
         except (ValueError, UnicodeError):
             raise RpcReadError('invalid_provider_response') from None
 
-    @abstractmethod
     async def lookup_address(self, address: str) -> dict:
-        raise NotImplementedError
+        from .registry import UnsupportedCapability
+        raise UnsupportedCapability()
 
-    @abstractmethod
     async def lookup_transaction(self, tx_hash: str) -> NormalizedTransaction:
-        raise NotImplementedError
+        from .registry import UnsupportedCapability
+        raise UnsupportedCapability()
 
-    @abstractmethod
     async def transactions(self, address: str) -> list[NormalizedTransaction]:
-        raise NotImplementedError
+        from .registry import UnsupportedCapability
+        raise UnsupportedCapability()

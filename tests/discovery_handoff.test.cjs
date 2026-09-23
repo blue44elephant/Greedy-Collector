@@ -1,3 +1,5 @@
+const {before}=require('node:test');
+before(()=>require('./chain_metadata_fixture.cjs')());
 const {test}=require('node:test');
 const assert=require('node:assert/strict');
 const {pathToFileURL}=require('node:url');

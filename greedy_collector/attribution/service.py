@@ -1,5 +1,6 @@
 """Explicit local AT-1 commands. Each mutation owns a dedicated Session transaction."""
 from functools import wraps
+from ..chain_types import supported_chain
 
 from pydantic import ValidationError
 
@@ -200,7 +201,7 @@ class AttributionService:
                     needs_review=None, include_archived=False, limit=50, offset=0):
         query = select(Claim).join(Entity, Entity.id == Claim.entity_id)
         if not include_archived: query = query.where(Claim.archived_at.is_(None), Entity.archived_at.is_(None))
-        if chain: query = query.where(Claim.chain == choice(chain, ("bitcoin", "ethereum")))
+        if chain: query = query.where(Claim.chain == supported_chain(chain))
         if subject_ref:
             if not chain: raise AttributionError("Subject filters require a chain")
             query = query.where(Claim.subject_ref == normalize_subject(chain, subject_ref))

@@ -1,4 +1,5 @@
 """ED-6 IDs and analyst choices only; source snapshots are server-owned."""
+from ..chain_types import ChainName
 from datetime import datetime
 from typing import Literal
 from pydantic import BaseModel, Field
@@ -31,7 +32,7 @@ class PromotionPreview(BaseModel):
     eligible: bool
     reason: Literal['source_not_promotable','review_required'] | None
     context_only: bool
-    chain: Literal['bitcoin','ethereum']
+    chain: ChainName
     address: str
     evidence: PromotionEvidence
 

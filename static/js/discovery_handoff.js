@@ -1,10 +1,11 @@
+import {supportedChain} from './chains.js';
 import {element, UserError} from './ui.js';
 import {graphSubjectIsUnambiguous} from './attribution_summary.js';
 
 // Envelope guard only. The existing local resolver and Discovery planner remain
 // authoritative for addresses; no provider or persistence operation belongs here.
 export function walletContext(value) {
-  if (!value || !['wallet','graph'].includes(value.origin) || !['bitcoin','ethereum'].includes(value.chain) || typeof value.address !== 'string' || !value.address.trim() || value.address.length > 128) return null;
+  if (!value || !['wallet','graph'].includes(value.origin) || !supportedChain(value.chain) || typeof value.address !== 'string' || !value.address.trim() || value.address.length > 128) return null;
   return {origin:value.origin,chain:value.chain,address:value.address.trim(),isCurrent:typeof value.isCurrent === 'function' ? value.isCurrent : null};
 }
 export function graphWalletEligible(graph, node) {

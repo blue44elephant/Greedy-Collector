@@ -100,7 +100,8 @@ export function makeForm(definitions, label, handler) {
   });
   return form;
 }
-export const chains = [["bitcoin", "Bitcoin"], ["ethereum", "Ethereum"]];
+import {chains} from './chains.js';
+export {chains};
 export const chainAddress = () => [
   {name:"chain", label:"Chain", options:chains},
   {name:"address", label:"Public wallet address", required:true},

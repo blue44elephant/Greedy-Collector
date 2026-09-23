@@ -3,6 +3,7 @@ import logging
 import httpx
 
 from .config import get_settings
+from .chains import get_chain_adapter
 from .schemas import NormalizedTransaction
 
 logger = logging.getLogger("GreedyCollector.Graph")
@@ -54,9 +55,9 @@ class GraphStore:
                     "chain": tx.chain,
                     "tx_hash": tx.tx_hash,
                     "from_address": tx.from_address,
-                    "from_normalized": tx.from_address.lower(),
+                    "from_normalized": get_chain_adapter(tx.chain).address_key(tx.from_address),
                     "to_address": tx.to_address,
-                    "to_normalized": tx.to_address.lower(),
+                    "to_normalized": get_chain_adapter(tx.chain).address_key(tx.to_address),
                     "value_native": tx.value_native,
                     "token_symbol": tx.token_symbol,
                     "timestamp": tx.timestamp.isoformat() if tx.timestamp else None,
@@ -102,7 +103,7 @@ class GraphStore:
                     "coalesce(n.type, 'Wallet') AS type, "
                     "n.chain AS chain"
                 ),
-                "parameters": {"chain": chain, "address": address.lower()},
+                "parameters": {"chain": chain, "address": get_chain_adapter(chain).address_key(address)},
             },
             {
                 "statement": (
@@ -113,7 +114,7 @@ class GraphStore:
                     "r.tx_hash AS tx_hash, r.value_native AS value_native, "
                     "r.token_symbol AS token_symbol, r.timestamp AS timestamp"
                 ),
-                "parameters": {"chain": chain, "address": address.lower()},
+                "parameters": {"chain": chain, "address": get_chain_adapter(chain).address_key(address)},
             },
         ]
         try:
@@ -121,10 +122,11 @@ class GraphStore:
             nodes = [
                 {
                     **dict(zip(results[0]["columns"], row["row"])),
-                    "is_focus": row["row"][0].lower() == address.lower(),
+                    "is_focus": get_chain_adapter(chain).address_key(row["row"][0]) == get_chain_adapter(chain).address_key(address),
                 }
                 for row in results[0]["data"]
             ]
+            if not nodes:return None  # A missing/stale optional mirror falls back to canonical SQLite.
             edges = [
                 dict(zip(results[1]["columns"], row["row"]))
                 for row in results[1]["data"]
@@ -166,20 +168,26 @@ class GraphStore:
         max_hops: int = 1,
         available_hops: int = 1,
     ) -> dict:
-        label_map = {item["address"].lower(): item for item in labels}
+        chain_ids={tx.chain for tx in transactions}
+        label_map = {(chain,get_chain_adapter(chain).address_key(item['address'])):item
+                     for chain in chain_ids for item in labels if item.get('chain',chain) in (chain,'any')}
+        # Single-chain API IDs retain their historical address spelling. Mixed internal
+        # graphs qualify IDs so identical text on different chains cannot collide.
+        def node_id(chain,address):return address if len(chain_ids)<=1 else chain+':'+address
         nodes = {}
         edges = []
         for tx in transactions:
             for address in [tx.from_address, tx.to_address]:
                 if not address:
                     continue
-                label = label_map.get(address.lower())
-                nodes[address.lower()] = {
-                    "id": address,
+                key=(tx.chain,get_chain_adapter(tx.chain).address_key(address))
+                label = label_map.get(key)
+                nodes[key] = {
+                    "id": node_id(tx.chain,address),
                     "label": label.get("label") if label else address,
                     "type": label.get("type") if label else "Wallet",
                     "chain": tx.chain,
-                    "is_focus": address.lower() == focus_address.lower(),
+                    "is_focus": get_chain_adapter(tx.chain).address_key(address) == get_chain_adapter(tx.chain).address_key(focus_address),
                 }
             if tx.from_address and tx.to_address:
                 edges.append(
@@ -188,8 +196,8 @@ class GraphStore:
                             f"{tx.chain}:{tx.tx_hash}:{tx.from_address}:"
                             f"{tx.to_address}:{tx.token_symbol}:{tx.value_native}"
                         ),
-                        "source": tx.from_address,
-                        "target": tx.to_address,
+                        "source": node_id(tx.chain,tx.from_address),
+                        "target": node_id(tx.chain,tx.to_address),
                         "tx_hash": tx.tx_hash,
                         "value_native": tx.value_native,
                         "token_symbol": tx.token_symbol,

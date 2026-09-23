@@ -9,6 +9,7 @@ from celery import Celery
 
 from .config import get_settings
 from .monitoring import monitor_chain
+from .chains import list_chains,Capability
 
 settings = get_settings()
 celery_app = Celery(
@@ -17,16 +18,9 @@ celery_app = Celery(
     backend=settings.redis_url,
 )
 celery_app.conf.beat_schedule = {
-    "greedy-collector-ethereum": {
-        "task": "greedy_collector.monitor_chain",
-        "schedule": settings.ethereum_monitor_minutes * 60,
-        "args": ("ethereum",),
-    },
-    "greedy-collector-bitcoin": {
-        "task": "greedy_collector.monitor_chain",
-        "schedule": settings.bitcoin_monitor_minutes * 60,
-        "args": ("bitcoin",),
-    },
+    'greedy-collector-'+d.chain_id: {'task':'greedy_collector.monitor_chain',
+        'schedule':d.adapter().monitoring_interval(settings)*60,'args':(d.chain_id,)}
+    for d in reversed(list_chains()) if Capability.MONITORING in d.capabilities
 }
 celery_app.conf.timezone = "UTC"
 

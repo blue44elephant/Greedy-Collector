@@ -1,3 +1,4 @@
+import {supportedChain, addressKey} from './chains.js';
 import {element} from './ui.js';
 import {request, readPage, encodeId, caption} from './attribution_api.js';
 
@@ -17,8 +18,8 @@ export const currentOverlayClaim = claim => !claim.archived_at&&!claim.entity_ar
 // A guard, not a competing address validator/normalizer. AT-1 validates all queries.
 // Existing graph keys fold case; never join a BTC Base58 spelling to its case sibling.
 export function graphSubjectIsUnambiguous(graph,node) {
-  if(!['bitcoin','ethereum'].includes(node.chain))return false;
-  if(node.chain!=='bitcoin'||/^bc1/i.test(node.id))return true;
+  if(!supportedChain(node.chain))return false;
+  if(addressKey(node.chain,node.id)===addressKey(node.chain,node.id.toUpperCase()))return true;
   const addresses=[...graph.nodes.filter(n=>n.chain===node.chain).map(n=>n.id),...graph.edges.flatMap(edge=>[edge.source,edge.target])];
   return !addresses.some(address=>address&&address!==node.id&&address.toLowerCase()===node.id.toLowerCase());
 }

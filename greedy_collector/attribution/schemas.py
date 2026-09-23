@@ -1,4 +1,5 @@
 """Typed AT-2 transport contracts; AT-1 input validators remain authoritative."""
+from ..chain_types import ChainName
 from datetime import date, datetime
 from typing import Annotated, Generic, Literal, TypeVar
 
@@ -14,7 +15,7 @@ Directness = Literal[*enums.DIRECTNESS]
 Origin = Literal[*enums.ORIGINS]
 EvidenceType = Literal[*enums.EVIDENCE_TYPES]
 Reliability = Literal[*enums.RELIABILITIES]
-Chain = Literal['bitcoin', 'ethereum']
+Chain = ChainName
 Identifier = Annotated[str, Field(min_length=1, max_length=36)]
 Version = Annotated[int, Field(strict=True, ge=1, description='Current entity/claim version read by the analyst. Reload after HTTP 409.')]
 

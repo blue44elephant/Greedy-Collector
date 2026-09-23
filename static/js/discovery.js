@@ -1,3 +1,4 @@
+import {supportedChain, addressKey} from './chains.js';
 import {graphSenseDetail} from './discovery_graphsense.js';
 import {manualSourceForm,manualSourceDetail,sourceReference} from './discovery_manual_source.js';
 import {promotionDetail} from './discovery_promotion.js';
@@ -114,14 +115,14 @@ export function initDiscovery() {
     const value = form.elements.address.value.trim();
     if (!value) throw new UserError('Enter a public Bitcoin or Ethereum wallet address.');
     let resolved;
-    try { resolved = await api('/resolve', {method:'POST', body:{input:value}}); }
+    try { resolved = await api('/resolve', {method:'POST', body:{input:value,chain_hint:expectedChain}}); }
     catch { throw new UserError('Could not identify a supported Bitcoin or Ethereum wallet address.'); }
     if (resolved.kind === 'unknown') throw new UserError('Could not identify a supported Bitcoin or Ethereum wallet address.');
-    if (resolved.kind !== 'address' || !['bitcoin','ethereum'].includes(resolved.chain)) throw new UserError('Discovery currently accepts Bitcoin and Ethereum wallet addresses only.');
+    if (resolved.kind !== 'address' || !supportedChain(resolved.chain)) throw new UserError('Discovery currently accepts Bitcoin and Ethereum wallet addresses only.');
     if (expectedChain && resolved.chain !== expectedChain) throw new UserError('The wallet handoff does not match its chain. Open the wallet again.');
     // After backend validation, mirror Discovery's canonical case convention
     // (the general resolver preserves ETH input case). Base58 stays exact.
-    const address = resolved.chain === 'ethereum' || /^bc1/i.test(resolved.normalized) ? resolved.normalized.toLowerCase() : resolved.normalized;
+    const address = addressKey(resolved.chain,resolved.normalized);
     subject = {chain:resolved.chain,address};
     form.elements.address.value = subject.address;
     detected.textContent = `${label(subject.chain)} · ${subject.address} · Format checked locally; the Discovery planner remains authoritative.`;

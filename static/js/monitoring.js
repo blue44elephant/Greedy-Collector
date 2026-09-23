@@ -1,3 +1,4 @@
+import {chainMetadata, hasCapability} from './chains.js';
 import {api, ApiError} from "./api.js";
 import {byId, element, panel, table, shortValue, dateText, fields, chainAddress, run} from "./ui.js";
 
@@ -30,7 +31,7 @@ function metadata(entries) {
 }
 function boundary(value) { return value ? shortValue(value) : element("span", "Not recorded"); }
 function balance(wallet) {
-  return wallet.balance_native == null ? "Not available" : `${wallet.balance_native} ${wallet.chain === "bitcoin" ? "BTC" : "ETH"}`;
+  return wallet.balance_native == null ? "Not available" : `${wallet.balance_native} ${chainMetadata(wallet.chain)?.native_symbol ?? ""}`;
 }
 async function request(path, options) {
   try { return await api(path, options); }

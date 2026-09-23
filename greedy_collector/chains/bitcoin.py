@@ -13,6 +13,17 @@ CONFIRMED_PER_PAGE = 25  # Esplora confirmed pagination returns 25 per page
 
 class BitcoinAdapter(ChainAdapter):
     chain = "bitcoin"
+    transaction_pattern = re.compile(r'[0-9a-fA-F]{64}')
+    address_case = 'bech32_insensitive'
+
+    def address_key(self,address):
+        value=address.strip()
+        return value.lower() if value.lower().startswith('bc1') else value
+
+    def address_case_insensitive(self,address):return address.lower().startswith('bc1')
+    def monitoring_interval(self,settings):return settings.bitcoin_monitor_minutes
+    def monitoring_baseline(self,transactions):
+        return next((tx for tx in transactions if (tx.get('timestamp') if isinstance(tx,dict) else tx.timestamp) is not None),None)
     address_pattern = re.compile(
         r"^(?:bc1[a-zA-HJ-NP-Z0-9]{11,71}|[13][a-km-zA-HJ-NP-Z1-9]{25,34})$",
         re.IGNORECASE,

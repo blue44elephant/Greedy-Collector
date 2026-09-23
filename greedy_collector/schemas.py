@@ -5,7 +5,7 @@ from pydantic import BaseModel, Field, model_validator, field_validator
 import re
 
 
-ChainName = Literal["ethereum", "bitcoin"]
+from .chain_types import ChainName, LabelChain
 
 
 class NormalizedTransaction(BaseModel):
@@ -68,6 +68,13 @@ class CaseEntityCreate(BaseModel):
     entity_ref: str
     metadata: dict[str, Any] = Field(default_factory=dict)
 
+    @model_validator(mode="after")
+    def chain_context(self):
+        if self.entity_type in ('wallet','transaction','graph_snapshot') and 'chain' in self.metadata:
+            from .chains import get_chain,Capability
+            get_chain(self.metadata['chain']).require(Capability.CASES)
+        return self
+
 
 class AnalystNoteCreate(BaseModel):
     body: str = Field(min_length=1)
@@ -75,7 +82,7 @@ class AnalystNoteCreate(BaseModel):
 
 
 class ManualLabelCreate(BaseModel):
-    chain: Literal["bitcoin", "ethereum", "any"] = "any"
+    chain: LabelChain = "any"
     address: str = Field(min_length=1, max_length=128)
     label: str = Field(min_length=1, max_length=255)
     type: Literal["Exchange", "Mixer", "Bridge", "Scam", "Sanctioned", "Unknown"]
@@ -88,8 +95,8 @@ class ManualLabelCreate(BaseModel):
         if not self.address.strip() or not self.label.strip() or not self.source.strip():
             raise ValueError("Address, label, and source must not be blank")
         if self.chain != "any":
-            from .chains import get_chain_adapter
-            get_chain_adapter(self.chain).validate_address(self.address)
+            from .chains import get_chain_adapter,Capability
+            get_chain_adapter(self.chain,Capability.LABELS).validate_address(self.address)
         return self
 
 
@@ -134,3 +141,4 @@ class KycReviewUpdate(BaseModel):
 
 class ResolveRequest(BaseModel):
     input: str
+    chain_hint: ChainName | None = None

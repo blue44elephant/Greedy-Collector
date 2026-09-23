@@ -1,3 +1,4 @@
+from tests.multichain_migration_helpers import before_mc1
 """ED-8A0 migrations operate only on isolated SQLite files, never the user DB."""
 import hashlib
 from pathlib import Path
@@ -75,7 +76,7 @@ def test_clean_upgrade_discovery_attribution_parity_and_no_seeds(tmp_path,monkey
             # Assert exact parity for both migrated families; the populated
             # upgrade test separately proves every other table is unchanged.
             if table.startswith(('discovery_','attribution_')):
-                expected=signature(orm,table)
+                expected=before_mc1(signature(orm,table))
                 if table=='discovery_results':expected['checks']=[(name,sql.replace(", 'mentions_wallet'",'').replace(", 'publicly_labeled_as'",'')) for name,sql in expected['checks']]
                 assert signature(engine,table)==expected,table
         assert triggers(engine)==triggers(orm)
@@ -84,8 +85,8 @@ def test_clean_upgrade_discovery_attribution_parity_and_no_seeds(tmp_path,monkey
             assert c.exec_driver_sql('PRAGMA foreign_keys').scalar_one()==1
             assert c.exec_driver_sql('PRAGMA foreign_key_check').all()==[]
         scripts=ScriptDirectory.from_config(cfg)
-        assert scripts.get_heads()==['20260922_02']
-        assert [r.revision for r in scripts.walk_revisions()]==['20260922_02','20260922_01',REVISION,PARENT,'20260913_01','20260912_01','20260630_01']
+        assert scripts.get_heads()==['20260923_01']
+        assert [r.revision for r in scripts.walk_revisions()]==['20260923_01','20260922_02','20260922_01',REVISION,PARENT,'20260913_01','20260912_01','20260630_01']
     finally:engine.dispose();orm.dispose()
 
 

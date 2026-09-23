@@ -280,7 +280,7 @@ class AttributionClaim(Base):
     version = mapped_column(Integer, nullable=False, default=1, server_default=text('1'))
     __table_args__ = (
         CheckConstraint("subject_type = 'wallet'", name="ck_attribution_claims_1"),
-        CheckConstraint("chain IN ('bitcoin','ethereum')", name="ck_attribution_claims_2"),
+        CheckConstraint("length(chain) BETWEEN 1 AND 32 AND substr(chain,1,1) GLOB '[a-z]' AND chain NOT GLOB '*[^a-z0-9_]*'", name="ck_attribution_claims_2"),
         CheckConstraint("relationship IN ('operated_by', 'controlled_by', 'publicly_declared_by')", name="ck_attribution_claims_3"),
         CheckConstraint("assessment IN ('unassessed', 'possible', 'supported', 'strongly_supported', 'rejected')", name="ck_attribution_claims_4"),
         CheckConstraint('version >= 1', name="ck_attribution_claims_5"),
@@ -449,7 +449,7 @@ class DiscoverySubject(Base):
         sa.CheckConstraint('length(identity_sha256) = 64', name="ck_discovery_subjects_3"),
         sa.CheckConstraint('length(canonical_value) BETWEEN 1 AND 2048', name="ck_discovery_subjects_4"),
         sa.CheckConstraint('length(namespace) > 0', name="ck_discovery_subjects_5"),
-        sa.CheckConstraint("kind != 'blockchain_address' OR namespace IN ('bitcoin','ethereum')", name="ck_discovery_subjects_6"),
+        sa.CheckConstraint("kind != 'blockchain_address' OR (length(namespace) BETWEEN 1 AND 32 AND substr(namespace,1,1) GLOB '[a-z]' AND namespace NOT GLOB '*[^a-z0-9_]*')", name="ck_discovery_subjects_6"),
         sa.CheckConstraint("kind != 'blockchain_address' OR namespace != 'ethereum' OR canonical_value = lower(canonical_value)", name="ck_discovery_subjects_7"),
         sa.CheckConstraint("kind != 'ens_name' OR namespace = 'ethereum'", name="ck_discovery_subjects_8"),
         sa.UniqueConstraint('identity_sha256', name="uq_discovery_subjects_1"),

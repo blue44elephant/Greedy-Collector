@@ -1,4 +1,5 @@
 """Bounded Discovery API and executor contracts. No executable input fields."""
+from ..chain_types import ChainName
 from datetime import date,datetime
 from enum import Enum
 from typing import Generic,TypeVar,Literal
@@ -20,7 +21,7 @@ class Input(BaseModel):
     model_config=ConfigDict(extra='forbid')
 
 class SubjectInput(Input):
-    chain:Literal['bitcoin','ethereum']
+    chain:ChainName
     address:str=Field(min_length=1,max_length=128)
     @model_validator(mode='after')
     def normalize(self):
@@ -96,7 +97,7 @@ class TransformCapability(BaseModel):
     description:str
     source_ids:list[str]
     input_types:list[str]
-    chains:list[Literal['bitcoin','ethereum']]
+    chains:list[ChainName]
     output_types:list[str]
     result_kinds:list[CandidateKind]
     predicates:list[Predicate]

@@ -1,3 +1,4 @@
+import {chains as chainChoices} from './chains.js';
 import {element,fields,table,run,UserError,dateText} from './ui.js';
 import {request,readPage,encodeId,caption,options,relationships} from './attribution_api.js';
 import {openAttribution} from './attribution_summary.js';
@@ -41,7 +42,7 @@ export function caseAttribution(caseId) {
     picker.hidden=false;selected=null;picker.replaceChildren(element('h3','Choose attribution to pin'));
     const filters=element('form',undefined,'attr-form');filters.id='case-attribution-filter';
     filters.append(fields([{name:'kind',label:'Reference type',options:[['attribution_claim','Claim'],['entity','Entity']]},
-      {name:'chain',label:'Claim chain',options:[['','All chains'],['bitcoin','Bitcoin'],['ethereum','Ethereum']]},
+      {name:'chain',label:'Claim chain',options:[['','All chains'],...chainChoices]},
       {name:'subject_ref',label:'Claim address (requires chain)'},{name:'relationship',label:'Claim relationship',options:[['','All relationships'],...options(relationships)]},
       {name:'search',label:'Entity name contains (Entity view)'},{name:'include_archived',label:'Include archived records',type:'checkbox'}]));
     const apply=element('button','Search attribution');apply.type='submit';filters.append(apply);

@@ -357,3 +357,11 @@ If PowerShell blocks `npm.ps1`, use `npm.cmd ci` and `npm.cmd test`; runtime nor
 Discovery can query GraphSense public TagPacks for source-backed BTC/ETH address annotations. Explicitly select **GraphSense Public Tags**, plan, then run. Configure the existing server-side `DISCOVERY_GITHUB_TOKEN`; this shares the code-mention GitHub account and rate limits. Requires operator-applied Alembic revision `20260922_02`; startup does not migrate the database.
 
 Results are third-party public annotations, not verified owners. Exact address and chain matching, bounded safe YAML retrieval, immutable source/blob provenance, a distinct public-annotation graph lane, and explicit reviewed `public_osint` promotion are supported. Actor/confidence/cluster-definer fields are metadata only: no automatic Labels, Entities, Claims, wallet clustering, risk, Cases or monitoring. Positive cache TTL is 24 hours (empty at most one hour); Refresh bypasses it. Search and file limits mean coverage is incomplete, not an exhaustive tag inventory. See [ED-9B](docs/EVIDENCE_DISCOVERY_ED9B.md) for parsing assumptions, source/license, migration, bounds and tests.
+
+
+### Multi-chain foundation (MC-1)
+
+Greedy Collector currently supports Bitcoin and Ethereum and uses an extensible
+internal multi-chain architecture. No additional production chains are enabled.
+See [Multi-chain architecture](docs/MULTICHAIN_ARCHITECTURE.md) for registry,
+capabilities, explicit resolver chain hints, and the future-adapter checklist.

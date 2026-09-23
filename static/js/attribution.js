@@ -1,3 +1,4 @@
+import {chains as chainChoices, supportedChain} from './chains.js';
 import {ApiError} from './api.js';
 import {addToCaseButton} from './case_actions.js';
 import {initEvidenceHandoff, snapshotProvenance} from './attribution_handoff.js';
@@ -91,7 +92,7 @@ export function initAttribution() {
   const claimFilters=panel('Filter claims');
   const filterTarget=element('p','All entities','muted small');
   const cf=form('attr-claim-filters',[
-    {name:'chain',label:'Chain',options:[['','All chains'],['bitcoin','Bitcoin'],['ethereum','Ethereum']]},
+    {name:'chain',label:'Chain',options:[['','All chains'],...chainChoices]},
     {name:'subject_ref',label:'Subject address (select its chain)',maxLength:128},
     {name:'relationship',label:'Relationship',options:[['','All relationships'],...options(relationships)]},
     {name:'assessment',label:'Assessment',options:[['','All assessments'],...options(assessments)]},
@@ -351,7 +352,7 @@ export function initAttribution() {
       if(context.action==='source_evidence'){await handoff.open(context);}
       else if(context.action==='open_claim'&&typeof context.id==='string'){await switchView('claims');await showClaim(context.id);}
       else if(context.action==='open_entity'&&typeof context.id==='string'){await switchView('entities');await showEntity(context.id);}
-      else if(context.action==='create_claim'&&['bitcoin','ethereum'].includes(context.chain)&&typeof context.address==='string'){
+      else if(context.action==='create_claim'&&supportedChain(context.chain)&&typeof context.address==='string'){
         await switchView('claims');openClaimEditor(null,{chain:context.chain,address:context.address});
       }
       loaded=true;

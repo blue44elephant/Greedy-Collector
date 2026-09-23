@@ -1,3 +1,4 @@
+import {chains as chainChoices} from './chains.js';
 import {element, fields, UserError} from './ui.js';
 import {options, entityTypes, relationships, evidenceTypes, origins, stances} from './attribution_api.js';
 
@@ -18,7 +19,7 @@ export const scopeFields = row => [
 export const scopeData = data => ({scope_note:data.scope_note, valid_from:data.valid_from || null, valid_to:data.valid_to || null});
 export const claimFields = () => [
   {name:'subject_type',label:'Subject type',options:[['wallet','Wallet address']]},
-  {name:'chain',label:'Chain',options:[['bitcoin','Bitcoin'],['ethereum','Ethereum']]},
+  {name:'chain',label:'Chain',options:chainChoices},
   {name:'subject_ref',label:'Public wallet address',required:true,maxLength:128},
   {name:'relationship',label:'Relationship',options:[['','Choose relationship'],...options(relationships)],required:true}, ...scopeFields(),
 ];

@@ -1,4 +1,5 @@
 """Explicit, atomic handoffs of local source records. No source URL retrieval."""
+from ..chains import is_supported_chain
 import re
 from urllib.parse import urlsplit, urlunsplit, parse_qsl, urlencode
 
@@ -50,7 +51,7 @@ class EvidenceHandoffService(AttributionService):
     def _source(self,kind,identifier):
         if kind=='label':
             record=row_data(self._get(Label,identifier))
-            if record['chain'] not in ('bitcoin','ethereum','any'):
+            if record['chain'] != 'any' and not is_supported_chain(record['chain']):
                 raise AttributionError('Label chain is not supported for attribution handoff')
             if not isinstance(record['confidence'],(int,float)) or not 0<=record['confidence']<=1:
                 raise AttributionError('Malformed source snapshot')

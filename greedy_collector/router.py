@@ -10,6 +10,8 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy import func, select
 
 from .chains.base import ChainDataError
+from .chains import list_chains
+from .chain_types import ChainName
 from .database import get_db
 from .kyc import SOURCE_CATALOG
 from .models import AnalystNote, Case, CaseEntity, KycMatch, Label, MonitoringRun, WatchlistWallet
@@ -47,7 +49,7 @@ def status():
 
     return {
         "enabled": True,
-        "supported_chains": ["ethereum", "bitcoin"],
+        "supported_chains": [d.chain_id for d in reversed(list_chains())],
         "backends": {
             "graph": service.graph_store.status(),
             "monitoring": monitoring_status(),
@@ -67,9 +69,14 @@ def status():
     }
 
 
+@router.get("/chains")
+def chain_metadata():
+    return {"chains": [d.public_metadata() for d in list_chains()]}
+
+
 @router.post("/resolve")
 def resolve(payload: ResolveRequest):
-    return resolve_identifier(payload.input)
+    return resolve_identifier(payload.input, payload.chain_hint)
 
 
 @router.post("/lookup/address")
@@ -93,7 +100,7 @@ async def lookup_tx(payload: TransactionLookupRequest):
 
 
 @router.get("/address/{chain}/{address}")
-def address(chain: str, address: str, db: Session = Depends(get_db)):
+def address(chain: ChainName, address: str, db: Session = Depends(get_db)):
     result = service.address_record(db, chain, address)
     if not result:
         raise HTTPException(status_code=404, detail="Address has not been looked up")
@@ -101,13 +108,13 @@ def address(chain: str, address: str, db: Session = Depends(get_db)):
 
 
 @router.get("/address/{chain}/{address}/transactions")
-def transactions(chain: str, address: str, db: Session = Depends(get_db)):
+def transactions(chain: ChainName, address: str, db: Session = Depends(get_db)):
     return {"transactions": service.address_transactions(db, chain, address)}
 
 
 @router.get("/address/{chain}/{address}/graph")
 def graph(
-    chain: str,
+    chain: ChainName,
     address: str,
     hops: int = Query(default=1, ge=1, le=3),
     db: Session = Depends(get_db),
@@ -116,7 +123,7 @@ def graph(
 
 
 @router.get("/address/{chain}/{address}/risk")
-def risk(chain: str, address: str, db: Session = Depends(get_db)):
+def risk(chain: ChainName, address: str, db: Session = Depends(get_db)):
     result = service.address_risk(db, chain, address)
     if not result:
         raise HTTPException(status_code=404, detail="No risk result is available")

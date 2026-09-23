@@ -1,3 +1,4 @@
+import {chainMetadata, hasCapability} from './chains.js';
 import {manualSourceAction} from './discovery_manual_source.js';
 import {discoveryAction} from "./discovery_handoff.js";
 import {attributionSummary} from "./attribution_summary.js";
@@ -13,7 +14,7 @@ export function investigate(chain, address) {
   byId("results").hidden = true;
   navigate("wallet");
   byId("wallet-address").value = address;
-  return lookup(false);
+  return lookup(false, chain);
 }
 function renderLookup(data, stored = false, labels = [], labelsUnavailable = false) {
   const profile = data.address;
@@ -30,9 +31,9 @@ function renderLookup(data, stored = false, labels = [], labelsUnavailable = fal
   text("risk-time", `Stored risk calculated: ${dateText(risk.calculated_at)}`);
   const bitcoin = profile.chain === "bitcoin";
   text("retrieval-label", stored ? "Stored profile updated" : "Retrieved");
-  text("result-chain", bitcoin ? "Bitcoin" : "Ethereum");
+  text("result-chain", chainMetadata(profile.chain)?.display_name ?? profile.chain);
   text("result-address", profile.address);
-  text("balance", `${profile.balance_native} ${bitcoin ? "BTC" : "ETH"}`);
+  text("balance", `${profile.balance_native} ${chainMetadata(profile.chain)?.native_symbol ?? ""}`);
   text("risk-score", risk.score == null ? "Not available" : `${risk.score} / 100`);
   text("risk-level", risk.level);
   text("record-count", transactions.length);
@@ -48,7 +49,7 @@ function renderLookup(data, stored = false, labels = [], labelsUnavailable = fal
   const rows = document.createDocumentFragment();
   for (const tx of transactions) {
     const row = element("tr");
-    const unconfirmed = bitcoin && !tx.timestamp && !tx.block_number;
+    const unconfirmed = hasCapability(tx.chain,'pending_transactions') && !tx.timestamp && !tx.block_number;
     for (const value of [tx.tx_hash, tx.direction, tx.from_address, tx.to_address, tx.value_native, tx.token_symbol, unconfirmed ? "Unconfirmed" : dateText(tx.timestamp), unconfirmed ? "—" : (tx.block_number || "Not available")]) {
       const cell = element("td", value ?? "Not available");
       row.append(cell);
@@ -124,14 +125,14 @@ function renderLookup(data, stored = false, labels = [], labelsUnavailable = fal
 }
 
 
-async function lookup(stored) {
+async function lookup(stored, chain_hint = undefined) {
   const form = byId("lookup-form");
   const input = byId("wallet-address").value.trim();
   if (form.dataset.busy === "true") return;
   byId("results").hidden = byId("transaction-result").hidden = true;
   return run(form, async () => {
     if (!input) throw new UserError("Enter a supported wallet address or transaction hash.");
-    const resolved = await api("/resolve", {method:"POST", body:{input}});
+    const resolved = await api("/resolve", {method:"POST", body:{input, chain_hint}});
     if (!["address", "transaction"].includes(resolved.kind)) {
       throw new UserError("Greedy Collector could not identify this value as a supported wallet address or transaction hash. Supported: Bitcoin/Ethereum addresses and transaction hashes.");
     }
@@ -167,7 +168,7 @@ function renderTransaction(tx) {
   host.replaceChildren(heading, element("p", tx.tx_hash, "full-address"));
   const rows = element("dl", undefined, "metadata");
   for (const [label, value] of [["Chain", tx.chain], ["Amount", tx.value_native], ["Asset", tx.token_symbol],
-    ["Block", tx.block_number], ["Timestamp", tx.timestamp ? dateText(tx.timestamp) : tx.chain === "bitcoin" && !tx.block_number ? "Unconfirmed" : null],
+    ["Block", tx.block_number], ["Timestamp", tx.timestamp ? dateText(tx.timestamp) : hasCapability(tx.chain,'pending_transactions') && !tx.block_number ? "Unconfirmed" : null],
     ["Fee", tx.fee], ["Provider", providerNames[tx.source_api]]]) {
     if (value == null || value === "") continue;
     const row = element("div"); row.append(element("dt", label), element("dd", value)); rows.append(row);

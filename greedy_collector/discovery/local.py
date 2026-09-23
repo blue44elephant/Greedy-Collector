@@ -3,6 +3,7 @@ from datetime import datetime,timezone
 from urllib.parse import urlencode
 from sqlalchemy import select,func
 from ..models import Label
+from ..chains import get_chain_adapter
 from .domain import canonical_subject,clean,public_url,DiscoveryError
 
 class LocalLabelsExecutor:
@@ -15,7 +16,7 @@ class LocalLabelsExecutor:
         stored=func.trim(Label.address,' \t\r\n\v\f')
         # ETH and accepted Bech32 use the shared canonical case convention;
         # Base58 is case-sensitive. Chain=any is retained as annotation scope.
-        comparison=func.lower(stored)==address if chain=='ethereum' or address.startswith('bc1') else stored==address
+        comparison=func.lower(stored)==address if get_chain_adapter(chain).address_case_insensitive(address) else stored==address
         with self.sessions() as db:
             rows=db.scalars(select(Label).where(Label.chain.in_((chain,'any')),comparison).order_by(Label.id).limit(maximum+1)).all()
             records=[]

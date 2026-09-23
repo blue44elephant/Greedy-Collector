@@ -1,3 +1,4 @@
+import {chains as chainChoices, supportedChain} from './chains.js';
 import {discoveryRequest} from './discovery_api.js';
 import {discoveryProvenance} from './discovery_promotion.js';
 import {element, fields, table, details, dateText, run, UserError} from './ui.js';
@@ -30,7 +31,7 @@ export function initEvidenceHandoff(parent,{createClaim,openClaim}) {
   const sourceView=element('div'),list=element('div'),chosen=element('div'),success=element('div');
   const filters=element('form',undefined,'attr-form');filters.id='attr-handoff-filter';
   filters.append(fields([
-    {name:'chain',label:'Claim chain',options:[['','All chains'],['bitcoin','Bitcoin'],['ethereum','Ethereum']]},
+    {name:'chain',label:'Claim chain',options:[['','All chains'],...chainChoices]},
     {name:'subject_ref',label:'Claim wallet address (select chain)',maxLength:128},
     {name:'relationship',label:'Claim relationship',options:[['','All relationships'],...options(relationships)]},
   ]));
@@ -45,7 +46,7 @@ export function initEvidenceHandoff(parent,{createClaim,openClaim}) {
     awaitingClaim=true;target=null;form.hidden=true;chosen.replaceChildren();
     const row=preview.snapshot.record;
     if(source.kind==='discovery'){await createClaim({chain:preview.chain,address:preview.address});return;}
-    await createClaim(source.kind==='label'&&['bitcoin','ethereum'].includes(row.chain)?{chain:row.chain,address:row.address}:null);
+    await createClaim(source.kind==='label'&&supportedChain(row.chain)?{chain:row.chain,address:row.address}:null);
   });
   host.append(element('h2','Use as attribution evidence'),status,sourceView,
     button('Reload source snapshot',async()=>{await loadSource();target=null;form.hidden=true;chosen.replaceChildren();}),

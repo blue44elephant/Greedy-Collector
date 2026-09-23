@@ -1,3 +1,4 @@
+from tests.multichain_migration_helpers import before_mc1
 """ED9B constraint-only successor; every database temporary."""
 from datetime import datetime,timezone
 from alembic import command
@@ -24,9 +25,9 @@ def test_clean_upgrade_parity_no_seeds(tmp_path,monkeypatch):
     try:
         Base.metadata.create_all(orm)
         for table in Base.metadata.tables:
-            if table.startswith(('discovery_','attribution_')):assert signature(engine,table)==signature(orm,table),table
+            if table.startswith(('discovery_','attribution_')):assert signature(engine,table)==before_mc1(signature(orm,table)),table
         assert triggers(engine)==triggers(orm) and all(not rows for rows in snapshot(engine).values())
-        assert ScriptDirectory.from_config(cfg).get_heads()==[HEAD]
+        assert ScriptDirectory.from_config(cfg).get_heads()==['20260923_01']
         with Session(engine) as db:require_schema(db)
     finally:engine.dispose();orm.dispose()
 

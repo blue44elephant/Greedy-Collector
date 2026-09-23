@@ -1,4 +1,5 @@
 """Read-only, bounded projection of immutable run membership. No execution."""
+from ..chain_types import ChainName
 from datetime import datetime
 from typing import Literal
 from pydantic import BaseModel, Field
@@ -15,7 +16,7 @@ class GraphRoot(BaseModel):
     id: str
     type: Literal['wallet'] = 'wallet'
     subject_id: str
-    chain: Literal['bitcoin','ethereum']
+    chain: ChainName
     address: str
 
 

@@ -1,24 +1,27 @@
-"""Local syntax resolution only; provider retrieval is a separate operation."""
-import re
+"""Local adapter syntax resolution. No provider retrieval or secret reflection."""
+from .chains import Capability
+from .chains import registry as chains
 
-from .chains import BitcoinAdapter, EthereumAdapter
-
-SUPPORTED = ["Bitcoin address", "Ethereum address", "Bitcoin transaction ID", "Ethereum transaction hash"]
-
-
-def resolve_identifier(value: str) -> dict:
-    normalized = value.strip()
-    # Exact transaction syntax takes precedence over the permissive address
-    # validators. In particular, bare 64-hex values are Bitcoin transaction IDs.
-    for chain, pattern in [("ethereum", r"0x[0-9a-fA-F]{64}"), ("bitcoin", r"[0-9a-fA-F]{64}")]:
-        if re.fullmatch(pattern, normalized):
-            return {"kind": "transaction", "chain": chain, "normalized": normalized.lower(), "lookup_type": "transaction"}
-    for adapter in [BitcoinAdapter(), EthereumAdapter()]:
-        try:
-            address = adapter.validate_address(normalized)
-        except ValueError:
-            continue
-        return {"kind": "address", "chain": adapter.chain, "normalized": address, "lookup_type": "address"}
-    # Do not echo arbitrary input (which could contain accidentally pasted secrets).
-    return {"kind": "unknown", "supported": SUPPORTED,
-            "message": "Greedy Collector could not identify this value as a supported wallet address or transaction hash."}
+def resolve_identifier(value: str, chain_hint: str | None = None, *, registry=None) -> dict:
+    registry=registry or chains.REGISTRY
+    definitions=(registry.get_chain(chain_hint),) if chain_hint is not None else registry.list_chains()
+    normalized=value.strip()
+    matches=[]
+    # Keep transaction precedence, including the existing permissive BTC syntax.
+    for definition in definitions:
+        adapter=definition.adapter()
+        if Capability.TRANSACTION_LOOKUP in definition.capabilities and adapter.identify_transaction(normalized):
+            matches.append(dict(kind='transaction',chain=definition.chain_id,
+                                normalized=adapter.normalize_transaction_id(normalized),lookup_type='transaction'))
+    if not matches:
+        for definition in definitions:
+            try:address=definition.adapter().validate_address(normalized)
+            except ValueError:continue
+            # Preserve resolver response spelling; persistence uses normalize_address.
+            matches.append(dict(kind='address',chain=definition.chain_id,normalized=address,lookup_type='address'))
+    if len(matches)==1:return matches[0]
+    if matches:return dict(kind='ambiguous',possibilities=[dict(chain=m['chain'],kind=m['kind']) for m in matches],message='Specify a chain for this identifier.')
+    supported=[d.display_name+' address' for d in registry.list_chains()]
+    supported += [d.display_name+' transaction '+('hash' if d.adapter.transaction_pattern.pattern.startswith('0x') else 'ID')
+                  for d in registry.list_chains() if Capability.TRANSACTION_LOOKUP in d.capabilities]
+    return dict(kind='unknown',supported=supported,message='Greedy Collector could not identify this value as a supported wallet address or transaction hash.')

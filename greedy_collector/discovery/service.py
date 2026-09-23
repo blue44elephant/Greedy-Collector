@@ -111,6 +111,8 @@ class DiscoveryService:
             if not isinstance(selected,dict) or set(selected)-{'transform_id','source_id','parameters'}:raise DiscoveryError('Invalid transform selection')
             transform,source=self.registry.pair(selected.get('transform_id'),selected.get('source_id'))
             if subject.namespace not in transform.chains:raise DiscoveryError('Transform does not support this chain')
+            from ..chains import get_chain,Capability
+            get_chain(subject.namespace).require(Capability.DISCOVERY,transform.required_capability)
             pair=(transform.id,source.id)
             if pair in seen:raise DiscoveryError('Duplicate selected pair')
             seen.add(pair)

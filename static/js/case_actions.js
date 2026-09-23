@@ -1,3 +1,4 @@
+import {supportedChain} from './chains.js';
 import {api, ApiError} from "./api.js";
 import {addCaseAttribution} from './case_attribution.js';
 import {element, fields, run, UserError, action} from "./ui.js";
@@ -26,7 +27,7 @@ export function openAlert(id) { document.dispatchEvent(new CustomEvent("open-ale
 export function openGraph(chain, address) {
   const form = document.querySelector("#graph-workspace form");
   if (form.dataset.busy === "true") throw new UserError("A graph is loading. Wait for it to finish.");
-  if (!["bitcoin", "ethereum"].includes(chain)) throw new UserError("This reference has no supported chain metadata.");
+  if (!supportedChain(chain)) throw new UserError("This reference has no supported chain metadata.");
   document.dispatchEvent(new CustomEvent("wallet-selected", {detail:{chain,address}}));
   document.querySelector('[data-workspace="graph"]').click(); form.requestSubmit();
 }

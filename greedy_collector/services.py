@@ -6,7 +6,7 @@ from fastapi.encoders import jsonable_encoder
 from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
-from .chains import get_chain_adapter
+from .chains import get_chain_adapter, get_chain, Capability
 from .database import initialize_database
 from .graph import GraphStore
 from .kyc import KycScreeningEngine
@@ -45,6 +45,7 @@ class GreedyCollectorService:
         self.graph_store = GraphStore()
 
     async def lookup_address(self, db: Session, request: LookupRequest) -> dict:
+        get_chain(request.chain).require(Capability.BALANCE,Capability.TRANSACTION_HISTORY,Capability.RISK)
         adapter = get_chain_adapter(request.chain)
         profile = await adapter.lookup_address(request.address)
         transactions = await adapter.transactions(request.address)
@@ -74,11 +75,11 @@ class GreedyCollectorService:
 
         address = db.scalar(
             select(Address).where(
-                Address.chain == request.chain, Address.address == request.address
+                Address.chain == request.chain, self._address_membership(request.chain,Address.address,{adapter.address_key(request.address)})
             )
         )
         if address is None:
-            address = Address(chain=request.chain, address=request.address)
+            address = Address(chain=request.chain, address=adapter.normalize_address(request.address))
             db.add(address)
         address.balance_native = profile.get("balance_native", "0")
         address.risk_score = risk["score"]
@@ -117,12 +118,13 @@ class GreedyCollectorService:
         }
 
     async def lookup_transaction(self, chain: str, tx_hash: str) -> dict:
+        get_chain(chain).require(Capability.TRANSACTION_LOOKUP)
         tx = await get_chain_adapter(chain).lookup_transaction(tx_hash)
         return self._tx_dict(tx)
 
     def address_record(self, db: Session, chain: str, address: str) -> dict | None:
         row = db.scalar(
-            select(Address).where(Address.chain == chain, Address.address == address)
+            select(Address).where(Address.chain == chain, self._address_membership(chain,Address.address,{get_chain(chain).adapter().address_key(address)}))
         )
         return row_dict(row) if row else None
 
@@ -132,8 +134,8 @@ class GreedyCollectorService:
             .where(
                 Transaction.chain == chain,
                 or_(
-                    Transaction.from_address == address,
-                    Transaction.to_address == address,
+                    self._address_membership(chain,Transaction.from_address,{get_chain(chain).adapter().address_key(address)}),
+                    self._address_membership(chain,Transaction.to_address,{get_chain(chain).adapter().address_key(address)}),
                 ),
             )
             .order_by(Transaction.timestamp.desc())
@@ -143,7 +145,7 @@ class GreedyCollectorService:
     def address_risk(self, db: Session, chain: str, address: str) -> dict | None:
         row = db.scalar(
             select(RiskResult)
-            .where(RiskResult.chain == chain, RiskResult.address == address)
+            .where(RiskResult.chain == chain, self._address_membership(chain,RiskResult.address,{get_chain(chain).adapter().address_key(address)}))
             .order_by(RiskResult.calculated_at.desc())
         )
         if row is None:
@@ -159,10 +161,12 @@ class GreedyCollectorService:
     def address_graph(
         self, db: Session, chain: str, address: str, hops: int
     ) -> dict:
+        get_chain(chain).require(Capability.GRAPH)
+        adapter = get_chain(chain).adapter()
         external_graph = self.graph_store.query_graph(chain, address, hops)
         if external_graph:
             return external_graph
-        frontier = {address.lower()}
+        frontier = {adapter.address_key(address)}
         visited = set()
         transactions_by_hash = {}
         available_hops = 0
@@ -173,8 +177,8 @@ class GreedyCollectorService:
                 select(Transaction).where(
                     Transaction.chain == chain,
                     or_(
-                        func.lower(Transaction.from_address).in_(frontier),
-                        func.lower(Transaction.to_address).in_(frontier),
+                        self._address_membership(chain,Transaction.from_address,frontier),
+                        self._address_membership(chain,Transaction.to_address,frontier),
                     ),
                 )
             ).all()
@@ -183,9 +187,9 @@ class GreedyCollectorService:
             available_hops += 1
             next_frontier = set()
             for row in rows:
-                transactions_by_hash[row.tx_hash] = row
+                transactions_by_hash[row.id] = row
                 for candidate in [row.from_address, row.to_address]:
-                    normalized = candidate.lower() if candidate else ""
+                    normalized = adapter.address_key(candidate) if candidate else ""
                     if normalized and normalized not in visited and normalized not in frontier:
                         next_frontier.add(normalized)
             visited.update(frontier)
@@ -211,11 +215,12 @@ class GreedyCollectorService:
         )
 
     def add_watchlist(self, db: Session, payload) -> dict:
-        get_chain_adapter(payload.chain).validate_address(payload.address)
+        get_chain(payload.chain).require(Capability.MONITORING)
+        payload.address = get_chain_adapter(payload.chain).normalize_address(payload.address)
         existing = db.scalar(
             select(WatchlistWallet).where(
                 WatchlistWallet.chain == payload.chain,
-                WatchlistWallet.address == payload.address,
+                self._address_membership(payload.chain,WatchlistWallet.address,{payload.address}),
             )
         )
         if existing:
@@ -235,7 +240,7 @@ class GreedyCollectorService:
             data = row_dict(row)
             address = db.scalar(
                 select(Address).where(
-                    Address.chain == row.chain, Address.address == row.address
+                    Address.chain == row.chain, self._address_membership(row.chain,Address.address,{get_chain(row.chain).adapter().address_key(row.address)})
                 )
             )
             data.update(
@@ -413,22 +418,28 @@ class GreedyCollectorService:
     def _labels_for_transactions(
         self, db: Session, transactions: list[NormalizedTransaction]
     ) -> list[dict]:
-        addresses = {
-            value.lower()
-            for tx in transactions
-            for value in [tx.from_address, tx.to_address]
-            if value
-        }
-        if not addresses:
-            return []
-        rows = db.scalars(select(Label).where(func.lower(Label.address).in_(addresses))).all()
-        return [row_dict(row) for row in rows]
+        identities = {(tx.chain,get_chain(tx.chain).adapter().address_key(value))
+                      for tx in transactions for value in (tx.from_address,tx.to_address) if value}
+        if not identities:return []
+        by_chain={}
+        for chain,address in identities:by_chain.setdefault(chain,set()).add(address)
+        conditions=[self._address_membership(chain,Label.address,addresses) & Label.chain.in_((chain,'any'))
+                    for chain,addresses in by_chain.items()]
+        return [row_dict(row) for row in db.scalars(select(Label).where(or_(*conditions))).all()]
+
+    @staticmethod
+    def _address_membership(chain,column,addresses):
+        adapter=get_chain(chain).adapter()
+        insensitive={v for v in addresses if adapter.address_case_insensitive(v)}
+        sensitive=set(addresses)-insensitive
+        return or_(column.in_(sensitive),func.lower(column).in_(insensitive))
 
     def _exposure_paths(
         self, db: Session, chain: str, start_address: str, max_hops: int
     ) -> list[dict]:
-        frontier = {start_address.lower(): [start_address]}
-        visited = {start_address.lower()}
+        adapter=get_chain(chain).adapter()
+        frontier = {adapter.address_key(start_address): [start_address]}
+        visited = {adapter.address_key(start_address)}
         paths = []
         for hop in range(1, max_hops + 1):
             if not frontier:
@@ -438,15 +449,15 @@ class GreedyCollectorService:
                 select(Transaction).where(
                     Transaction.chain == chain,
                     or_(
-                        func.lower(Transaction.from_address).in_(addresses),
-                        func.lower(Transaction.to_address).in_(addresses),
+                        self._address_membership(chain,Transaction.from_address,addresses),
+                        self._address_membership(chain,Transaction.to_address,addresses),
                     ),
                 )
             ).all()
             next_frontier = {}
             for row in rows:
-                left = row.from_address.lower() if row.from_address else ""
-                right = row.to_address.lower() if row.to_address else ""
+                left = adapter.address_key(row.from_address) if row.from_address else ""
+                right = adapter.address_key(row.to_address) if row.to_address else ""
                 for current, candidate in [(left, right), (right, left)]:
                     if current not in frontier or not candidate or candidate in visited:
                         continue
@@ -454,7 +465,8 @@ class GreedyCollectorService:
             if next_frontier:
                 labels = db.scalars(
                     select(Label).where(
-                        func.lower(Label.address).in_(set(next_frontier))
+                        self._address_membership(chain,Label.address,set(next_frontier)),
+                        Label.chain.in_((chain,'any'))
                     )
                 ).all()
                 for label in labels:
@@ -462,7 +474,7 @@ class GreedyCollectorService:
                         paths.append(
                             {
                                 "hops": hop,
-                                "path": next_frontier.get(label.address.lower(), []),
+                                "path": next_frontier.get(adapter.address_key(label.address), []),
                                 "terminal_address": label.address,
                                 "terminal_type": label.type,
                                 "source": label.source,
@@ -480,7 +492,7 @@ class GreedyCollectorService:
         counts = {}
         for tx in transactions:
             cp = tx.to_address if tx.direction == "outgoing" else tx.from_address
-            if cp and cp.lower() != address.lower():
+            if cp and get_chain(tx.chain).adapter().address_key(cp) != get_chain(tx.chain).adapter().address_key(address):
                 counts[cp] = counts.get(cp, 0) + 1
         return [
             {"address": cp, "transaction_count": count}

@@ -1,5 +1,6 @@
 """Typed descriptors; runtime implementation state is determined by code bindings."""
 import os,re
+from ..chains import get_chain,list_chains,Capability
 from pydantic import BaseModel,ConfigDict,Field,model_validator
 from .domain import DiscoveryError,choice
 from . import enums as e
@@ -34,7 +35,8 @@ class TransformDescriptor(BaseModel):
     description:str
     source_ids:tuple[str,...]
     input_types:tuple[str,...]=('blockchain_address',)
-    chains:tuple[str,...]=('bitcoin','ethereum')
+    chains:tuple[str,...]
+    required_capability:Capability=Field(default=Capability.DISCOVERY,exclude=True)
     output_types:tuple[str,...]
     result_kinds:tuple[str,...]
     predicates:tuple[str,...]
@@ -49,13 +51,21 @@ class TransformDescriptor(BaseModel):
     cache_seconds:int=Field(default=0,strict=True,ge=0,le=86400)
     capture_only:bool=False
     implemented:bool=False
+    @model_validator(mode='before')
+    @classmethod
+    def compatible_chains(cls,value):
+        if isinstance(value,dict) and 'chains' not in value:
+            required=Capability(value.get('required_capability',Capability.DISCOVERY))
+            value={**value,'chains':tuple(d.chain_id for d in list_chains()
+                if {Capability.DISCOVERY,required} <= d.capabilities)}
+        return value
     @model_validator(mode='after')
     def validate_descriptor(self):
         if self.implemented:raise DiscoveryError('Implementation state is binding-owned, not a descriptor assertion')
         if self.input_types!=('blockchain_address',):raise DiscoveryError('Only wallet input is enabled')
         if not self.source_ids or len(set(self.source_ids))!=len(self.source_ids):raise DiscoveryError('Unique source references required')
         if not self.chains or not self.display_name.strip() or not self.description.strip():raise DiscoveryError('Descriptor contract required')
-        for chain in self.chains:choice(chain,('bitcoin','ethereum'))
+        for chain in self.chains:get_chain(chain).require(self.required_capability)
         for typ in self.output_types:choice(typ,e.SUBJECT_KINDS)
         for kind in self.result_kinds:choice(kind,e.RESULT_KINDS)
         for predicate in self.predicates:choice(predicate,e.PREDICATES)
@@ -103,8 +113,8 @@ REGISTRY=Registry([
     dict(id='ens_ethereum',display_name='ENS / Ethereum',category='name_service',mode='automated',cost_class='LIMITED_FREE',credential_env='ALCHEMY_API_KEY',rate_limit_per_minute=10,retention_policy_id='ens-primary-name-v1',storage_allowed=True,provenance_note='Current forward-verified technical naming relationship; not real-world attribution.'),
     dict(id='github',display_name='Public GitHub code',category='code',mode='automated',cost_class='LIMITED_FREE',credential_env='DISCOVERY_GITHUB_TOKEN',rate_limit_per_minute=10,retention_policy_id='github-public-excerpt-v1',storage_allowed=True,provenance_note='Bounded public code fragments and GraphSense tag metadata; no ownership inference. Use a token without private-repository access.'),
 ],[
-    dict(id='wallet.graphsense_public_tags',display_name='GraphSense Public Tags',description='Exact BTC/ETH address annotations from public GraphSense TagPacks. Third-party annotations, not verified ownership or clustering.',source_ids=('github',),output_types=('annotation',),result_kinds=('candidate_relationship',),predicates=('publicly_labeled_as',),observation_kinds=('verified_page_observation',),mode='automated',cost_class='LIMITED_FREE',max_results=100,max_requests=10,deadline_seconds=60,cache_seconds=86400),
-    dict(id='wallet.local_labels',display_name='Stored Label context',description='Read current exact-address local annotations. No external collection or ownership inference.',source_ids=('gc_labels',),output_types=('annotation',),result_kinds=('candidate_evidence',),predicates=('locally_labeled_as',),observation_kinds=('local_label_snapshot',),mode='local',cost_class='FREE_LOCAL',max_requests=0),
+    dict(id='wallet.graphsense_public_tags',display_name='GraphSense Public Tags',description='Exact BTC/ETH address annotations from public GraphSense TagPacks. Third-party annotations, not verified ownership or clustering.',source_ids=('github',),chains=('bitcoin','ethereum'),output_types=('annotation',),result_kinds=('candidate_relationship',),predicates=('publicly_labeled_as',),observation_kinds=('verified_page_observation',),mode='automated',cost_class='LIMITED_FREE',max_results=100,max_requests=10,deadline_seconds=60,cache_seconds=86400),
+    dict(id='wallet.local_labels',display_name='Stored Label context',description='Read current exact-address local annotations. No external collection or ownership inference.',source_ids=('gc_labels',),required_capability=Capability.LABELS,output_types=('annotation',),result_kinds=('candidate_evidence',),predicates=('locally_labeled_as',),observation_kinds=('local_label_snapshot',),mode='local',cost_class='FREE_LOCAL',max_requests=0),
     dict(id='wallet.manual_exact_web',display_name='Manual exact web search',description='Generate an exact-wallet search link for explicit analyst use. The search engine is not queried by Greedy Collector.',source_ids=('google',),output_types=(),result_kinds=(),predicates=(),observation_kinds=(),mode='manual',cost_class='FREE_LOCAL',max_requests=0),
     dict(id='wallet.manual_source_observation',display_name='Record source observation',description='Manually preserve where this wallet was observed. Preview and confirm; no network or ownership inference.',source_ids=('manual_source',),output_types=('url','annotation'),result_kinds=('candidate_relationship',),predicates=('mentions_wallet',),observation_kinds=('analyst_capture',),mode='manual',cost_class='FREE_LOCAL',max_requests=0,max_results=1,capture_only=True),
     dict(id='wallet.ens_primary_name',display_name='ENS Primary Name',description='Retrieve one forward-verified Ethereum ENS primary name. Requires Ethereum RPC and the local ENS normalizer. No ownership inference.',source_ids=('ens_ethereum',),chains=('ethereum',),output_types=('ens_name',),result_kinds=('candidate_relationship',),predicates=('resolves_to',),observation_kinds=('name_service_record',),mode='automated',cost_class='LIMITED_FREE',max_results=1,max_requests=1,max_bytes=16384,deadline_seconds=30,cache_seconds=3600),

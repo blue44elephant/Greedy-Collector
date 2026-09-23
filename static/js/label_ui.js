@@ -1,8 +1,10 @@
+import {chains as chainChoices, addressKey} from './chains.js';
 import {api, ApiError} from "./api.js";
 import {element, action, UserError} from "./ui.js";
 
 export const labelTypes = ["Exchange", "Mixer", "Bridge", "Scam", "Sanctioned", "Unknown"];
-export const labelChains = [["bitcoin", "Bitcoin"], ["ethereum", "Ethereum"], ["any", "Any (unvalidated address scope)"]];
+export const labelChains = [];
+export function refreshLabelChains() { labelChains.splice(0,labelChains.length,...chainChoices,["any", "Any (unvalidated address scope)"]); }
 export async function labelRequest(path, options) {
   try {return await api(path,options);}
   catch(error) {
@@ -17,7 +19,7 @@ export async function readLabels() {
   return data.labels;
 }
 export function labelsFor(rows, chain, address) {
-  const key = value => chain === "ethereum" ? value.toLowerCase() : value;
+  const key = value => addressKey(chain,value);
   return rows.filter(row => (row.chain === chain || row.chain === "any") && key(row.address) === key(address))
     .sort((a,b) => String(b.last_updated || "").localeCompare(String(a.last_updated || "")) || String(a.id).localeCompare(String(b.id)));
 }

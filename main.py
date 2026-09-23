@@ -11,7 +11,8 @@ from pathlib import Path
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, JSONResponse
+from greedy_collector.chains.registry import ChainError
 from fastapi.staticfiles import StaticFiles
 
 from greedy_collector import router as greedy_collector_router
@@ -28,6 +29,11 @@ app = FastAPI(
     docs_url="/docs",
     openapi_url="/openapi.json",
 )
+
+@app.exception_handler(ChainError)
+async def chain_error_handler(request,exc):
+    return JSONResponse(status_code=422,content={"detail":exc.code})
+
 
 # Add CORS middleware for development
 app.add_middleware(

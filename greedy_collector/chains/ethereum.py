@@ -10,9 +10,12 @@ from ..schemas import NormalizedTransaction
 WEI = Decimal("1000000000000000000")
 
 
-class EthereumAdapter(ChainAdapter):
+from .evm import EvmAdapter
+
+
+class EthereumAdapter(EvmAdapter):
     chain = "ethereum"
-    address_pattern = re.compile(r"^0x[a-fA-F0-9]{40}$")
+    def monitoring_interval(self, settings):return settings.ethereum_monitor_minutes
     etherscan_url = "https://api.etherscan.io/v2/api"
     alchemy_url = "https://eth-mainnet.g.alchemy.com/v2"
 
