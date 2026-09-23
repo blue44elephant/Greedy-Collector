@@ -12,12 +12,12 @@ os.environ.update(PYTHON_DOTENV_DISABLED='1',GREEDY_COLLECTOR_DATABASE_URL='sqli
 mode=sys.argv[2]
 if mode=='ens':os.environ['ALCHEMY_API_KEY']='ed8a-browser-test-only'
 if mode in ('production','unmigrated','handoff','handoff_unmigrated','promotion_partial','promotion_unmigrated'):os.environ.pop('DISCOVERY_GITHUB_TOKEN',None)
-if mode not in ('production','executor','unmigrated','github','handoff','handoff_github','handoff_unmigrated','promotion','promotion_partial','promotion_unmigrated','graph','graph_partial','graph_unmigrated','ens','manual_source','graphsense','mc1'):raise RuntimeError('Unknown test mode')
+if mode not in ('production','executor','unmigrated','github','handoff','handoff_github','handoff_unmigrated','promotion','promotion_partial','promotion_unmigrated','graph','graph_partial','graph_unmigrated','ens','manual_source','graphsense','mc1','mc2'):raise RuntimeError('Unknown test mode')
 if mode not in ('unmigrated','handoff_unmigrated','promotion_unmigrated','graph_unmigrated'):
     from alembic import command
     from alembic.config import Config
     cfg=Config(str(ROOT/'alembic.ini'));cfg.set_main_option('script_location',str(ROOT/'migrations'))
-    command.upgrade(cfg,'head' if mode in ('promotion','graph','ens','manual_source','graphsense','mc1') else '20260913_01')
+    command.upgrade(cfg,'head' if mode in ('promotion','graph','ens','manual_source','graphsense','mc1','mc2') else '20260913_01')
 
 import httpx
 import requests
@@ -46,7 +46,7 @@ import main
 if mode in ('ens','graphsense'):
     main.start_monitoring=lambda:None
     main.stop_monitoring=lambda:None
-if mode.startswith('handoff') or mode in ('manual_source','mc1'):
+if mode.startswith('handoff') or mode in ('manual_source','mc1','mc2'):
     from tests.browser_discovery_handoff_fixture import install
     main.start_monitoring=lambda:None
     main.stop_monitoring=lambda:None

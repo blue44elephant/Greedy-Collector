@@ -40,6 +40,8 @@ service = GreedyCollectorService()
 def _provider_error(exc: ChainDataError) -> str:
     if "ETHERSCAN_API_KEY" in str(exc) or "ALCHEMY_API_KEY" in str(exc):
         return "Ethereum provider configuration is unavailable."
+    if "tron_configuration_unavailable" in str(exc):
+        return "TRON provider configuration is unavailable."
     return "Blockchain provider request failed. Try again later."
 
 

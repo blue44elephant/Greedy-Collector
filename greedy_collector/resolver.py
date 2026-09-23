@@ -10,7 +10,9 @@ def resolve_identifier(value: str, chain_hint: str | None = None, *, registry=No
     # Keep transaction precedence, including the existing permissive BTC syntax.
     for definition in definitions:
         adapter=definition.adapter()
-        if Capability.TRANSACTION_LOOKUP in definition.capabilities and adapter.identify_transaction(normalized):
+        if (Capability.TRANSACTION_LOOKUP in definition.capabilities
+                and (chain_hint is not None or adapter.resolve_unqualified_transactions)
+                and adapter.identify_transaction(normalized)):
             matches.append(dict(kind='transaction',chain=definition.chain_id,
                                 normalized=adapter.normalize_transaction_id(normalized),lookup_type='transaction'))
     if not matches:

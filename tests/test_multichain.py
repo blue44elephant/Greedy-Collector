@@ -58,9 +58,9 @@ def no_network(monkeypatch):
 def test_production_registry_order_and_safe_metadata(monkeypatch):
     monkeypatch.setenv('ETHERSCAN_API_KEY','secret-not-public')
     rows=[d.public_metadata() for d in cr.list_chains()]
-    assert [r['id'] for r in rows]==['bitcoin','ethereum']
-    assert [r['native_symbol'] for r in rows]==['BTC','ETH']
-    assert [r['family'] for r in rows]==['utxo','account']
+    assert [r['id'] for r in rows]==['bitcoin','ethereum','tron']
+    assert [r['native_symbol'] for r in rows]==['BTC','ETH','TRX']
+    assert [r['family'] for r in rows]==['utxo','account','account']
     assert 'secret' not in json.dumps(rows) and 'adapter' not in json.dumps(rows)
     assert cr.is_supported_chain('ethereum') and not cr.is_supported_chain('test_chain')
 
@@ -93,7 +93,7 @@ def test_hint_unknown_mismatch_and_ambiguity(third):
     assert resolve_identifier('arbitrary text')['kind']=='unknown'
     assert resolve_identifier(ETH)['kind']=='ambiguous'
     assert resolve_identifier(ETH,'test_chain')['chain']=='test_chain'
-    assert LookupRequest.model_json_schema()['properties']['chain']['enum']==['bitcoin','ethereum','test_chain']
+    assert LookupRequest.model_json_schema()['properties']['chain']['enum']==['bitcoin','ethereum','tron','test_chain']
     assert resolve_identifier(ETH,'ethereum')['chain']=='ethereum'
 
 @pytest.mark.parametrize('chain,has,absent',[('bitcoin',C.PENDING_TRANSACTIONS,C.TOKEN_TRANSFERS),('ethereum',C.TOKEN_TRANSFERS,C.PENDING_TRANSACTIONS)])
@@ -190,7 +190,7 @@ def test_metadata_and_controlled_route_errors():
     import main
     with TestClient(main.app) as client:
         rows=client.get('/api/greedy-collector/chains').json()['chains']
-        assert [r['id'] for r in rows]==['bitcoin','ethereum']
+        assert [r['id'] for r in rows]==['bitcoin','ethereum','tron']
         for path in ['/','/health','/docs','/openapi.json','/static/js/chains.js']:
             assert client.get(path).status_code==200
         r=client.post('/api/greedy-collector/resolve',json={'input':ETH,'chain_hint':'unknown'})
@@ -200,7 +200,7 @@ def test_metadata_and_controlled_route_errors():
 
 def test_pre_mc1_discovery_descriptor_and_query_fingerprints_unchanged():
     from greedy_collector.discovery.domain import fingerprint
-    expected={'wallet.graphsense_public_tags': '250c55c5d1802b92e8e3f0d81c8021d8acbedcce6241a63f5fff924ce847ece5', 'wallet.local_labels': 'd44c63b1c7cd7b3c7a796750f0ea89f00244aff7a3c7eda1c39870399faa0838', 'wallet.manual_exact_web': '2e33be818649e8a6982a6698c9eb2da66bb4299f3decd9ec98033368ae0ae088', 'wallet.manual_source_observation': 'a2ffd73dcf577cdd7f38161ceab477abbd1e49bef59aee2e8ef323406cfe9fd2', 'wallet.ens_primary_name': 'd2a00085bafd6a10946e9eef7e24759cafecd37021b6ef49f9e2916ad93c589e', 'wallet.public_code_mentions': 'b271a170bafe2b182e59659976f969a5ce8e21292417e38eb63b3a1372233221'}
+    expected={'wallet.graphsense_public_tags': '250c55c5d1802b92e8e3f0d81c8021d8acbedcce6241a63f5fff924ce847ece5', 'wallet.local_labels': 'becb0856112f9d0c0ee628956e3bafd3f650536138f1e4ea7c3758a1d1ab5667', 'wallet.manual_exact_web': 'e8ec988554d4a47c6228bcd86db2209f77f158570d2dec4bb6afcbbfb5446ee5', 'wallet.manual_source_observation': '6f27dbfecc12f8ed6fc44f45b1bc750af3c8a1b97a1af47694fa8c31fb940cbf', 'wallet.ens_primary_name': 'd2a00085bafd6a10946e9eef7e24759cafecd37021b6ef49f9e2916ad93c589e', 'wallet.public_code_mentions': 'c9381a108092c85dbd0303fbec814b77f63561a97e2642cc9a3ecceba67ffd68'}
     assert {key:fingerprint(t.model_dump(mode='json')) for key,t in REGISTRY.transforms.items()}==expected
     queries={('bitcoin', 'wallet.graphsense_public_tags'): '9881cc43df2de0c151c0c8edc80e95897c209059283fe9ff72a01f19bfdc8dba', ('bitcoin', 'wallet.local_labels'): '52875d7f6413a64d57dda643f6e27b20a5172e90a799ee62cf2b4ecb627478ad', ('bitcoin', 'wallet.manual_exact_web'): 'a6f0ce92125cc008bdb814a1e6f475847d4b450103fefc1c018d031357249748', ('bitcoin', 'wallet.manual_source_observation'): 'e4a8c321fff561788f8c3b0a07478bdc56c50be6b24ebd6b61450e2f29612967', ('bitcoin', 'wallet.public_code_mentions'): 'd9e822fb86d56dc800856613f66abc85dc65d53c1136f802c7dee4c58f3566dd', ('ethereum', 'wallet.graphsense_public_tags'): '1c839aabd7dafba8b4b86ee8d2a20997eb0886d412844674bef9a3d0fc0d74bd', ('ethereum', 'wallet.local_labels'): '9c336d551e1cc66aa14da3b25e127adcc47c73ffc19d157b3bc3e980ad5df6b2', ('ethereum', 'wallet.manual_exact_web'): '70f91d4da45d30bfc2045d09bcc26a21dd909e47c0946bd882fdc725d2c05f39', ('ethereum', 'wallet.manual_source_observation'): '4d2a7318f033489f442fe10100bd2acd6907c2893c033d9f07fdd4df66ee62fc', ('ethereum', 'wallet.ens_primary_name'): '7efab019d0ba2b4afdb24132a3a2c17b6e4d4c1862c12bcb7d01c4686d411753', ('ethereum', 'wallet.public_code_mentions'): 'eb3cb29bbf65f9703251599ec5ad60641b1736c2da1e920d55eef8e32abc7f7b'}
     for (chain,key),digest in queries.items():

@@ -100,13 +100,15 @@ class ChainRegistry:
 def _builtins():
     from .bitcoin import BitcoinAdapter
     from .ethereum import EthereumAdapter
+    from .tron import TronAdapter
     common=frozenset({Capability.ADDRESS_VALIDATION,Capability.BALANCE,
         Capability.TRANSACTION_HISTORY,Capability.TRANSACTION_LOOKUP,Capability.COUNTERPARTIES,
         Capability.GRAPH,Capability.MONITORING,Capability.DISCOVERY,Capability.LABELS,
         Capability.CASES,Capability.ATTRIBUTION,Capability.RISK})
     return ChainRegistry((
         ChainDefinition('bitcoin','Bitcoin','BTC',ChainFamily.UTXO,BitcoinAdapter,common|{Capability.PENDING_TRANSACTIONS},8),
-        ChainDefinition('ethereum','Ethereum','ETH',ChainFamily.ACCOUNT,EthereumAdapter,common|{Capability.TOKEN_TRANSFERS},18,True)))
+        ChainDefinition('ethereum','Ethereum','ETH',ChainFamily.ACCOUNT,EthereumAdapter,common|{Capability.TOKEN_TRANSFERS},18,True),
+        ChainDefinition('tron','TRON','TRX',ChainFamily.ACCOUNT,TronAdapter,common|{Capability.TOKEN_TRANSFERS},6)))
 
 REGISTRY=_builtins()
 def get_chain(chain_id):return REGISTRY.get_chain(chain_id)

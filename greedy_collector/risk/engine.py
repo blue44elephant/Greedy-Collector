@@ -46,6 +46,7 @@ class ExplainableRiskEngine:
         transactions: list[NormalizedTransaction],
         labels: list[dict],
         exposure_paths: list[dict] | None = None,
+        include_behavioral: bool = True,
     ) -> dict:
         # Canonical ordering makes bounded evidence samples independent of input order.
         transactions = sorted(transactions, key=lambda tx: (
@@ -131,7 +132,8 @@ class ExplainableRiskEngine:
                     )
                 )
 
-        self._behavioral_findings(address, transactions, findings)
+        if include_behavioral:
+            self._behavioral_findings(address, transactions, findings)
         findings = self._deduplicate_findings(findings)
         self._apply_budgets(findings)
         score = sum(item["score_contribution"] for item in findings)

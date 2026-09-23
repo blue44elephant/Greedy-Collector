@@ -50,7 +50,8 @@ class GraphStore:
                 {
                     "edge_id": (
                         f"{tx.chain}:{tx.tx_hash}:{tx.from_address}:"
-                        f"{tx.to_address}:{tx.token_symbol}:{tx.value_native}"
+                        f"{tx.to_address}:{tx.token_symbol}:{tx.value_native}:"
+                        f"{get_chain_adapter(tx.chain).transfer_identity(tx)}"
                     ),
                     "chain": tx.chain,
                     "tx_hash": tx.tx_hash,
@@ -194,7 +195,8 @@ class GraphStore:
                     {
                         "id": (
                             f"{tx.chain}:{tx.tx_hash}:{tx.from_address}:"
-                            f"{tx.to_address}:{tx.token_symbol}:{tx.value_native}"
+                            f"{tx.to_address}:{tx.token_symbol}:{tx.value_native}:"
+                            f"{get_chain_adapter(tx.chain).transfer_identity(tx)}"
                         ),
                         "source": node_id(tx.chain,tx.from_address),
                         "target": node_id(tx.chain,tx.to_address),

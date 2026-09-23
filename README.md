@@ -1,6 +1,6 @@
 # Greedy Collector
 
-Greedy Collector is a standalone application for inspecting public Bitcoin and Ethereum
+Greedy Collector is a standalone application for inspecting public Bitcoin, Ethereum, and TRON
 wallet activity. It retrieves records from configured providers, stores normalized results
 in SQLite, applies deterministic risk rules, and provides Wallet, Graph, Monitoring, Alerts, Cases, and Labels workspaces.
 Other existing backend workflows remain accessible through Swagger at `/docs`; they are
@@ -68,14 +68,18 @@ Normal ETH transactions and ERC-20 transfers each paginate up to 10 pages of 1,0
 records, before normalization and deduplication. A later-page error fails the lookup.
 Ethereum pending/mempool monitoring is not implemented; finality is not enforced.
 
+### TRON
+
+TRON mainnet balance and transaction retrieval require `TRON_PRO_API_KEY`. Greedy Collector sends it only in the server-side `TRON-PRO-API-KEY` header. TronGrid account, account-transaction, TRC-20 history, and solidified transaction-detail endpoints are read-only. Each history stream is bounded to 200 records per page and five pages. TRX amounts are converted exactly from sun; TRC-20 decimals and symbols come from returned token metadata. No token contract is hard-coded. See [TRON support](docs/TRON_SUPPORT.md).
+
 ## Workspaces
 
 ### Wallet
 
 Unified search automatically resolves supported blockchain identifiers:
-Bitcoin addresses (forms accepted by the existing adapter), Ethereum addresses,
+Bitcoin addresses (forms accepted by the existing adapter), Ethereum addresses, TRON Base58Check addresses,
 bare 64-hex Bitcoin transaction IDs, and `0x` + 64-hex Ethereum transaction hashes.
-`0x` + 40-hex is an Ethereum address. Paste an identifier and press **Search** or Enter.
+`0x` + 40-hex is an Ethereum address. TRON transaction IDs use the same bare 64-hex syntax as Bitcoin and resolve as TRON with an explicit `chain_hint=tron`; unqualified bare hashes retain the existing Bitcoin behavior. Paste an identifier and press **Search** or Enter.
 The local `POST /api/greedy-collector/resolve` endpoint classifies syntax without provider
 requests. Unknown values produce a supported-types message and no lookup request.
 Support can be extended later; other blockchains and naming systems are not implemented.
@@ -111,7 +115,7 @@ inference, or automatic crawling. Bitcoin relationships remain simplified endpoi
 
 ### Monitoring
 
-Add a public Bitcoin or Ethereum address without first looking it up. Edit its label,
+Add a public Bitcoin, Ethereum, or TRON address without first looking it up. Edit its label,
 notes, priority, enabled state, or an optional case selected from stored cases. Duplicate addresses return
 the existing watch. **Disable watch** preserves its baseline, runs, and alerts;
 re-enabling continues from that retained boundary. The UI does not hard-delete watches.
@@ -136,7 +140,7 @@ no transaction hash. The existing alerts endpoint has no wallet filter or pagina
 
 Bitcoin requires no API key. Ethereum monitoring requires `ETHERSCAN_API_KEY`;
 `ALCHEMY_API_KEY` is only an optional balance fallback and does not replace Etherscan history.
-No fake watches, provider results, or alerts are substituted when requests fail.
+TRON monitoring requires `TRON_PRO_API_KEY` and uses confirmed bounded TronGrid history. No fake watches, provider results, or alerts are substituted when requests fail.
 
 ### Alerts
 
@@ -156,11 +160,11 @@ not automatically turned into alerts. The current alert API is not paginated.
 ## Storage and interpretation limits
 
 The default database is `sqlite:///./data/greedy_collector.db`, configured with
-`GREEDY_COLLECTOR_DATABASE_URL`. Use Alembic revision `20260630_01` for initialization.
+`GREEDY_COLLECTOR_DATABASE_URL`. Use the current Alembic head for initialization.
 SQLite foreign keys are enabled by the application engine. No Epic Archer installation
 or database is required.
 
-- Neither chain guarantees lifetime-complete transaction history.
+- No supported chain guarantees lifetime-complete transaction history.
 - Repeated lookup inserts previously unseen transaction identities, updates the address,
   and adds a risk result. Existing transaction rows are not updated, so stored confirmation
   state/direction can differ from fresh lookup data. Direction reflects the lookup that
@@ -214,7 +218,7 @@ Download reports as **Markdown, HTML, JSON, or PDF** using the existing report b
 
 Wallet risk is a deterministic investigative indicator, not a probability, proof of wrongdoing, or identification of real-world ownership. General activity is not inherently suspicious. Transaction count, fan-in/out, repeated counterparties, round/large asset amounts, short returned history, and Exchange/Bridge interactions now remain visible as **zero-point context**.
 
-Known-risk counterparty exposure weighs more than volume: Sanctioned/Scam/Mixer contacts retain 40/30/25 points. Overlapping classifications of one counterparty use the strongest classification; each risk type contributes at most once. Independent types can contribute up to 95. Two-/three-hop stored proximity contributes at most 10/5, and adds no points on top of direct risky contact. Labels are sourced assertions requiring review, not automatically verified attribution. There is currently no direct wallet-attribution rule.
+Known-risk counterparty exposure weighs more than volume: Sanctioned/Scam/Mixer contacts retain 40/30/25 points. Overlapping classifications of one counterparty use the strongest classification; each risk type contributes at most once. Independent types can contribute up to 95. Two-/three-hop stored proximity contributes at most 10/5, and adds no points on top of direct risky contact. Labels are sourced assertions requiring review, not automatically verified attribution. There is currently no direct wallet-attribution rule. TRON retains source-backed label exposure but does not run the BTC/ETH behavioral rules; the Wallet view marks that component unavailable.
 
 Weak chronological same-asset decreasing amounts, rapid sequences, and long observed gaps contribute 8/5/4, with a combined behavioral cap of 10. No current-clock dependency or second activity score is introduced. Overall cap remains 100; levels remain Low 0–30, Medium 31–70, High 71–100. A Low aggregate level does not negate a specific high-severity label finding.
 
@@ -226,7 +230,7 @@ See [the full risk audit](docs/RISK_CALIBRATION.md) for every original rule, ove
 
 The Labels workspace manages real local address annotations: **Exchange, Mixer, Bridge, Scam, Sanctioned, Unknown**. Create a manual label, filter by chain/type or label/source text, inspect provenance and confidence, investigate its wallet, open the stored graph, or add its existing label ID to a case. Wallet and Graph show stored names alongside addresses and link back to label details. Cases open the referenced label record.
 
-Manual creation defaults to source **Manual analyst label** and confidence **0.7**. Confidence remains the stored 0–1 value; it is not the risk score. Sources remain visible, with HTTP(S) URLs safely linked. Bitcoin/Ethereum addresses are validated locally without provider calls. `any` preserves unvalidated address-scope semantics; it does not establish chain membership. Unsupported chains are rejected on new writes. Existing records are not migrated or rewritten.
+Manual creation defaults to source **Manual analyst label** and confidence **0.7**. Confidence remains the stored 0–1 value; it is not the risk score. Sources remain visible, with HTTP(S) URLs safely linked. Bitcoin/Ethereum/TRON addresses are validated locally without provider calls. `any` preserves unvalidated address-scope semantics; it does not establish chain membership. Unsupported chains are rejected on new writes. Existing records are not migrated or rewritten.
 
 CSV import requires `address,label,type,source,confidence`; `chain` is optional and defaults to `any`. Use UTF-8 `.csv` files. The full file is validated before writes. The result counts processed rows, including updates, not only newly created labels. Export downloads the existing backend CSV with `chain,address,label,type,source,confidence,last_updated`; JavaScript does not reconstruct or reimport the file.
 

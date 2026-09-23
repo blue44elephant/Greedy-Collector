@@ -116,9 +116,9 @@ export function initDiscovery() {
     if (!value) throw new UserError('Enter a public Bitcoin or Ethereum wallet address.');
     let resolved;
     try { resolved = await api('/resolve', {method:'POST', body:{input:value,chain_hint:expectedChain}}); }
-    catch { throw new UserError('Could not identify a supported Bitcoin or Ethereum wallet address.'); }
-    if (resolved.kind === 'unknown') throw new UserError('Could not identify a supported Bitcoin or Ethereum wallet address.');
-    if (resolved.kind !== 'address' || !supportedChain(resolved.chain)) throw new UserError('Discovery currently accepts Bitcoin and Ethereum wallet addresses only.');
+    catch { throw new UserError('Could not identify a supported wallet address.'); }
+    if (resolved.kind === 'unknown') throw new UserError('Could not identify a supported wallet address.');
+    if (resolved.kind !== 'address' || !supportedChain(resolved.chain)) throw new UserError('Discovery requires a supported wallet address.');
     if (expectedChain && resolved.chain !== expectedChain) throw new UserError('The wallet handoff does not match its chain. Open the wallet again.');
     // After backend validation, mirror Discovery's canonical case convention
     // (the general resolver preserves ETH input case). Base58 stays exact.

@@ -25,6 +25,8 @@ class ChainAdapter(ABC):
     address_pattern: re.Pattern
     transaction_pattern: re.Pattern | None = None
     address_case = 'sensitive'
+    resolve_unqualified_transactions = True
+    behavioral_risk = True
 
     def address_key(self, address: str) -> str:
         """Canonical comparison without validation; also supports stored legacy records."""
@@ -50,6 +52,12 @@ class ChainAdapter(ABC):
 
     def monitoring_baseline(self, transactions):
         return transactions[0] if transactions else None
+
+    def transfer_identity(self, transaction) -> str:
+        """Stable normalized transfer identity without changing the DB schema."""
+        if isinstance(transaction, dict):
+            return transaction.get("event_id") or transaction.get("tx_hash", "")
+        return transaction.raw_payload.get("_event_id") or transaction.tx_hash
 
     def __init__(self):
         self.settings = get_settings()

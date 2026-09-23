@@ -198,7 +198,7 @@ def test_wallet_plan_and_openapi_root_contract_unchanged(api,chain,address):
     assert response.json()['selections'][0]['eligibility']=='eligible'
     schema=api.get('/openapi.json').json()['components']['schemas']['SubjectInput']
     assert set(schema['properties'])=={'chain','address'}
-    assert schema['properties']['chain']['enum']==['bitcoin','ethereum']
+    assert schema['properties']['chain']['enum']==['bitcoin','ethereum','tron']
     ens=next(t for t in api.get(P+'/transforms').json() if t['id']=='wallet.ens_primary_name')
     assert ens['implemented'] and ens['chains']==['ethereum']
     assert ens['input_types']==['blockchain_address'] # ENS endpoints remain output-only.

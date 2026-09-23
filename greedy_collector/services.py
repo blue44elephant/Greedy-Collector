@@ -68,8 +68,10 @@ class GreedyCollectorService:
 
         exposure_paths = self._exposure_paths(db, request.chain, request.address, 3)
         risk = self.risk_engine.evaluate(
-            request.address, transactions, labels, exposure_paths
+            request.address, transactions, labels, exposure_paths,
+            include_behavioral=adapter.behavioral_risk,
         )
+        risk["behavioral_supported"] = adapter.behavioral_risk
         # Encode nested evidence once for both the JSON column and API response.
         risk["findings"] = jsonable_encoder(risk["findings"])
 
@@ -502,6 +504,9 @@ class GreedyCollectorService:
     @staticmethod
     def _tx_dict(tx: NormalizedTransaction) -> dict:
         data = tx.model_dump(exclude={"raw_payload"}) if hasattr(tx, "model_dump") else tx.dict(exclude={"raw_payload"})
+        public = tx.raw_payload.get("_public") if isinstance(tx.raw_payload, dict) else None
+        if isinstance(public, dict):
+            data.update(public)
         if tx.timestamp:
             data["timestamp"] = tx.timestamp.isoformat()
         return data

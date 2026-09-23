@@ -2,7 +2,7 @@
 import pytest
 from fastapi.testclient import TestClient
 import main
-from greedy_collector.chains import BitcoinAdapter, EthereumAdapter
+from greedy_collector.chains import BitcoinAdapter, EthereumAdapter, TronAdapter
 from greedy_collector.chains.base import ChainAdapter
 
 
@@ -12,7 +12,7 @@ def client(monkeypatch):
     monkeypatch.setattr(main, "stop_monitoring", lambda: None)
     def forbidden(*args, **kwargs):
         pytest.fail("Resolver attempted a provider operation")
-    for adapter in [BitcoinAdapter, EthereumAdapter]:
+    for adapter in [BitcoinAdapter, EthereumAdapter, TronAdapter]:
         monkeypatch.setattr(adapter, "lookup_address", forbidden)
         monkeypatch.setattr(adapter, "lookup_transaction", forbidden)
         monkeypatch.setattr(adapter, "transactions", forbidden)
@@ -56,7 +56,7 @@ def test_unknown_returns_safe_result_without_lookup(client, value):
     response = client.post("/api/greedy-collector/resolve", json={"input":value})
     assert response.status_code == 200
     assert response.json()["kind"] == "unknown"
-    assert len(response.json()["supported"]) == 4
+    assert len(response.json()["supported"]) == 6
     assert "normalized" not in response.json()
 
 

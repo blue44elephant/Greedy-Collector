@@ -1,8 +1,8 @@
-# MC-1 multi-chain foundation
+# Multi-chain registry and adapter architecture
 
-Greedy Collector registers **Bitcoin (`bitcoin`) and Ethereum (`ethereum`) only**.
-IDs are stable persisted identifiers. MC-1 adds no chain, network provider, fake
-runtime data, token standard, bridge inference or new risk rule.
+Greedy Collector registers **Bitcoin (`bitcoin`)**, **Ethereum (`ethereum`)**, and
+**TRON (`tron`)**. IDs are stable persisted identifiers. MC-2 exercises the MC-1
+extension boundary with one real read-only provider adapter and no fake runtime data.
 
 ## Registry and adapter boundary
 
@@ -16,8 +16,8 @@ Unknown IDs raise `unsupported_chain`; neither falls back to Ethereum.
 Syntax validation/normalization, transaction recognition and monitoring baseline
 policy belong to adapters. Generic callers use the registry; provider dispatch
 constructs only the selected adapter. Current provider transport, ordering,
-pagination and fallback remain inside Bitcoin/Ethereum adapters. Existing
-ETHERSCAN_API_KEY, ALCHEMY_API_KEY and monitoring environment variables are unchanged.
+pagination and fallback remain inside each provider adapter. TRON uses the server-side
+`TRON_PRO_API_KEY`; credentials never enter registry metadata or browser code.
 
 `GET /api/greedy-collector/chains` exposes a deliberate safe metadata projection,
 never adapter objects, settings, credentials or request URLs. Browser modules load
@@ -37,7 +37,9 @@ metadata and historical pins; old cases are not rewritten. Research remains inde
 Transaction identity includes chain and transaction ID; stored transfer identity
 also includes endpoints, token and amount. Graph traversal retains individual stored
 rows for one hash. Graph node maps include chain; mixed internal graph outputs qualify
-node IDs, while single-chain API node IDs remain addresses. SQLite queries and Neo4j
+node IDs, while single-chain API node IDs remain addresses. A TRON Base58Check address
+and an Ethereum address derived from the same 20-byte payload remain distinct identities;
+no ownership or graph relationship is inferred. SQLite queries and Neo4j
 wallet identities are chain-scoped. Cache/query fingerprints already include the
 canonical Discovery subject namespace; MC-1 does not change those fingerprints.
 
@@ -56,20 +58,22 @@ BTC pending history and ETH token transfers remain distinct. Monitoring jobs are
 generated from capable registry entries; BTC confirmed-only initial baseline and
 ETH newest-record baseline remain adapter-owned. A limited chain cannot run Wallet
 risk evaluation or monitoring without explicitly declaring those capabilities.
-The existing deterministic risk engine is unchanged and never implicitly enabled
-for a future chain.
+TRON uses generic source-backed label exposure but opts out of the existing BTC/ETH
+behavioral indicators. No TRON-specific heuristic or neutral evidence is invented.
 
 Discovery chain support and transform compatibility remain separate. Generic wallet
 transforms materialize compatible registered chains at startup; execution checks
 the declared capability as well. Local Labels requires label support. ENS explicitly
 declares Ethereum only. GraphSense explicitly declares Bitcoin/Ethereum only;
 upstream coverage is not widened. Manual capture and generic subject schemas use
-registry validation. Internal eligibility metadata is excluded from existing
-descriptor snapshots/fingerprints. No ownership/claim semantics change.
+registry validation. Query and result fingerprints retain the chain-qualified
+subject namespace, so existing Bitcoin/Ethereum identities remain unchanged.
+No ownership/claim semantics change.
 
 `chains/evm.py` shares only EVM address/transaction syntax and case normalization.
 Ethereum mainnet endpoints, chainid=1, provider configuration, ERC-20 parsing and ENS
-stay Ethereum-specific. EVM compatibility does not imply ENS support. Native/token
+stay Ethereum-specific. EVM compatibility does not imply ENS support. TRON is an
+account-family chain but is not marked EVM-compatible. Native/token
 amounts remain exact strings; decimals belong to adapters/assets, never generic math.
 
 ## Storage and audit

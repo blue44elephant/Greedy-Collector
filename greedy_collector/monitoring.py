@@ -71,7 +71,7 @@ async def _monitor_chain(chain: str, wallet_id: str | None = None) -> dict:
                     # Establish baseline without alerting
                     wallet.last_checked = datetime.now(timezone.utc)
                     if baseline_tx:
-                        tx_hash = baseline_tx.get("tx_hash") if isinstance(baseline_tx, dict) else baseline_tx.tx_hash
+                        tx_hash = adapter.transfer_identity(baseline_tx)
                         block_number = baseline_tx.get("block_number") if isinstance(baseline_tx, dict) else baseline_tx.block_number
                         wallet.last_seen_tx = tx_hash
                         wallet.last_seen_block = block_number
@@ -90,7 +90,7 @@ async def _monitor_chain(chain: str, wallet_id: str | None = None) -> dict:
                 if previous_tx is not None:
                     # Previous boundary exists - verify it's in current results
                     boundary_found = any(
-                        tx["tx_hash"] == previous_tx
+                        adapter.transfer_identity(tx) == previous_tx
                         for tx in transactions
                     )
                     
@@ -116,12 +116,14 @@ async def _monitor_chain(chain: str, wallet_id: str | None = None) -> dict:
                 # Normal operation: boundary found or this is first-run
                 new_rows = []
                 for tx in transactions:
-                    if previous_tx and tx["tx_hash"] == previous_tx:
+                    if previous_tx and adapter.transfer_identity(tx) == previous_tx:
                         break
                     new_rows.append(tx)
 
                 triggers = []
                 for tx in new_rows:
+                    if tx.get("direction") not in ("incoming", "outgoing") or not tx.get("from_address") or not tx.get("to_address"):
+                        continue
                     triggers.append(
                         {
                             "name": "New outgoing transaction"
@@ -166,25 +168,28 @@ async def _monitor_chain(chain: str, wallet_id: str | None = None) -> dict:
                     
                     # TRANSACTION-BACKED ALERT: Real tx_hash exists
                     if tx_hash:
-                        # Use logical identity to detect existing alert (catches both old and new hash formats)
-                        existing = db.scalar(
+                        event_identity = adapter.transfer_identity(tx)
+                        # Existing BTC/ETH rows used tx-hash logical identity before
+                        # stable per-transfer event IDs existed. Preserve that lookup
+                        # only when the adapter still uses the hash as its identity.
+                        if event_identity == tx_hash and db.scalar(
                             select(WalletAlert.id).where(
                                 WalletAlert.wallet == wallet.address,
                                 WalletAlert.chain == chain,
                                 WalletAlert.tx_hash == tx_hash,
                                 WalletAlert.trigger_type == trigger["name"],
                             )
-                        )
-                        if existing:
+                        ):
                             continue
-                        
                         # Compute new stable dedupe_key (excludes mutable risk_score)
                         dedupe = hashlib.sha256(
                             (
-                                f"{wallet.id}:{chain}:{tx_hash}:"
+                                f"{wallet.id}:{chain}:{event_identity}:"
                                 f"{trigger['name']}"
                             ).encode()
                         ).hexdigest()
+                        if db.scalar(select(WalletAlert.id).where(WalletAlert.dedupe_key == dedupe)):
+                            continue
                     
                     # RISK-ONLY ALERT: No real transaction, falls back to "risk"
                     else:
@@ -223,7 +228,7 @@ async def _monitor_chain(chain: str, wallet_id: str | None = None) -> dict:
                     )
                 wallet.last_checked = datetime.now(timezone.utc)
                 if transactions:
-                    wallet.last_seen_tx = transactions[0]["tx_hash"]
+                    wallet.last_seen_tx = adapter.transfer_identity(transactions[0])
                     wallet.last_seen_block = transactions[0]["block_number"]
                 run.new_transactions = len(new_rows)
                 run.status = "completed"
@@ -289,4 +294,10 @@ def monitoring_status() -> dict:
         "scheduler_running": scheduler.running,
         "ethereum_interval_minutes": settings.ethereum_monitor_minutes,
         "bitcoin_interval_minutes": settings.bitcoin_monitor_minutes,
+        "tron_interval_minutes": settings.tron_monitor_minutes,
+        "chain_intervals": {
+            definition.chain_id: definition.adapter().monitoring_interval(settings)
+            for definition in list_chains()
+            if Capability.MONITORING in definition.capabilities
+        },
     }

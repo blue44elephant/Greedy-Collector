@@ -16,7 +16,7 @@ module.exports=async({evaluate,call,work,mode,httpPort,traffic})=>{
   assert.equal(await evaluate(`document.querySelectorAll('[data-workspace]').length`),9);
   assert.ok((await text()).includes('Public-source pivots & candidate evidence'));
   assert.equal(await evaluate(`document.querySelector('#discovery-workspace h1').textContent`),'Discovery');
-  if(mode==='mc1'){
+  if(mode==='mc1'||mode==='mc2'){
     await require('./browser_multichain.cjs')({evaluate,call,work,httpPort,traffic});
   }else if(mode==='graphsense'){
     await require('./browser_discovery_graphsense.cjs')({evaluate,call,work,mode,httpPort,traffic});

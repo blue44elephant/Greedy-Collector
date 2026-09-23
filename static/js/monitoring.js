@@ -1,4 +1,4 @@
-import {chainMetadata, hasCapability} from './chains.js';
+import {chains, chainMetadata, hasCapability} from './chains.js';
 import {api, ApiError} from "./api.js";
 import {byId, element, panel, table, shortValue, dateText, fields, chainAddress, run} from "./ui.js";
 
@@ -103,11 +103,12 @@ export function initMonitoring() {
   function renderScheduler(state) {
     scheduler.replaceChildren(element("h2", "Scheduler"));
     const backend = {apscheduler:"APScheduler", celery:"Celery", disabled:"Disabled"}[state.active] || "Unknown";
+    const intervals = chains.filter(([id]) => hasCapability(id, "monitoring")).map(([id, name]) =>
+      [`${name} interval`, typeof state.chain_intervals?.[id] === "number" ? `${state.chain_intervals[id]} minutes` : "Not available"]);
     scheduler.append(metadata([
       ["Configured backend", backend],
       ["Local scheduler", state.scheduler_running === true ? "Running" : "Not running"],
-      ["Ethereum interval", typeof state.ethereum_interval_minutes === "number" ? `${state.ethereum_interval_minutes} minutes` : "Not available"],
-      ["Bitcoin interval", typeof state.bitcoin_interval_minutes === "number" ? `${state.bitcoin_interval_minutes} minutes` : "Not available"],
+      ...intervals,
     ]));
     scheduler.append(element("p", "Values reflect the last refresh. Celery worker/beat activity is not verified by this status. Use one application process: overlap protection is process-local. Changes appear after an explicit refresh or action.", "muted small"));
   }

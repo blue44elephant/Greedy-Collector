@@ -1,4 +1,4 @@
-import {chainMetadata, hasCapability} from './chains.js';
+import {chains, chainMetadata, hasCapability} from './chains.js';
 import {manualSourceAction} from './discovery_manual_source.js';
 import {discoveryAction} from "./discovery_handoff.js";
 import {attributionSummary} from "./attribution_summary.js";
@@ -6,7 +6,7 @@ import {addToCaseButton} from "./case_actions.js";
 import {readLabels, labelsFor, labelCards} from "./label_ui.js";
 import {api} from "./api.js";
 import {byId, text, element, dateText, shortValue, action, run, UserError} from "./ui.js";
-const providerNames = {blockstream:"Blockstream", mempool_space:"Mempool.space", etherscan:"Etherscan", alchemy:"Alchemy"};
+const providerNames = {blockstream:"Blockstream", mempool_space:"Mempool.space", etherscan:"Etherscan", alchemy:"Alchemy", trongrid:"TronGrid", trongrid_trc20:"TronGrid TRC-20"};
 let navigate;
 export function investigate(chain, address) {
   if (byId("lookup-form").dataset.busy === "true") return;
@@ -58,6 +58,10 @@ function renderLookup(data, stored = false, labels = [], labelsUnavailable = fal
       row.children[index].replaceChildren(shortValue([tx.tx_hash, tx.direction, tx.from_address, tx.to_address][index]));
     });
     row.children[4].className = "numeric";
+    if (tx.asset_type === "trc20") {
+      const details = [tx.token_name, tx.token_contract, tx.token_decimals != null ? `${tx.token_decimals} decimals` : null, tx.raw_value != null ? `raw ${tx.raw_value}` : null, tx.confirmed === true ? "Confirmed" : null].filter(Boolean).join(" · ");
+      row.children[5].replaceChildren(element("span", tx.token_symbol || "TOKEN"), element("span", details, "muted small"));
+    }
     rows.append(row);
   }
   byId("transaction-rows").replaceChildren(rows);
@@ -71,7 +75,8 @@ function renderLookup(data, stored = false, labels = [], labelsUnavailable = fal
     for (const [key, label] of [["direct_evidence", "Direct evidence"], ["exposure", "Exposure"], ["behavioral", "Behavioral"], ["context", "Context"]]) {
       const category = risk.category_contributions[key];
       if (!category) continue;
-      const row = element("div"); row.append(element("dt", label), element("dd", `${category.applied} points (raw ${category.raw}; cap ${category.cap})`)); summary.append(row);
+      const value = key === "behavioral" && risk.behavioral_supported === false ? "Not available for this chain" : `${category.applied} points (raw ${category.raw}; cap ${category.cap})`;
+      const row = element("div"); row.append(element("dt", label), element("dd", value)); summary.append(row);
     }
     breakdown.append(element("h3", "Score breakdown"), summary, element("p", "Activity context adds no risk points. Applied contributions sum to the score; overlapping evidence and category caps can reduce raw points.", "muted small"));
   } else if (stored && data.risk) {
@@ -134,7 +139,7 @@ async function lookup(stored, chain_hint = undefined) {
     if (!input) throw new UserError("Enter a supported wallet address or transaction hash.");
     const resolved = await api("/resolve", {method:"POST", body:{input, chain_hint}});
     if (!["address", "transaction"].includes(resolved.kind)) {
-      throw new UserError("Greedy Collector could not identify this value as a supported wallet address or transaction hash. Supported: Bitcoin/Ethereum addresses and transaction hashes.");
+      throw new UserError(`Greedy Collector could not identify this value as a supported wallet address or transaction hash. Supported: ${chains.map(row => row[1]).join("/")} addresses and supported transaction identifiers.`);
     }
     const chain = resolved.chain, address = resolved.normalized;
     byId("wallet-address").value = address;
@@ -168,6 +173,7 @@ function renderTransaction(tx) {
   host.replaceChildren(heading, element("p", tx.tx_hash, "full-address"));
   const rows = element("dl", undefined, "metadata");
   for (const [label, value] of [["Chain", tx.chain], ["Amount", tx.value_native], ["Asset", tx.token_symbol],
+    ["Asset type", tx.asset_type], ["Token name", tx.token_name], ["Token contract", tx.token_contract], ["Token decimals", tx.token_decimals], ["Raw value", tx.raw_value], ["Confirmation", tx.confirmed === true ? "Confirmed" : null],
     ["Block", tx.block_number], ["Timestamp", tx.timestamp ? dateText(tx.timestamp) : hasCapability(tx.chain,'pending_transactions') && !tx.block_number ? "Unconfirmed" : null],
     ["Fee", tx.fee], ["Provider", providerNames[tx.source_api]]]) {
     if (value == null || value === "") continue;

@@ -18,6 +18,7 @@ class GreedyCollectorSettings(BaseModel):
     )
     etherscan_api_key: str = os.getenv("ETHERSCAN_API_KEY", "")
     alchemy_api_key: str = os.getenv("ALCHEMY_API_KEY", "")
+    tron_pro_api_key: str = os.getenv("TRON_PRO_API_KEY", "")
     opensanctions_api_key: str = os.getenv("OPENSANCTIONS_API_KEY", "")
     urlscan_api_key: str = os.getenv("URLSCAN_API_KEY", "")
     virustotal_api_key: str = os.getenv("VIRUSTOTAL_API_KEY", "")
@@ -30,6 +31,9 @@ class GreedyCollectorSettings(BaseModel):
     )
     bitcoin_monitor_minutes: int = int(
         os.getenv("GREEDY_COLLECTOR_BTC_MONITOR_MINUTES", "20")
+    )
+    tron_monitor_minutes: int = int(
+        os.getenv("GREEDY_COLLECTOR_TRON_MONITOR_MINUTES", "10")
     )
     graph_backend: str = os.getenv(
         "GREEDY_COLLECTOR_GRAPH_BACKEND", "sqlite"

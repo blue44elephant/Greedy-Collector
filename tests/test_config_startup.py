@@ -9,7 +9,7 @@ import pytest
 
 
 ROOT = Path(__file__).resolve().parents[1]
-KEYS = ["ETHERSCAN_API_KEY", "ALCHEMY_API_KEY", "OPENSANCTIONS_API_KEY",
+KEYS = ["ETHERSCAN_API_KEY", "ALCHEMY_API_KEY", "TRON_PRO_API_KEY", "OPENSANCTIONS_API_KEY",
         "URLSCAN_API_KEY", "VIRUSTOTAL_API_KEY"]
 
 
@@ -52,6 +52,7 @@ def test_repository_dotenv_loads_all_existing_settings(isolated_app):
                    "GREEDY_COLLECTOR_TIMEOUT": "7.5",
                    "GREEDY_COLLECTOR_ETH_MONITOR_MINUTES": "31",
                    "GREEDY_COLLECTOR_BTC_MONITOR_MINUTES": "32",
+                   "GREEDY_COLLECTOR_TRON_MONITOR_MINUTES": "33",
                    "GREEDY_COLLECTOR_REDIS_URL": "redis://localhost:6379/4",
                    "GREEDY_COLLECTOR_NEO4J_URL": "http://localhost:7474",
                    "GREEDY_COLLECTOR_NEO4J_USER": "test-user",
@@ -67,9 +68,10 @@ assert main.settings is s
 assert str(engine.url) == "sqlite:///:memory:"
 for name in ["etherscan", "alchemy", "opensanctions", "urlscan", "virustotal"]:
     assert getattr(s, name + "_api_key") == "dummy-file-" + name + "_api_key"
+assert s.tron_pro_api_key == "dummy-file-tron_pro_api_key"
 assert s.graph_backend == "sqlite" and s.monitoring_backend == "apscheduler"
 assert s.request_timeout == 7.5
-assert (s.ethereum_monitor_minutes, s.bitcoin_monitor_minutes) == (31, 32)
+assert (s.ethereum_monitor_minutes, s.bitcoin_monitor_minutes, s.tron_monitor_minutes) == (31, 32, 33)
 assert s.redis_url == "redis://localhost:6379/4"
 assert s.neo4j_url == "http://localhost:7474"
 assert s.neo4j_user == "test-user" and s.neo4j_password == "dummy-password"

@@ -22,11 +22,12 @@ export async function api(path, {method = "GET", body, binary = false} = {}) {
     if (response.status === 404) message = "This address has not been stored locally yet.";
     if (response.status === 422) {
       // Only known validation messages are safe to echo; arbitrary exception text is not.
-      const safeDetails = ["Invalid bitcoin address format", "Invalid ethereum address format", "Invalid public wallet address."];
+      const safeDetails = ["Invalid bitcoin address format", "Invalid ethereum address format", "Invalid TRON address format", "Invalid TRON address checksum", "Invalid public wallet address."];
       message = safeDetails.includes(detail) ? detail : "Check the selected chain and public wallet address.";
     }
     if ([429, 502, 503, 504].includes(response.status)) message = "Blockchain provider request failed. Try again later.";
     if (response.status === 502 && /(?:ETHERSCAN_API_KEY|ALCHEMY_API_KEY|provider configuration)/i.test(detail)) message = "Ethereum provider configuration is unavailable.";
+    if (response.status === 502 && /TRON provider configuration/i.test(detail)) message = "TRON provider configuration is unavailable.";
     throw new ApiError(response.status, message);
   }
   if (binary) return response.blob();
