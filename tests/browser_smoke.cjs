@@ -65,6 +65,17 @@ const failures = [];
   await evaluate(`document.getElementById('wallet-address').value='0x'+'1'.repeat(40); document.getElementById('lookup-form').requestSubmit(); waitFor(()=>document.getElementById('balance').textContent.endsWith(' ETH'))`);
   assert.equal(await evaluate("document.getElementById('balance').textContent"), '1.000000000000000001 ETH');
   assert.ok(await evaluate("document.getElementById('transaction-rows').innerText.includes('1.234567') && document.getElementById('transaction-rows').innerText.includes('TEST')"));
+  assert.ok(await evaluate("[...document.querySelector('#chain-hint').options].some(option=>option.value==='base')"));
+  await evaluate(`document.getElementById('chain-hint').value='base'; document.getElementById('wallet-address').value='0x'+'1'.repeat(40); document.getElementById('lookup-form').requestSubmit(); waitFor(()=>document.getElementById('lookup-form').dataset.busy==='false')`);
+  assert.equal(await evaluate("document.getElementById('result-chain').textContent"), 'Base');
+  assert.equal(await evaluate("document.getElementById('balance').textContent"), '2.5 ETH');
+  await evaluate(`go('graph')`);
+  await evaluate(`{const f=document.querySelector('#graph-workspace form');f.elements.chain.value='base';f.elements.address.value='0x'+'1'.repeat(40);f.requestSubmit();waitFor(()=>f.dataset.busy==='false')}`);
+  assert.ok(await evaluate("document.querySelectorAll('#graph-workspace .graph-node').length >= 2"));
+  await evaluate(`go('wallet')`);
+  await evaluate(`document.getElementById('wallet-address').value='0x'+'a'.repeat(64); document.getElementById('lookup-form').requestSubmit(); waitFor(()=>document.getElementById('transaction-result').hidden===false)`);
+  assert.ok(await evaluate("document.getElementById('transaction-result').innerText.includes('base')"));
+  await evaluate(`document.getElementById('chain-hint').value=''; document.getElementById('wallet-address').value='0x'+'1'.repeat(40); document.getElementById('lookup-form').requestSubmit(); waitFor(()=>document.getElementById('lookup-form').dataset.busy==='false')`);
   await evaluate(`document.getElementById('stored-button').click(); waitFor(()=>document.getElementById('lookup-form').dataset.busy==='false')`);
   assert.equal(await evaluate("document.getElementById('stored-note').hidden"), false);
   assert.ok(await evaluate("document.getElementById('risk-time').textContent.includes('UTC')"));
@@ -78,7 +89,7 @@ const failures = [];
   assert.equal(await evaluate("!!document.querySelector('#graph-workspace svg')"), false);
   await evaluate(`go('wallet'); document.getElementById('wallet-address').value='0x'+'8'.repeat(40); document.getElementById('stored-button').click(); waitFor(()=>document.getElementById('lookup-form').dataset.busy==='false')`);
   assert.ok(await evaluate("document.querySelector('#lookup-form .operation-status').textContent.includes('This address has not been stored locally yet.')"));
-  for (const [address, expected] of [['', 'Enter a supported wallet address or transaction hash.'], ['invalid-address', 'Greedy Collector could not identify this value as a supported wallet address or transaction hash. Supported: Bitcoin/Ethereum/TRON addresses and supported transaction identifiers.'], ['0x'+'5'.repeat(40), 'Ethereum provider configuration is unavailable.'], ['0x'+'6'.repeat(40), 'Blockchain provider request failed. Try again later.']]) {
+  for (const [address, expected] of [['', 'Enter a supported wallet address or transaction hash.'], ['invalid-address', 'Greedy Collector could not identify this value as a supported wallet address or transaction hash. Supported: Bitcoin/Ethereum/Base/Arbitrum One/BNB Smart Chain/Polygon/TRON/Solana addresses and supported transaction identifiers.'], ['0x'+'5'.repeat(40), 'Ethereum provider configuration is unavailable.'], ['0x'+'6'.repeat(40), 'Blockchain provider request failed. Try again later.']]) {
     await evaluate(`document.getElementById('wallet-address').value=${JSON.stringify(address)}; document.getElementById('lookup-form').requestSubmit(); waitFor(()=>document.getElementById('lookup-form').dataset.busy==='false')`);
     assert.equal(await evaluate("document.querySelector('#lookup-form .operation-status').textContent"), expected);
     assert.equal(await evaluate("document.getElementById('results').hidden"), true);

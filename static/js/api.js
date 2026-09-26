@@ -26,8 +26,8 @@ export async function api(path, {method = "GET", body, binary = false} = {}) {
       message = safeDetails.includes(detail) ? detail : "Check the selected chain and public wallet address.";
     }
     if ([429, 502, 503, 504].includes(response.status)) message = "Blockchain provider request failed. Try again later.";
-    if (response.status === 502 && /(?:ETHERSCAN_API_KEY|ALCHEMY_API_KEY|provider configuration)/i.test(detail)) message = "Ethereum provider configuration is unavailable.";
-    if (response.status === 502 && /TRON provider configuration/i.test(detail)) message = "TRON provider configuration is unavailable.";
+    if (response.status === 502 && /provider configuration is unavailable/i.test(detail)) message = detail;
+    if (response.status === 502 && /(?:ETHERSCAN_API_KEY|ALCHEMY_API_KEY)/i.test(detail)) message = "Blockchain provider configuration is unavailable.";
     throw new ApiError(response.status, message);
   }
   if (binary) return response.blob();

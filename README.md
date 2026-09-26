@@ -1,7 +1,7 @@
 # Greedy Collector
 
-Greedy Collector is a standalone application for inspecting public Bitcoin, Ethereum, and TRON
-wallet activity. It retrieves records from configured providers, stores normalized results
+Greedy Collector is a standalone application for inspecting public Bitcoin, Ethereum, Base,
+Arbitrum One, BNB Smart Chain, Polygon, TRON, and Solana account activity. It retrieves records from configured providers, stores normalized results
 in SQLite, applies deterministic risk rules, and provides Wallet, Graph, Monitoring, Alerts, Cases, and Labels workspaces.
 Other existing backend workflows remain accessible through Swagger at `/docs`; they are
 not exposed in this frontend increment.
@@ -68,24 +68,43 @@ Normal ETH transactions and ERC-20 transfers each paginate up to 10 pages of 1,0
 records, before normalization and deduplication. A later-page error fails the lookup.
 Ethereum pending/mempool monitoring is not implemented; finality is not enforced.
 
+### Base, Arbitrum, BNB Smart Chain and Polygon
+
+These EVM networks share one Etherscan V2 adapter and the server-side `ETHERSCAN_API_KEY`.
+The adapter sends each network's configured chain ID: Base 8453, Arbitrum One 42161, BNB
+Smart Chain 56, and Polygon 137. Native assets are displayed as ETH, ETH, BNB and POL.
+Etherscan plan coverage and quotas vary by chain; confirm the chain is enabled for the
+configured account in the [Etherscan supported-chains list](https://docs.etherscan.io/supported-chains).
+History is bounded to at most 10 pages of 1,000 records per native-transaction stream and
+10 pages per token-transfer stream. Alchemy balance fallback is Ethereum mainnet only.
+
 ### TRON
 
-TRON mainnet balance and transaction retrieval require `TRON_PRO_API_KEY`. Greedy Collector sends it only in the server-side `TRON-PRO-API-KEY` header. TronGrid account, account-transaction, TRC-20 history, and solidified transaction-detail endpoints are read-only. Each history stream is bounded to 200 records per page and five pages. TRX amounts are converted exactly from sun; TRC-20 decimals and symbols come from returned token metadata. No token contract is hard-coded. See [TRON support](docs/TRON_SUPPORT.md).
+TRON mainnet balance and transaction retrieval require `TRON_PRO_API_KEY`. Greedy Collector sends it only in the server-side `TRON-PRO-API-KEY` header. TronGrid account, account-transaction, TRC-20 history, and solidified transaction-detail endpoints are read-only. Each history stream is bounded to 200 records per page and five pages. TRX amounts are converted exactly from sun; TRC-20 decimals and symbols come from returned token metadata. No token contract is hard-coded. See [TRON support](docs/TRON_SUPPORT.md) and [generic EVM multi-chain support](docs/EVM_MULTICHAIN_SUPPORT.md).
+
+### Solana
+
+Solana is a read-only account-family integration. Set `SOLANA_RPC_URL` to a private JSON-RPC provider when configured infrastructure is available. If unset, the application uses Solana's public mainnet endpoint, which is rate-limited and is not guaranteed production infrastructure. Balance uses finalized `getBalance`; confirmed history starts with at most 50 signatures and transaction reads are sequential. Monitoring catches up at most 100 signatures per poll. Solana has no unlimited-history claim. SOL and supported SPL/Token-2022 transfer instructions are parsed into distinct instruction-path events; token-account owners are used only when RPC metadata explicitly supplies them. There is no signing, wallet connection, transfer submission, NFT handling, or Solana-specific behavioral risk model. See [Solana support](docs/SOLANA_SUPPORT.md).
 
 ## Workspaces
 
 ### Wallet
 
 Unified search automatically resolves supported blockchain identifiers:
-Bitcoin addresses (forms accepted by the existing adapter), Ethereum addresses, TRON Base58Check addresses,
-bare 64-hex Bitcoin transaction IDs, and `0x` + 64-hex Ethereum transaction hashes.
-`0x` + 40-hex is an Ethereum address. TRON transaction IDs use the same bare 64-hex syntax as Bitcoin and resolve as TRON with an explicit `chain_hint=tron`; unqualified bare hashes retain the existing Bitcoin behavior. Paste an identifier and press **Search** or Enter.
+Bitcoin addresses (forms accepted by the existing adapter), Ethereum-compatible 40-hex `0x`
+addresses on Ethereum, Base, Arbitrum One, BNB Smart Chain and Polygon, and TRON Base58Check
+addresses, and Solana 32-byte base58 addresses. Solana 64-byte base58 transaction signatures also resolve locally after existing chain formats. Bare 64-hex transaction IDs resolve to Bitcoin. `0x` + 64-hex hashes default to
+Ethereum. Because EVM networks share address and hash syntax, choose the optional Network
+hint for Base, Arbitrum, BNB Smart Chain or Polygon. TRON hashes need an explicit TRON
+hint. Solana account and signature checks make no provider call during resolution. Paste a supported identifier and press **Search** or Enter.
 The local `POST /api/greedy-collector/resolve` endpoint classifies syntax without provider
-requests. Unknown values produce a supported-types message and no lookup request.
-Support can be extended later; other blockchains and naming systems are not implemented.
+requests. The chain selector is optional; Ethereum is the default for shared EVM syntax.
+Unknown values produce a supported-types message and no lookup request.
+ENS remains Ethereum-only, and GraphSense remains Bitcoin/Ethereum-only. Support can be extended
+through chain descriptors and adapters; other networks and naming systems are not implemented.
 
-Addresses dispatch to the existing `/lookup/address` API; transaction hashes use
-`/lookup/tx`. Transaction results show only returned normalized fields and allow explicit
+Addresses dispatch to the existing `/lookup/address` API; transaction identifiers use
+`/lookup/tx`. Solana transaction results retain each parsed transfer event from a signature. Transaction results show only returned normalized fields and allow explicit
 wallet investigation. Transaction lookup itself does not store a wallet graph.
 Wallet results retain exact decimal balances, activity, risk/evidence, counterparties,
 and provenance. **View stored** reads profile, transactions, and risk through the existing
@@ -115,7 +134,7 @@ inference, or automatic crawling. Bitcoin relationships remain simplified endpoi
 
 ### Monitoring
 
-Add a public Bitcoin, Ethereum, or TRON address without first looking it up. Edit its label,
+Add a public address on any supported chain without first looking it up. Edit its label,
 notes, priority, enabled state, or an optional case selected from stored cases. Duplicate addresses return
 the existing watch. **Disable watch** preserves its baseline, runs, and alerts;
 re-enabling continues from that retained boundary. The UI does not hard-delete watches.
@@ -138,8 +157,9 @@ per-run generated-alert counts or historical boundary snapshots. **Wallet alerts
 actual stored alerts filtered by the selected address and chain; risk-only alerts may have
 no transaction hash. The existing alerts endpoint has no wallet filter or pagination.
 
-Bitcoin requires no API key. Ethereum monitoring requires `ETHERSCAN_API_KEY`;
-`ALCHEMY_API_KEY` is only an optional balance fallback and does not replace Etherscan history.
+Bitcoin requires no API key. Ethereum, Base, Arbitrum, BNB Smart Chain and Polygon monitoring
+use `ETHERSCAN_API_KEY`; `ALCHEMY_API_KEY` is only an optional Ethereum-mainnet balance
+fallback and does not replace Etherscan history. Etherscan plan coverage varies by chain.
 TRON monitoring requires `TRON_PRO_API_KEY` and uses confirmed bounded TronGrid history. No fake watches, provider results, or alerts are substituted when requests fail.
 
 ### Alerts
@@ -230,7 +250,7 @@ See [the full risk audit](docs/RISK_CALIBRATION.md) for every original rule, ove
 
 The Labels workspace manages real local address annotations: **Exchange, Mixer, Bridge, Scam, Sanctioned, Unknown**. Create a manual label, filter by chain/type or label/source text, inspect provenance and confidence, investigate its wallet, open the stored graph, or add its existing label ID to a case. Wallet and Graph show stored names alongside addresses and link back to label details. Cases open the referenced label record.
 
-Manual creation defaults to source **Manual analyst label** and confidence **0.7**. Confidence remains the stored 0–1 value; it is not the risk score. Sources remain visible, with HTTP(S) URLs safely linked. Bitcoin/Ethereum/TRON addresses are validated locally without provider calls. `any` preserves unvalidated address-scope semantics; it does not establish chain membership. Unsupported chains are rejected on new writes. Existing records are not migrated or rewritten.
+Manual creation defaults to source **Manual analyst label** and confidence **0.7**. Confidence remains the stored 0–1 value; it is not the risk score. Sources remain visible, with HTTP(S) URLs safely linked. Bitcoin, Ethereum, Base, Arbitrum, BNB Smart Chain, Polygon, TRON and Solana addresses are validated locally without provider calls. `any` preserves unvalidated address-scope semantics; it does not establish chain membership. Unsupported chains are rejected on new writes. Existing records are not migrated or rewritten.
 
 CSV import requires `address,label,type,source,confidence`; `chain` is optional and defaults to `any`. Use UTF-8 `.csv` files. The full file is validated before writes. The result counts processed rows, including updates, not only newly created labels. Export downloads the existing backend CSV with `chain,address,label,type,source,confidence,last_updated`; JavaScript does not reconstruct or reimport the file.
 
@@ -270,7 +290,7 @@ The existing endpoints remain `GET /api/greedy-collector/kyc/sources`, `POST /ap
 
 ## Attribution � evidence-backed entity claims
 
-The Attribution workspace provides paginated **Claims** and **Entities** views for explicit manual investigation. Create an entity descriptor, enter a public Bitcoin/Ethereum wallet claim, capture or reuse immutable evidence, and record an assessment after reviewing supporting, contradicting, and contextual material. Contradictions require explicit acknowledgement and discussion. History, version conflicts, archival, link withdrawal/restoration, and evidence replacement remain inspectable.
+The Attribution workspace provides paginated **Claims** and **Entities** views for explicit manual investigation. Create an entity descriptor, enter a public wallet claim on a supported chain, capture or reuse immutable evidence, and record an assessment after reviewing supporting, contradicting, and contextual material. Contradictions require explicit acknowledgement and discussion. History, version conflicts, archival, link withdrawal/restoration, and evidence replacement remain inspectable.
 
 Attribution is evidence-backed analyst assessment. It is not automatic wallet-owner discovery. Creating attribution does not change risk or automatically derive claims from Labels, Research, blockchain activity, or Cases. No source URLs or external providers are queried by this workspace.
 
@@ -363,9 +383,10 @@ Discovery can query GraphSense public TagPacks for source-backed BTC/ETH address
 Results are third-party public annotations, not verified owners. Exact address and chain matching, bounded safe YAML retrieval, immutable source/blob provenance, a distinct public-annotation graph lane, and explicit reviewed `public_osint` promotion are supported. Actor/confidence/cluster-definer fields are metadata only: no automatic Labels, Entities, Claims, wallet clustering, risk, Cases or monitoring. Positive cache TTL is 24 hours (empty at most one hour); Refresh bypasses it. Search and file limits mean coverage is incomplete, not an exhaustive tag inventory. See [ED-9B](docs/EVIDENCE_DISCOVERY_ED9B.md) for parsing assumptions, source/license, migration, bounds and tests.
 
 
-### Multi-chain foundation (MC-1)
+### Multi-chain support
 
-Greedy Collector currently supports Bitcoin and Ethereum and uses an extensible
-internal multi-chain architecture. No additional production chains are enabled.
-See [Multi-chain architecture](docs/MULTICHAIN_ARCHITECTURE.md) for registry,
-capabilities, explicit resolver chain hints, and the future-adapter checklist.
+Greedy Collector currently supports eight chains: Bitcoin, Ethereum, Base, Arbitrum One, BNB Smart Chain,
+Polygon, TRON and Solana through its extensible chain registry. The EVM networks share a
+descriptor-configured Etherscan V2 adapter; see [generic EVM multi-chain support](docs/EVM_MULTICHAIN_SUPPORT.md)
+and [multi-chain architecture](docs/MULTICHAIN_ARCHITECTURE.md) and [Solana support](docs/SOLANA_SUPPORT.md) for provider coverage,
+capabilities, identifier hints and extension boundaries.

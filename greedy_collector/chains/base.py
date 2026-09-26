@@ -1,6 +1,8 @@
 from abc import ABC
 import re
 import json
+from datetime import datetime, timezone
+from email.utils import parsedate_to_datetime
 
 import httpx
 
@@ -14,9 +16,10 @@ class ChainDataError(RuntimeError):
 
 class RpcReadError(ChainDataError):
     """Bounded read failure: no provider message, URL or revert payload retained."""
-    def __init__(self, category, selector=None):
+    def __init__(self, category, selector=None, retry_after_seconds=None):
         self.category = category
         self.selector = selector
+        self.retry_after_seconds = retry_after_seconds
         super().__init__(category)
 
 
@@ -61,6 +64,16 @@ class ChainAdapter(ABC):
 
     def __init__(self):
         self.settings = get_settings()
+        # Runtime chain parameters come from the same descriptor exposed by /chains.
+        from .registry import get_chain
+        definition = get_chain(self.chain)
+        self.display_name = definition.display_name
+        self.native_symbol = definition.native_symbol
+        self.native_decimals = definition.native_decimals
+        if definition.evm_chain_id is not None:
+            self.evm_chain_id = definition.evm_chain_id
+        if definition.explorer_url is not None:
+            self.explorer_url = definition.explorer_url
 
     def validate_address(self, address: str) -> str:
         candidate = address.strip()
@@ -109,7 +122,21 @@ class ChainAdapter(ABC):
                                          follow_redirects=False, trust_env=False) as client:
                 async with client.stream('POST', url, json=payload,
                         headers={'User-Agent':'Greedy-Collector/0.1','Accept-Encoding':'identity'}) as response:
-                    if response.status_code == 429:raise RpcReadError('rate_limited')
+                    if response.status_code == 429:
+                        retry_after = response.headers.get('retry-after')
+                        delay = None
+                        if retry_after:
+                            try:
+                                delay = max(0.0, float(retry_after))
+                            except ValueError:
+                                try:
+                                    retry_at = parsedate_to_datetime(retry_after)
+                                    if retry_at.tzinfo is None:
+                                        retry_at = retry_at.replace(tzinfo=timezone.utc)
+                                    delay = max(0.0, (retry_at - datetime.now(timezone.utc)).total_seconds())
+                                except (TypeError, ValueError, OverflowError):
+                                    delay = None
+                        raise RpcReadError('rate_limited', retry_after_seconds=delay)
                     if response.status_code in (401,403):raise RpcReadError('configuration_unavailable')
                     if response.status_code != 200:raise RpcReadError('transport_failed')
                     if response.headers.get('content-encoding','identity') != 'identity':

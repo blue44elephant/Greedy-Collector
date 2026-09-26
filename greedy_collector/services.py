@@ -44,11 +44,11 @@ class GreedyCollectorService:
         self.kyc_engine = KycScreeningEngine()
         self.graph_store = GraphStore()
 
-    async def lookup_address(self, db: Session, request: LookupRequest) -> dict:
+    async def lookup_address(self, db: Session, request: LookupRequest, *, profile_override=None, transactions_override=None) -> dict:
         get_chain(request.chain).require(Capability.BALANCE,Capability.TRANSACTION_HISTORY,Capability.RISK)
         adapter = get_chain_adapter(request.chain)
-        profile = await adapter.lookup_address(request.address)
-        transactions = await adapter.transactions(request.address)
+        profile = profile_override if profile_override is not None else await adapter.lookup_address(request.address)
+        transactions = transactions_override if transactions_override is not None else await adapter.transactions(request.address)
         labels = self._labels_for_transactions(db, transactions)
 
         from .transaction_identity import persist_normalized_event
@@ -111,7 +111,12 @@ class GreedyCollectorService:
 
     async def lookup_transaction(self, chain: str, tx_hash: str) -> dict:
         get_chain(chain).require(Capability.TRANSACTION_LOOKUP)
-        tx = await get_chain_adapter(chain).lookup_transaction(tx_hash)
+        adapter = get_chain_adapter(chain)
+        lookup_events = getattr(adapter, "lookup_transaction_events", None)
+        if lookup_events is not None:
+            events = await lookup_events(tx_hash)
+            return {"chain": chain, "tx_hash": events[0].tx_hash, "events": [self._tx_dict(tx) for tx in events]}
+        tx = await adapter.lookup_transaction(tx_hash)
         return self._tx_dict(tx)
 
     def address_record(self, db: Session, chain: str, address: str) -> dict | None:

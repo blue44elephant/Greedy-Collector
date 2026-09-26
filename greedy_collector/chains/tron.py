@@ -10,37 +10,14 @@ from decimal import Decimal, InvalidOperation
 import httpx
 
 from .base import ChainAdapter, ChainDataError
+from .base58 import BASE58_ALPHABET, BASE58_INDEX, base58_decode as _base58_decode, base58_encode as _base58_encode
 from ..schemas import NormalizedTransaction
 
 
-BASE58_ALPHABET = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz"
-BASE58_INDEX = {character: index for index, character in enumerate(BASE58_ALPHABET)}
 SUN = Decimal("1000000")
 PAGE_SIZE = 200
 MAX_PAGES = 5
 MAX_RESPONSE_BYTES = 2 * 1024 * 1024
-
-
-def _base58_decode(value: str) -> bytes:
-    number = 0
-    for character in value:
-        try:
-            digit = BASE58_INDEX[character]
-        except KeyError:
-            raise ValueError("Invalid TRON address format") from None
-        number = number * 58 + digit
-    payload = number.to_bytes((number.bit_length() + 7) // 8, "big") if number else b""
-    return b"\x00" * (len(value) - len(value.lstrip("1"))) + payload
-
-
-def _base58_encode(value: bytes) -> str:
-    leading = len(value) - len(value.lstrip(b"\x00"))
-    number = int.from_bytes(value, "big")
-    encoded = ""
-    while number:
-        number, digit = divmod(number, 58)
-        encoded = BASE58_ALPHABET[digit] + encoded
-    return "1" * leading + encoded
 
 
 def tron_address_to_hex(address: str) -> str:

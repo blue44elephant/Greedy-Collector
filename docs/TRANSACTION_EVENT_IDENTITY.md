@@ -12,6 +12,8 @@ the migration.
 | EVM token log with a valid provider log index | `evm-log:<canonical decimal index>` |
 | TRON provider event | `provider:<existing provider event ID>` |
 | Bitcoin wallet-relative activity | `activity:<stable tuple digest>` |
+| Solana top-level instruction | `solana-ix:<outer instruction index>` |
+| Solana inner instruction/CPI | `solana-inner:<outer index>:<inner index>` |
 | Token event without a protocol index | `legacy:<stable tuple and contract digest>` |
 
 Event indexes are stored as canonical decimal strings. `asset_contract` is
@@ -21,6 +23,8 @@ wallet-relative de-duplication behavior. TRON monitoring retains its existing
 provider event identity; EVM monitoring now distinguishes logs in one
 transaction. Graph edges retain event-level IDs and expose the event key,
 index and contract where available.
+Solana's instruction-path keys let identical transfers at separate positions
+coexist while repeated ingestion of the same instruction path remains idempotent.
 
 Migration `20260923_02` adds and backfills these fields without changing the
 provider retrieval logic or adding chain support. Downgrade is refused before

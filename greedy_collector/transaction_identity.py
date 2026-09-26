@@ -9,6 +9,7 @@ from typing import Any
 MAX_EVENT_INDEX = (1 << 64) - 1
 MAX_EVENT_KEY_LENGTH = 160
 _EVENT_ID = re.compile(r"[a-z0-9_-]{1,24}:[0-9a-f]{64}\Z")
+_STABLE_EVENT_KEY = re.compile(r"solana-(?:ix:[0-9]{1,20}|inner:[0-9]{1,20}:[0-9]{1,20})\Z")
 
 
 def normalize_event_index(value: Any) -> str | None:
@@ -58,6 +59,10 @@ def build_event_key(value: Any) -> str:
     payload = _get(value, "raw_payload", {})
     payload = payload if isinstance(payload, dict) else {}
 
+    stable_key = payload.get("_stable_event_key")
+    if isinstance(stable_key, str) and _STABLE_EVENT_KEY.fullmatch(stable_key):
+        return stable_key
+
     if chain == "bitcoin":
         # Bitcoin rows are wallet-relative normalized activities. This preserves
         # the former tuple dedupe semantics while allowing multiple outputs/views.
@@ -101,6 +106,9 @@ def event_identity(value: Any, event_key: str | None = None) -> str:
         return tx_hash
     payload = _get(value, "raw_payload", {})
     payload = payload if isinstance(payload, dict) else {}
+    stable_key = payload.get("_stable_event_key")
+    if isinstance(stable_key, str) and _STABLE_EVENT_KEY.fullmatch(stable_key):
+        return f"{chain}:{tx_hash}:{stable_key}"
     provider_event = payload.get("_event_id")
     if isinstance(provider_event, str) and _EVENT_ID.fullmatch(provider_event):
         return provider_event

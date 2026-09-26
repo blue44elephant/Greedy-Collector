@@ -56,7 +56,7 @@ def test_unknown_returns_safe_result_without_lookup(client, value):
     response = client.post("/api/greedy-collector/resolve", json={"input":value})
     assert response.status_code == 200
     assert response.json()["kind"] == "unknown"
-    assert len(response.json()["supported"]) == 6
+    assert len(response.json()["supported"]) == 16
     assert "normalized" not in response.json()
 
 

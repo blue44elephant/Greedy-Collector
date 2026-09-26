@@ -15,10 +15,28 @@ for key in ["ETHERSCAN_API_KEY", "ALCHEMY_API_KEY", "OPENSANCTIONS_API_KEY", "UR
     os.environ[key] = "browser-test-only-key"
 
 import main
-from greedy_collector.chains import BitcoinAdapter, EthereumAdapter
+from greedy_collector.chains import BitcoinAdapter, EthereumAdapter, BaseAdapter, ArbitrumAdapter, BnbAdapter, PolygonAdapter, SolanaAdapter
+from greedy_collector.chains.solana import base58_encode
 from greedy_collector.kyc.engine import KycScreeningEngine
 from greedy_collector.schemas import NormalizedTransaction
 from greedy_collector.chains.base import ChainDataError
+
+SOL_ADDRESS = base58_encode(bytes(range(32)))
+SOL_OTHER = base58_encode(bytes(range(2, 34)))
+SOL_MINT = base58_encode(bytes(range(32, 64)))
+SOL_SIGNATURE = base58_encode(bytes(range(64)))
+SOL_SIGNATURE_NEW = base58_encode(bytes(range(1, 65)))
+
+
+def solana_events(address, signature=SOL_SIGNATURE):
+    common = dict(chain="solana", from_address=address, to_address=SOL_OTHER,
+        timestamp=datetime(2026, 9, 11, tzinfo=timezone.utc), block_number="123",
+        direction="outgoing", source_api="solana-json-rpc")
+    native = NormalizedTransaction(tx_hash=signature, value_native="0.25", token_symbol="SOL",
+        fee="0.000005", raw_payload={"_stable_event_key":"solana-ix:0", "_public":{"event_key":"solana-ix:0", "asset_type":"native", "execution_status":"succeeded"}}, **common)
+    token = NormalizedTransaction(tx_hash=signature, value_native="1.5", token_symbol="SPL",
+        asset_contract=SOL_MINT, raw_payload={"_stable_event_key":"solana-inner:1:0", "_public":{"event_key":"solana-inner:1:0", "asset_type":"spl_token", "token_mint":SOL_MINT, "token_decimals":6, "raw_value":"1500000", "source_token_account":SOL_ADDRESS, "destination_token_account":SOL_OTHER, "source_owner_known":True, "destination_owner_known":True, "amount_basis":"parsed_instruction_amount"}}, **common)
+    return [native, token]
 
 # Browser checks use explicit manual monitoring, with no scheduler or external network access.
 main.start_monitoring = lambda: None
@@ -30,17 +48,19 @@ async def balance(address, *, chain):
         raise ChainDataError("https://provider.invalid/v2/browser-test-only-key")
     if address == "missing-ethereum-key" or address == "0x" + "5" * 40:
         raise ChainDataError("ETHERSCAN_API_KEY missing")
-    adapter = EthereumAdapter() if chain == "ethereum" else BitcoinAdapter()
+    adapter = next(cls() for cls in [BitcoinAdapter, EthereumAdapter, BaseAdapter, ArbitrumAdapter, BnbAdapter, PolygonAdapter, SolanaAdapter] if cls.chain == chain)
     adapter.validate_address(address)
-    return {"balance_native": "1.000000000000000001", "source_api": "etherscan" if address.startswith("0x") else "blockstream"}
+    if chain == "solana": return {"balance_native":"1.25", "source_api":"solana-json-rpc"}
+    balance_value = "2.5" if chain == "base" else "1.000000000000000001"
+    return {"balance_native": balance_value, "source_api": "etherscan" if chain != "bitcoin" else "blockstream"}
 
-async def transactions(address):
+async def transactions(address, *, chain):
+    if chain == "solana": return solana_events(address)
     if address == "0x" + "9" * 40:
         return []
-    chain = "ethereum" if address.startswith("0x") else "bitcoin"
     counts[address] = counts.get(address, 0) + 1
     other = "0x" + "2" * 40 if chain == "ethereum" else "1BoatSLRHtKNngkdXEeobR76b53LETtpyT"
-    base = dict(chain=chain, from_address=other, to_address=address, value_native="1", token_symbol="ETH" if chain == "ethereum" else "BTC", timestamp=datetime(2026, 9, 11, tzinfo=timezone.utc), block_number="123", direction="incoming", source_api="etherscan" if chain == "ethereum" else "blockstream")
+    base = dict(chain=chain, from_address=other, to_address=address, value_native="1", token_symbol="BTC" if chain == "bitcoin" else "ETH", timestamp=datetime(2026, 9, 11, tzinfo=timezone.utc), block_number="123", direction="incoming", source_api="blockstream" if chain == "bitcoin" else "etherscan")
     if address == "0x" + "3" * 40:
         baseline = NormalizedTransaction(tx_hash="e" * 64, **base)
         new = NormalizedTransaction(tx_hash="f" * 64, **base)
@@ -61,17 +81,33 @@ async def transactions(address):
     return rows
 
 async def transaction(tx_hash, *, chain):
+    is_btc = chain == "bitcoin"
     return NormalizedTransaction(chain=chain, tx_hash=tx_hash,
-        from_address="0x"+"1"*40 if chain == "ethereum" else "1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa",
-        to_address="0x"+"2"*40 if chain == "ethereum" else "1BoatSLRHtKNngkdXEeobR76b53LETtpyT",
-        value_native="1.000000000000000001", token_symbol="ETH" if chain == "ethereum" else "BTC",
+        from_address="1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa" if is_btc else "0x"+"1"*40,
+        to_address="1BoatSLRHtKNngkdXEeobR76b53LETtpyT" if is_btc else "0x"+"2"*40,
+        value_native="1.000000000000000001", token_symbol="BTC" if is_btc else "ETH",
         block_number="123", fee="0.00001", timestamp=datetime(2026,9,11,tzinfo=timezone.utc),
-        source_api="etherscan" if chain == "ethereum" else "blockstream")
+        source_api="blockstream" if is_btc else "etherscan")
 
-for adapter in [BitcoinAdapter, EthereumAdapter]:
+async def solana_transaction_events(tx_hash):
+    return solana_events(SOL_ADDRESS, tx_hash)
+
+solana_monitor_polls = {}
+async def solana_monitoring_delta(self, address, previous_identity, *, limit=100):
+    solana_monitor_polls[address] = solana_monitor_polls.get(address, 0) + 1
+    poll = solana_monitor_polls[address]
+    if poll == 1:
+        return {"transactions":solana_events(address, SOL_SIGNATURE_NEW), "boundary_found":True}
+    if poll == 2:
+        return {"transactions":solana_events(address, SOL_SIGNATURE_NEW), "boundary_found":True}
+    return {"transactions":[], "boundary_found":False}
+
+for adapter in [BitcoinAdapter, EthereumAdapter, BaseAdapter, ArbitrumAdapter, BnbAdapter, PolygonAdapter, SolanaAdapter]:
     adapter.lookup_transaction = AsyncMock(side_effect=partial(transaction, chain=adapter.chain))
     adapter.lookup_address = AsyncMock(side_effect=partial(balance, chain=adapter.chain))
-    adapter.transactions = AsyncMock(side_effect=transactions)
+    adapter.transactions = AsyncMock(side_effect=partial(transactions, chain=adapter.chain))
+SolanaAdapter.lookup_transaction_events = AsyncMock(side_effect=solana_transaction_events)
+SolanaAdapter.monitoring_delta = solana_monitoring_delta
 
 async def research_request(url, **kwargs):
     if "opensanctions" in url:

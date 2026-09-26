@@ -55,9 +55,18 @@ async def _monitor_chain(chain: str, wallet_id: str | None = None) -> dict:
             run_ids.append(run.id)
             previous_tx = wallet.last_seen_tx
             try:
-                result = await service.lookup_address(
-                    db, LookupRequest(chain=chain, address=wallet.address, refresh=True)
-                )
+                if previous_tx and hasattr(adapter, "monitoring_delta"):
+                    delta = await adapter.monitoring_delta(wallet.address, previous_tx)
+                    profile = await adapter.lookup_address(wallet.address)
+                    result = await service.lookup_address(
+                        db, LookupRequest(chain=chain, address=wallet.address, refresh=True),
+                        profile_override=profile, transactions_override=delta["transactions"],
+                    )
+                    result["_monitor_boundary_found"] = delta["boundary_found"]
+                else:
+                    result = await service.lookup_address(
+                        db, LookupRequest(chain=chain, address=wallet.address, refresh=True)
+                    )
                 transactions = result["transactions"]
                 
                 # FIRST-RUN DETECTION AND BASELINE ESTABLISHMENT
@@ -73,7 +82,8 @@ async def _monitor_chain(chain: str, wallet_id: str | None = None) -> dict:
                     if baseline_tx:
                         tx_hash = adapter.transfer_identity(baseline_tx)
                         block_number = baseline_tx.get("block_number") if isinstance(baseline_tx, dict) else baseline_tx.block_number
-                        wallet.last_seen_tx = tx_hash
+                        cursor = getattr(adapter, "monitoring_cursor", adapter.transfer_identity)
+                        wallet.last_seen_tx = cursor(baseline_tx)
                         wallet.last_seen_block = block_number
                     # If no baseline_tx (e.g., Bitcoin mempool-only), leave last_seen_tx as None
                     
@@ -86,13 +96,15 @@ async def _monitor_chain(chain: str, wallet_id: str | None = None) -> dict:
                 
                 # CONTINUITY LOSS DETECTION
                 # Check if previous_tx exists but is absent from current results
-                boundary_found = True
+                reported_boundary_found = result.pop("_monitor_boundary_found", None)
+                boundary_found = reported_boundary_found if reported_boundary_found is not None else True
                 if previous_tx is not None:
                     # Previous boundary exists - verify it's in current results
-                    boundary_found = any(
-                        (adapter.transfer_identity(tx) == previous_tx or tx.get("tx_hash") == previous_tx)
-                        for tx in transactions
-                    )
+                    if reported_boundary_found is None:
+                        boundary_found = any(
+                            (adapter.transfer_identity(tx) == previous_tx or tx.get("tx_hash") == previous_tx)
+                            for tx in transactions
+                        )
                     
                     if not boundary_found:
                         # Continuity loss: stored boundary not in current window
@@ -228,7 +240,8 @@ async def _monitor_chain(chain: str, wallet_id: str | None = None) -> dict:
                     )
                 wallet.last_checked = datetime.now(timezone.utc)
                 if transactions:
-                    wallet.last_seen_tx = adapter.transfer_identity(transactions[0])
+                    cursor = getattr(adapter, "monitoring_cursor", adapter.transfer_identity)
+                    wallet.last_seen_tx = cursor(transactions[0])
                     wallet.last_seen_block = transactions[0]["block_number"]
                 run.new_transactions = len(new_rows)
                 run.status = "completed"

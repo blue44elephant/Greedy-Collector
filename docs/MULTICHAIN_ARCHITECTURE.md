@@ -1,14 +1,16 @@
 # Multi-chain registry and adapter architecture
 
-Greedy Collector registers **Bitcoin (`bitcoin`)**, **Ethereum (`ethereum`)**, and
-**TRON (`tron`)**. IDs are stable persisted identifiers. MC-2 exercises the MC-1
-extension boundary with one real read-only provider adapter and no fake runtime data.
+Greedy Collector registers **Bitcoin (`bitcoin`)**, **Ethereum (`ethereum`)**, **Base (`base`)**,
+**Arbitrum One (`arbitrum`)**, **BNB Smart Chain (`bsc`)**, **Polygon (`polygon`)**, and
+**TRON (`tron`)**, and **Solana (`solana`)**. IDs are stable persisted identifiers. The four added EVM networks share
+one descriptor-configured Etherscan V2 adapter; Solana uses a separate read-only JSON-RPC adapter. No database migration or fake runtime data is used.
 
 ## Registry and adapter boundary
 
 `chains/registry.py` contains an ordered internal registry of frozen, typed
 `ChainDefinition` records: ID, display name, native symbol/precision, UTXO or
-account family, EVM compatibility, adapter class and bounded `Capability` flags.
+account family, EVM compatibility and chain ID, explorer URL, adapter class and bounded
+`Capability` flags.
 Registration rejects duplicate IDs, missing adapters and inconsistent operations.
 Optional methods on the existing `ChainAdapter` raise `unsupported_chain_capability`.
 Unknown IDs raise `unsupported_chain`; neither falls back to Ethereum.
@@ -18,6 +20,8 @@ policy belong to adapters. Generic callers use the registry; provider dispatch
 constructs only the selected adapter. Current provider transport, ordering,
 pagination and fallback remain inside each provider adapter. TRON uses the server-side
 `TRON_PRO_API_KEY`; credentials never enter registry metadata or browser code.
+Solana uses `SOLANA_RPC_URL` or the documented rate-limited public mainnet endpoint;
+the credential-bearing URL never enters responses or logs.
 
 `GET /api/greedy-collector/chains` exposes a deliberate safe metadata projection,
 never adapter objects, settings, credentials or request URLs. Browser modules load
@@ -26,7 +30,7 @@ capabilities and case comparison. No frontend build dependency was added.
 
 ## Identity and resolution
 
-Wallet identity is `(chain_id, canonical_address)`. Ethereum folds case; Bitcoin
+Wallet identity is `(chain_id, canonical_address)`. EVM addresses fold case; Bitcoin
 Bech32 folds case; Base58 remains case-sensitive. Existing legacy spelling is not
 rewritten. New wallet storage normalizes addresses; reads recognize historical
 spelling using adapter comparison rules. Labels retain explicit `any` scope and
@@ -44,22 +48,27 @@ wallet identities are chain-scoped. Cache/query fingerprints already include the
 canonical Discovery subject namespace; MC-1 does not change those fingerprints.
 
 `resolve_identifier(value, chain_hint=None)` consults registered adapter syntax
-without network calls. Existing unqualified BTC/ETH addresses and transaction IDs
-resolve as before (including response spelling and transaction precedence). An
-explicit hint selects one registered adapter; mismatch gives the existing unknown
-result. Multiple matching adapters return `ambiguous` with chain/kind possibilities.
-The browser passes chain hints on investigation handoffs. No syntax-only assumption
-is made that an EVM address uniquely identifies a future network.
+without network calls. Bare 64-hex transaction IDs resolve to Bitcoin; `0x` plus 40
+hex resolves to Ethereum by default; `0x` plus 64 hex resolves to Ethereum by default.
+Since supported EVM networks share syntax, an explicit hint is required to route an EVM
+identifier to Base, Arbitrum, BNB Smart Chain or Polygon. A hint selects one adapter;
+mismatch returns unknown. Existing TRON transaction IDs also use an explicit hint.
+Solana base58 accounts and 64-byte transaction signatures resolve locally when no
+higher-priority existing chain syntax matches.
+The Wallet workspace populates the optional selector from `/chains`; investigation handoffs
+carry the selected chain directly.
 
 ## Capabilities and Discovery
 
 Application capabilities describe supported operations, not provider configuration.
-BTC pending history and ETH token transfers remain distinct. Monitoring jobs are
-generated from capable registry entries; BTC confirmed-only initial baseline and
-ETH newest-record baseline remain adapter-owned. A limited chain cannot run Wallet
+BTC pending history remains distinct; all five registered EVM networks expose bounded
+native history and token transfers through Etherscan V2. Monitoring jobs are generated
+from capable registry entries; BTC confirmed-only initial baseline and newest-record
+account-chain baselines remain adapter-owned. A limited chain cannot run Wallet
 risk evaluation or monitoring without explicitly declaring those capabilities.
 TRON uses generic source-backed label exposure but opts out of the existing BTC/ETH
-behavioral indicators. No TRON-specific heuristic or neutral evidence is invented.
+behavioral indicators. Solana also opts out of chain-specific behavioral risk rules.
+No TRON- or Solana-specific heuristic or neutral evidence is invented.
 
 Discovery chain support and transform compatibility remain separate. Generic wallet
 transforms materialize compatible registered chains at startup; execution checks
@@ -70,11 +79,20 @@ registry validation. Query and result fingerprints retain the chain-qualified
 subject namespace, so existing Bitcoin/Ethereum identities remain unchanged.
 No ownership/claim semantics change.
 
-`chains/evm.py` shares only EVM address/transaction syntax and case normalization.
-Ethereum mainnet endpoints, chainid=1, provider configuration, ERC-20 parsing and ENS
-stay Ethereum-specific. EVM compatibility does not imply ENS support. TRON is an
-account-family chain but is not marked EVM-compatible. Native/token
-amounts remain exact strings; decimals belong to adapters/assets, never generic math.
+Solana's adapter supports bounded parsed history and instruction-derived SOL/SPL events.
+See [Solana support](SOLANA_SUPPORT.md) for RPC bounds, version support, ownership limits,
+event keys, and monitoring behavior.
+
+`chains/evm.py` owns common EVM address/transaction syntax and case normalization.
+`chains/etherscan_v2.py` owns shared V2 balance, bounded transaction/token pagination,
+normalization and transaction lookup. Network descriptors supply Etherscan `chainid`,
+native symbol/precision and explorer URL. `EthereumAdapter` alone adds the optional
+Alchemy mainnet balance fallback; ENS remains Ethereum-only. TRON is an account-family
+chain but is not marked EVM-compatible. Native/token amounts remain exact strings;
+decimals belong to adapters/assets, never generic floating-point math.
+Etherscan V2 uses a shared account key, but eligible plan coverage can vary by chain.
+See [generic EVM multi-chain support](EVM_MULTICHAIN_SUPPORT.md) for current IDs,
+provider-plan notes and identifier routing.
 
 ## Storage and audit
 
@@ -118,5 +136,6 @@ Migration `20260923_02` gives normalized transaction rows an `event_key` and use
 `tx` event; EVM token logs use a validated canonical log index; TRON keeps its
 provider event ID; Bitcoin keeps stable wallet-relative activity identity. The
 nullable `event_index` and `asset_contract` columns preserve provider event
-metadata when available. See [Transaction event identity](TRANSACTION_EVENT_IDENTITY.md)
+metadata when available. Solana uses validated `solana-ix:<outer>` and
+`solana-inner:<outer>:<inner>` keys. See [Transaction event identity](TRANSACTION_EVENT_IDENTITY.md)
 for migration and downgrade behavior.

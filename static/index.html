@@ -36,13 +36,18 @@
             <label for="wallet-address">Wallet address or transaction hash</label>
             <input id="wallet-address" name="address" type="text" autocomplete="off" autocapitalize="none" spellcheck="false" placeholder="Search wallet address or transaction hash" aria-describedby="input-note">
           </div>
+          <div class="chain-hint-field">
+            <label for="chain-hint">Network hint (optional)</label>
+            <select id="chain-hint" aria-describedby="chain-hint-note"><option value="">Auto-detect</option></select>
+          </div>
           <button id="lookup-button" type="submit">Search</button>
           <button id="stored-button" type="button" class="secondary">View stored</button>
         </fieldset>
       </form>
-      <p class="muted small">Supported: Bitcoin, Ethereum, and TRON addresses, plus supported transaction identifiers.</p>
+      <p class="muted small">Supported: Bitcoin, Ethereum, Base, Arbitrum, BNB Smart Chain, Polygon and TRON addresses, plus supported transaction identifiers.</p>
       <p id="input-note" class="input-note">Use public blockchain identifiers only. Never enter a private key or recovery phrase.</p>
-      <p class="muted small">Bitcoin needs no API key. Ethereum requires Etherscan configured on the server.</p>
+      <p id="chain-hint-note" class="muted small">Ethereum is the default for shared EVM syntax. Choose a network hint for Base, Arbitrum, BNB Smart Chain, Polygon or TRON transaction IDs.</p>
+      <p class="muted small">Bitcoin needs no key. EVM lookups use Etherscan on the server; Ethereum may use optional Alchemy balance fallback. Etherscan plan coverage varies by chain.</p>
       
     </section>
 

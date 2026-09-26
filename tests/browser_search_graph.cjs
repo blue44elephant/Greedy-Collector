@@ -9,21 +9,32 @@ module.exports=async({evaluate,call,work})=>{
     await call('Input.dispatchKeyEvent',{type:'keyUp',key:'Enter',code:'Enter',windowsVirtualKeyCode:13});
     await evaluate(`waitFor(()=>searchRequests.length>0&&document.getElementById('lookup-form').dataset.busy==='false')`);
   };
-  assert.equal(await evaluate("document.querySelector('#lookup-form select')"),null);
+  assert.ok(await evaluate("!!document.querySelector('#chain-hint')"));
+  assert.equal(await evaluate("document.getElementById('chain-hint').value"), '');
   await search('unsupported identifier');
   assert.deepEqual(await evaluate('searchRequests.map(r=>r.url)'),['/api/greedy-collector/resolve']);
   assert.ok(await evaluate("document.querySelector('#lookup-form .operation-status').innerText.includes('could not identify')"));
-  for(const value of ['a'.repeat(64),'0x'+'b'.repeat(64)]){
+  await search('11111111111111111111111111111111');
+  assert.deepEqual(await evaluate('searchRequests.map(r=>r.url)'),['/api/greedy-collector/resolve']);
+  assert.ok(await evaluate("document.querySelector('#lookup-form .operation-status').innerText.includes('matches more than one')"));
+  for(const value of ['a'.repeat(64),'0x'+'b'.repeat(64),'1GMkH3brNXiNNs1tiFZHu4yZSRrzJwxi5wB9bHFtMinfCXNnR1adh8Vo8NTheK4evneedH4qmvjeqcBBNAefgS']){
     await search(value);
     assert.deepEqual(await evaluate('searchRequests.map(r=>r.url)'),['/api/greedy-collector/resolve','/api/greedy-collector/lookup/tx']);
     assert.equal(await evaluate("document.getElementById('transaction-result').hidden"),false);
     assert.equal(await evaluate("document.getElementById('results').hidden"),true);
     assert.ok(await evaluate("!!button('#transaction-result','Investigate wallet')"));
+    if (value.startsWith('1GMkH3')) {
+      assert.ok(await evaluate("document.getElementById('transaction-result').innerText.includes('2 normalized transfer events')"));
+      assert.ok(await evaluate("document.getElementById('transaction-result').innerText.includes('solana-inner:1:0')"));
+      assert.ok(await evaluate("['0.25','SOL','1.5','SPL'].every(value=>document.getElementById('transaction-result').innerText.includes(value))"));
+    }
   }
   await evaluate(`searchRequests.length=0;button('#transaction-result','Investigate wallet').click();waitFor(()=>document.getElementById('lookup-form').dataset.busy==='false')`);
   assert.deepEqual(await evaluate('searchRequests.filter(r=>!r.url.startsWith("/api/greedy-collector/attribution/claims?")).map(r=>r.url)'),['/api/greedy-collector/resolve','/api/greedy-collector/lookup/address','/api/greedy-collector/labels']);
   assert.equal(await evaluate('searchRequests.filter(r=>r.url.startsWith("/api/greedy-collector/attribution/claims?")).length'),1);
-  await evaluate(`document.getElementById('wallet-graph').click();document.querySelector('#graph-workspace form').requestSubmit();waitFor(()=>document.querySelector('#graph-workspace form').dataset.busy==='false')`);
+  assert.equal(await evaluate("document.getElementById('result-chain').textContent"),'Solana');
+  assert.equal(await evaluate("document.getElementById('balance').textContent"),'1.25 SOL');
+  assert.ok(await evaluate("['0.25','SOL','1.5','SPL'].every(value=>document.getElementById('transaction-rows').innerText.includes(value))"));  await evaluate(`document.getElementById('wallet-graph').click();document.querySelector('#graph-workspace form').requestSubmit();waitFor(()=>document.querySelector('#graph-workspace form').dataset.busy==='false')`);
   const positions=await evaluate("[...document.querySelectorAll('.graph-node')].map(n=>[n.dataset.nodeId,n.getAttribute('transform')])");
   assert.equal(new Set(positions.map(row=>row[0])).size,positions.length);
   const initial=await evaluate("document.querySelector('#graph-workspace svg').getAttribute('viewBox')");

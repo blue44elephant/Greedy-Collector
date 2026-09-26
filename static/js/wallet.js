@@ -6,7 +6,7 @@ import {addToCaseButton} from "./case_actions.js";
 import {readLabels, labelsFor, labelCards} from "./label_ui.js";
 import {api} from "./api.js";
 import {byId, text, element, dateText, shortValue, action, run, UserError} from "./ui.js";
-const providerNames = {blockstream:"Blockstream", mempool_space:"Mempool.space", etherscan:"Etherscan", alchemy:"Alchemy", trongrid:"TronGrid", trongrid_trc20:"TronGrid TRC-20"};
+const providerNames = {blockstream:"Blockstream", mempool_space:"Mempool.space", etherscan:"Etherscan", alchemy:"Alchemy", trongrid:"TronGrid", trongrid_trc20:"TronGrid TRC-20", "solana-json-rpc":"Solana JSON-RPC"};
 let navigate;
 export function investigate(chain, address) {
   if (byId("lookup-form").dataset.busy === "true") return;
@@ -58,8 +58,8 @@ function renderLookup(data, stored = false, labels = [], labelsUnavailable = fal
       row.children[index].replaceChildren(shortValue([tx.tx_hash, tx.direction, tx.from_address, tx.to_address][index]));
     });
     row.children[4].className = "numeric";
-    if (tx.asset_type === "trc20") {
-      const details = [tx.token_name, tx.token_contract, tx.token_decimals != null ? `${tx.token_decimals} decimals` : null, tx.raw_value != null ? `raw ${tx.raw_value}` : null, tx.confirmed === true ? "Confirmed" : null].filter(Boolean).join(" · ");
+    if (["trc20", "erc20", "spl_token", "token2022"].includes(tx.asset_type)) {
+      const details = [tx.token_name, tx.token_contract || tx.token_mint || tx.asset_contract, tx.token_decimals != null ? `${tx.token_decimals} decimals` : null, tx.raw_value != null ? `raw ${tx.raw_value}` : null, tx.confirmed === true ? "Confirmed" : null].filter(Boolean).join(" · ");
       row.children[5].replaceChildren(element("span", tx.token_symbol || "TOKEN"), element("span", details, "muted small"));
     }
     rows.append(row);
@@ -137,7 +137,12 @@ async function lookup(stored, chain_hint = undefined) {
   byId("results").hidden = byId("transaction-result").hidden = true;
   return run(form, async () => {
     if (!input) throw new UserError("Enter a supported wallet address or transaction hash.");
-    const resolved = await api("/resolve", {method:"POST", body:{input, chain_hint}});
+    const selectedHint = chain_hint ?? (byId("chain-hint").value || undefined);
+    const resolved = await api("/resolve", {method:"POST", body:{input, ...(selectedHint ? {chain_hint:selectedHint} : {})}});
+    if (resolved.kind === "ambiguous") {
+      const choices = (resolved.possibilities || []).map(item => `${chainMetadata(item.chain)?.display_name ?? item.chain} ${item.kind}`).join(" / ");
+      throw new UserError(`This value matches more than one supported identifier format (${choices}). Choose a Network hint to continue.`);
+    }
     if (!["address", "transaction"].includes(resolved.kind)) {
       throw new UserError(`Greedy Collector could not identify this value as a supported wallet address or transaction hash. Supported: ${chains.map(row => row[1]).join("/")} addresses and supported transaction identifiers.`);
     }
@@ -170,27 +175,38 @@ async function lookup(stored, chain_hint = undefined) {
 function renderTransaction(tx) {
   const host = byId("transaction-result");
   const heading = element("h2", "Transaction"); heading.tabIndex = -1;
+  const events = Array.isArray(tx.events) ? tx.events : null;
   host.replaceChildren(heading, element("p", tx.tx_hash, "full-address"));
+  if (events) host.append(element("p", `${events.length} normalized transfer event${events.length === 1 ? "" : "s"} returned.`, "muted small"));
+  const records = events || [tx];
+  for (const record of records) {
+  const eventHeading = events ? element("h3", record.event_key || "Transaction activity") : null;
+  if (eventHeading) host.append(eventHeading);
   const rows = element("dl", undefined, "metadata");
-  for (const [label, value] of [["Chain", tx.chain], ["Amount", tx.value_native], ["Asset", tx.token_symbol],
-    ["Asset type", tx.asset_type], ["Token name", tx.token_name], ["Token contract", tx.token_contract], ["Token decimals", tx.token_decimals], ["Raw value", tx.raw_value], ["Confirmation", tx.confirmed === true ? "Confirmed" : null],
-    ["Block", tx.block_number], ["Timestamp", tx.timestamp ? dateText(tx.timestamp) : hasCapability(tx.chain,'pending_transactions') && !tx.block_number ? "Unconfirmed" : null],
-    ["Fee", tx.fee], ["Provider", providerNames[tx.source_api]]]) {
+  for (const [label, value] of [["Chain", record.chain || tx.chain], ["Amount", record.value_native], ["Asset", record.token_symbol],
+    ["Asset type", record.asset_type], ["Token mint", record.token_mint || record.asset_contract || record.token_contract], ["Token decimals", record.token_decimals], ["Raw value", record.raw_value], ["Execution", record.execution_status],
+    ["Source token account", record.source_token_account], ["Destination token account", record.destination_token_account], ["Amount basis", record.amount_basis],
+    ["Confirmation", record.confirmed === true ? "Confirmed" : null], ["Block", record.block_number], ["Timestamp", record.timestamp ? dateText(record.timestamp) : hasCapability(record.chain || tx.chain,'pending_transactions') && !record.block_number ? "Unconfirmed" : null],
+    ["Fee", record.fee], ["Provider", providerNames[record.source_api]]]) {
     if (value == null || value === "") continue;
     const row = element("div"); row.append(element("dt", label), element("dd", value)); rows.append(row);
   }
-  host.append(rows, addToCaseButton("transaction", tx.chain, tx.tx_hash));
-  for (const [label, address] of [["Sender", tx.from_address], ["Recipient", tx.to_address]]) {
+  host.append(rows);
+  for (const [label, address] of [["Sender", record.from_address], ["Recipient", record.to_address]]) {
     if (!address) continue;
     const row = element("div", undefined, "toolbar");
-    row.append(element("strong", label), shortValue(address), action("Investigate wallet", () => investigate(tx.chain,address)));
+    row.append(element("strong", label), shortValue(address), action("Investigate wallet", () => investigate(record.chain || tx.chain,address)));
     host.append(row);
   }
+  }
+  host.append(addToCaseButton("transaction", tx.chain, tx.tx_hash));
   host.append(element("p", "This is the provider's normalized transaction record. Bitcoin sender/recipient endpoints are representative. Transaction lookup does not automatically persist a wallet graph; investigate a wallet to collect its records.", "bounded-note"));
   host.hidden = false; heading.focus();
 }
 export function initWallet(go) {
   navigate = go;
+  const hint = byId("chain-hint");
+  for (const [id, name] of chains) { const option = element("option", name); option.value = id; hint.append(option); }
   byId("lookup-form").addEventListener("submit", event => {event.preventDefault(); lookup(false);});
   byId("stored-button").addEventListener("click", () => lookup(true));
   byId("wallet-graph").addEventListener("click", () => navigate("graph"));

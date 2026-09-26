@@ -37,11 +37,17 @@ router = APIRouter(prefix="/api/greedy-collector", tags=["Greedy Collector"])
 service = GreedyCollectorService()
 
 
-def _provider_error(exc: ChainDataError) -> str:
-    if "ETHERSCAN_API_KEY" in str(exc) or "ALCHEMY_API_KEY" in str(exc):
+def _provider_error(exc: ChainDataError, chain: str | None = None) -> str:
+    if "ETHERSCAN_API_KEY" in str(exc):
+        from .chains import get_chain
+        name=get_chain(chain).display_name if chain else "Blockchain"
+        return f"{name} provider configuration is unavailable."
+    if "ALCHEMY_API_KEY" in str(exc):
         return "Ethereum provider configuration is unavailable."
     if "tron_configuration_unavailable" in str(exc):
         return "TRON provider configuration is unavailable."
+    if "solana_configuration_unavailable" in str(exc):
+        return "Solana RPC configuration is unavailable."
     return "Blockchain provider request failed. Try again later."
 
 
@@ -88,7 +94,7 @@ async def lookup_address(payload: LookupRequest, db: Session = Depends(get_db)):
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     except ChainDataError as exc:
-        raise HTTPException(status_code=502, detail=_provider_error(exc)) from exc
+        raise HTTPException(status_code=502, detail=_provider_error(exc, payload.chain)) from exc
 
 
 @router.post("/lookup/tx")
@@ -98,7 +104,7 @@ async def lookup_tx(payload: TransactionLookupRequest):
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     except ChainDataError as exc:
-        raise HTTPException(status_code=502, detail=_provider_error(exc)) from exc
+        raise HTTPException(status_code=502, detail=_provider_error(exc, payload.chain)) from exc
 
 
 @router.get("/address/{chain}/{address}")

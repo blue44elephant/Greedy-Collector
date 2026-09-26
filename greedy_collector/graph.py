@@ -183,6 +183,12 @@ class GraphStore:
         edges = []
         from .transaction_identity import build_event_key
         for tx in transactions:
+            raw_payload = tx.raw_payload if isinstance(tx.raw_payload, dict) else {}
+            public = raw_payload.get("_public", {}) if isinstance(raw_payload.get("_public", {}), dict) else {}
+            provenance_keys = ("asset_type", "token_mint", "token_decimals", "raw_value",
+                "source_token_account", "destination_token_account", "source_owner_known",
+                "destination_owner_known", "amount_basis", "execution_status")
+            event_provenance = {key: public[key] for key in provenance_keys if key in public}
             for address in [tx.from_address, tx.to_address]:
                 if not address:
                     continue
@@ -211,6 +217,7 @@ class GraphStore:
                         "event_key": tx.event_key or build_event_key(tx),
                         "event_index": tx.event_index,
                         "asset_contract": tx.asset_contract,
+                        "event_provenance": event_provenance,
                         "timestamp": tx.timestamp.isoformat() if tx.timestamp else None,
                     }
                 )

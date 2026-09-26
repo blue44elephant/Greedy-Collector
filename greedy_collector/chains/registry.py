@@ -41,6 +41,8 @@ class ChainDefinition:
     capabilities: frozenset[Capability]
     native_decimals: int
     evm_compatible: bool = False
+    evm_chain_id: int | None = None
+    explorer_url: str | None = None
 
     def __post_init__(self):
         if not isinstance(self.chain_id,str) or not re.fullmatch(r'[a-z][a-z0-9_]{0,31}', self.chain_id):
@@ -70,16 +72,23 @@ class ChainDefinition:
             raise ValueError('Inconsistent chain capabilities')
         if self.evm_compatible and self.family != ChainFamily.ACCOUNT:
             raise ValueError('EVM requires account family')
+        if self.evm_chain_id is not None and (not self.evm_compatible or type(self.evm_chain_id) is not int or self.evm_chain_id <= 0):
+            raise ValueError('Invalid EVM chain ID')
+        if self.explorer_url is not None and not self.explorer_url.startswith('https://'):
+            raise ValueError('Explorer URL must use HTTPS')
 
     def require(self,*capabilities):
         if not set(capabilities) <= self.capabilities: raise UnsupportedCapability()
         return self
 
     def public_metadata(self):
-        return dict(id=self.chain_id,display_name=self.display_name,native_symbol=self.native_symbol,
-                    family=self.family.value,evm_compatible=self.evm_compatible,native_decimals=self.native_decimals,
-                    capabilities=[c.value for c in Capability if c in self.capabilities],
-                    address_case=self.adapter.address_case)
+        data=dict(id=self.chain_id,display_name=self.display_name,native_symbol=self.native_symbol,
+                  family=self.family.value,evm_compatible=self.evm_compatible,native_decimals=self.native_decimals,
+                  capabilities=[c.value for c in Capability if c in self.capabilities],
+                  address_case=self.adapter.address_case)
+        if self.evm_chain_id is not None:data['evm_chain_id']=self.evm_chain_id
+        if self.explorer_url is not None:data['explorer_url']=self.explorer_url
+        return data
 
 class ChainRegistry:
     def __init__(self,definitions=()):
@@ -101,14 +110,21 @@ def _builtins():
     from .bitcoin import BitcoinAdapter
     from .ethereum import EthereumAdapter
     from .tron import TronAdapter
+    from .solana import SolanaAdapter
+    from .evm_networks import BaseAdapter,ArbitrumAdapter,BnbAdapter,PolygonAdapter
     common=frozenset({Capability.ADDRESS_VALIDATION,Capability.BALANCE,
         Capability.TRANSACTION_HISTORY,Capability.TRANSACTION_LOOKUP,Capability.COUNTERPARTIES,
         Capability.GRAPH,Capability.MONITORING,Capability.DISCOVERY,Capability.LABELS,
         Capability.CASES,Capability.ATTRIBUTION,Capability.RISK})
     return ChainRegistry((
         ChainDefinition('bitcoin','Bitcoin','BTC',ChainFamily.UTXO,BitcoinAdapter,common|{Capability.PENDING_TRANSACTIONS},8),
-        ChainDefinition('ethereum','Ethereum','ETH',ChainFamily.ACCOUNT,EthereumAdapter,common|{Capability.TOKEN_TRANSFERS},18,True),
-        ChainDefinition('tron','TRON','TRX',ChainFamily.ACCOUNT,TronAdapter,common|{Capability.TOKEN_TRANSFERS},6)))
+        ChainDefinition('ethereum','Ethereum','ETH',ChainFamily.ACCOUNT,EthereumAdapter,common|{Capability.TOKEN_TRANSFERS},18,True,1,'https://etherscan.io'),
+        ChainDefinition('base','Base','ETH',ChainFamily.ACCOUNT,BaseAdapter,common|{Capability.TOKEN_TRANSFERS},18,True,8453,'https://basescan.org'),
+        ChainDefinition('arbitrum','Arbitrum One','ETH',ChainFamily.ACCOUNT,ArbitrumAdapter,common|{Capability.TOKEN_TRANSFERS},18,True,42161,'https://arbiscan.io'),
+        ChainDefinition('bsc','BNB Smart Chain','BNB',ChainFamily.ACCOUNT,BnbAdapter,common|{Capability.TOKEN_TRANSFERS},18,True,56,'https://bscscan.com'),
+        ChainDefinition('polygon','Polygon','POL',ChainFamily.ACCOUNT,PolygonAdapter,common|{Capability.TOKEN_TRANSFERS},18,True,137,'https://polygonscan.com'),
+        ChainDefinition('tron','TRON','TRX',ChainFamily.ACCOUNT,TronAdapter,common|{Capability.TOKEN_TRANSFERS},6),
+        ChainDefinition('solana','Solana','SOL',ChainFamily.ACCOUNT,SolanaAdapter,common|{Capability.TOKEN_TRANSFERS},9,False,None,'https://explorer.solana.com')))
 
 REGISTRY=_builtins()
 def get_chain(chain_id):return REGISTRY.get_chain(chain_id)

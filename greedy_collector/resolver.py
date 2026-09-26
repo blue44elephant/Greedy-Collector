@@ -22,8 +22,16 @@ def resolve_identifier(value: str, chain_hint: str | None = None, *, registry=No
             # Preserve resolver response spelling; persistence uses normalize_address.
             matches.append(dict(kind='address',chain=definition.chain_id,normalized=address,lookup_type='address'))
     if len(matches)==1:return matches[0]
+    if matches and chain_hint is None:
+        # EVM syntax is shared across networks. Keep Ethereum mainnet as the
+        # compatibility default; a non-Ethereum network requires an explicit hint.
+        evm_matches=[m for m in matches if registry.get_chain(m['chain']).evm_compatible]
+        if len(evm_matches)==len(matches):
+            default=next((m for m in evm_matches if m['chain']=='ethereum'),None)
+            if default:return default
     if matches:return dict(kind='ambiguous',possibilities=[dict(chain=m['chain'],kind=m['kind']) for m in matches],message='Specify a chain for this identifier.')
     supported=[d.display_name+' address' for d in registry.list_chains()]
-    supported += [d.display_name+' transaction '+('hash' if d.adapter.transaction_pattern.pattern.startswith('0x') else 'ID')
+    supported += [d.display_name+' '+getattr(d.adapter,'transaction_identifier_name',
+                  'transaction '+('hash' if d.adapter.transaction_pattern.pattern.startswith('0x') else 'ID'))
                   for d in registry.list_chains() if Capability.TRANSACTION_LOOKUP in d.capabilities]
     return dict(kind='unknown',supported=supported,message='Greedy Collector could not identify this value as a supported wallet address or transaction hash.')

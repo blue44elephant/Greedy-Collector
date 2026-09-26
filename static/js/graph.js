@@ -7,6 +7,7 @@ import {api} from "./api.js";
 import {byId, panel, element, makeForm, chainAddress, table, shortValue, action, dateText, UserError} from "./ui.js";
 import {investigate} from "./wallet.js";
 import {layoutGraph, connectionPath, nodeKey, compact} from "./graph_layout.js";
+import {chainMetadata} from "./chains.js";
 
 const NS = "http://www.w3.org/2000/svg";
 function svgNode(tag, attrs = {}, label) {
@@ -71,27 +72,34 @@ export function renderGraph(host, graph, chain, labels = null) {
     const path = connectionPath(from, to, layout.bounds[1]+20);
     node.append(svgNode("path", {d:path, class:"edge-hit"}), svgNode("path", {d:path, class:"edge-line", "marker-end":"url(#graph-arrow)"}));
     node.append(svgNode("title", {}, `${group.source} → ${group.target}\n${group.records.length} transaction records. Select to inspect.`));
-    selectable(node, () => {
+      selectable(node, () => {
       detail.replaceChildren(element("h3", "Directional relationship"), element("p", `${group.source} → ${group.target}`, "full-address"),
         element("p", `${group.records.length} underlying transaction records. Amounts are listed individually; no mixed-asset totals are calculated.`), edgeTable(group.records));
+      const provenance = group.records.filter(record => record.event_provenance && Object.keys(record.event_provenance).length);
+      if (provenance.length) {
+        const disclosure = element("details"); disclosure.append(element("summary", `Transfer provenance (${provenance.length} events)`));
+        disclosure.append(element("pre", JSON.stringify(provenance.map(record => ({tx_hash:record.tx_hash,event_key:record.event_key,...record.event_provenance})), null, 2)));
+        detail.append(disclosure);
+      }
     });
     svg.append(node);
   }
   for (const node of layout.nodes) {
     const position = layout.positions.get(key(node.id));
     const annotations = labelsFor(labels || [], node.chain || chain, node.id);
+    const entityKind = chainMetadata(node.chain || chain)?.family === "account" ? "Account/address" : "Wallet";
     const displayLabel = annotations[0]?.label || (labels === null ? node.label : node.id);
     const named = displayLabel && displayLabel !== node.id;
     const group = svgNode("g", {class:`graph-node${node.is_focus ? " is-focus" : ""}`, "data-node-id":node.id,
       "data-depth":position.depth ?? "unconnected", transform:`translate(${position.x} ${position.y})`, "aria-label":`Select ${node.label || node.id}`});
     group.append(svgNode("rect", {width:position.width, height:position.height, rx:9}));
     group.append(svgNode("text", {x:13,y:23,class:"entity-name"}, named ? displayLabel.length > 28 ? displayLabel.slice(0,25)+"…" : displayLabel : compact(node.id)));
-    group.append(svgNode("text", {x:13,y:43,class:"entity-address"}, named ? compact(node.id) : "Wallet entity"));
+    group.append(svgNode("text", {x:13,y:43,class:"entity-address"}, named ? compact(node.id) : `${entityKind} entity`));
     group.append(svgNode("text", {x:13,y:63,class:"entity-chain"}, `${node.chain || chain}${annotations[0] ? " · " + annotations[0].type : ""}${node.is_focus ? " · FOCUS" : ""}`));
     group.append(svgNode("title", {}, `${displayLabel || node.id}\n${node.id}\n${node.chain || chain}`));
     selectable(group, () => {
       const count = graph.edges.filter(edge => key(edge.source) === key(node.id) || key(edge.target) === key(node.id)).length;
-      detail.replaceChildren(element("h3", named ? displayLabel : "Wallet entity"), element("p", node.id, "full-address"),
+      detail.replaceChildren(element("h3", named ? displayLabel : `${entityKind} entity`), element("p", node.id, "full-address"),
         element("p", `${node.chain || chain} · ${node.is_focus ? "Focus entity" : "Related entity"} · ${count} stored transaction relationships`),
         action("Investigate wallet", () => investigate(node.chain || chain, node.id)),
         addToCaseButton("wallet", node.chain || chain, node.id), labelCards(annotations));
