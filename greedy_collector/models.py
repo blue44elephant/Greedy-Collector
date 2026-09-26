@@ -59,16 +59,11 @@ class Transaction(Base):
     direction: Mapped[str] = mapped_column(String(16), default="unknown")
     source_api: Mapped[str] = mapped_column(String(64), default="")
     raw_payload: Mapped[dict] = mapped_column(JSON, default=dict)
+    event_key: Mapped[str] = mapped_column(String(160), nullable=False, default="tx", server_default="'tx'")
+    event_index: Mapped[str | None] = mapped_column(String(80), index=True)
+    asset_contract: Mapped[str | None] = mapped_column(String(128), index=True)
     __table_args__ = (
-        UniqueConstraint(
-            "chain",
-            "tx_hash",
-            "from_address",
-            "to_address",
-            "value_native",
-            "token_symbol",
-            name="uq_transaction_transfer",
-        ),
+        UniqueConstraint("chain", "tx_hash", "event_key", name="uq_transaction_event_identity"),
     )
 
 

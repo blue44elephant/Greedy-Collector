@@ -54,10 +54,10 @@ class ChainAdapter(ABC):
         return transactions[0] if transactions else None
 
     def transfer_identity(self, transaction) -> str:
-        """Stable normalized transfer identity without changing the DB schema."""
-        if isinstance(transaction, dict):
-            return transaction.get("event_id") or transaction.get("tx_hash", "")
-        return transaction.raw_payload.get("_event_id") or transaction.tx_hash
+        """Stable chain-scoped event identity used by graph and monitoring."""
+        from ..transaction_identity import event_identity
+        persisted_key = transaction.get("event_key") if isinstance(transaction, dict) else getattr(transaction, "event_key", None)
+        return event_identity(transaction, persisted_key)
 
     def __init__(self):
         self.settings = get_settings()

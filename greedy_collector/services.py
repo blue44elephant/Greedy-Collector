@@ -51,19 +51,9 @@ class GreedyCollectorService:
         transactions = await adapter.transactions(request.address)
         labels = self._labels_for_transactions(db, transactions)
 
+        from .transaction_identity import persist_normalized_event
         for tx in transactions:
-            exists = db.scalar(
-                select(Transaction.id).where(
-                    Transaction.chain == tx.chain,
-                    Transaction.tx_hash == tx.tx_hash,
-                    Transaction.from_address == tx.from_address,
-                    Transaction.to_address == tx.to_address,
-                    Transaction.value_native == tx.value_native,
-                    Transaction.token_symbol == tx.token_symbol,
-                )
-            )
-            if not exists:
-                db.add(Transaction(**(tx.model_dump() if hasattr(tx, "model_dump") else tx.dict())))
+            persist_normalized_event(db, tx)
         db.flush()
 
         exposure_paths = self._exposure_paths(db, request.chain, request.address, 3)
@@ -504,6 +494,9 @@ class GreedyCollectorService:
     @staticmethod
     def _tx_dict(tx: NormalizedTransaction) -> dict:
         data = tx.model_dump(exclude={"raw_payload"}) if hasattr(tx, "model_dump") else tx.dict(exclude={"raw_payload"})
+        from .transaction_identity import build_event_key, event_identity
+        data["event_key"] = build_event_key(tx)
+        data["event_identity"] = event_identity(tx, data["event_key"])
         public = tx.raw_payload.get("_public") if isinstance(tx.raw_payload, dict) else None
         if isinstance(public, dict):
             data.update(public)

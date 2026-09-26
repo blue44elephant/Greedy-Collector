@@ -297,19 +297,12 @@ class EthereumAdapter(EvmAdapter):
         # Combine and globally sort by timestamp descending
         combined = normal + tokens
         
-        # Deduplicate conservatively using transaction identity semantics:
-        # (chain, tx_hash, from_address, to_address, value_native, token_symbol)
+        # Token logs use their protocol position; native records remain tx-scoped.
+        from ..transaction_identity import build_event_key
         seen = set()
         deduplicated = []
         for tx in combined:
-            identity = (
-                tx.chain,
-                tx.tx_hash,
-                tx.from_address,
-                tx.to_address,
-                tx.value_native,
-                tx.token_symbol,
-            )
+            identity = (tx.chain, tx.tx_hash, build_event_key(tx))
             if identity not in seen:
                 seen.add(identity)
                 deduplicated.append(tx)
@@ -369,17 +362,35 @@ class EthereumAdapter(EvmAdapter):
         )
 
     def _normalize_token(self, row: dict, focus_address: str) -> NormalizedTransaction:
-        decimals = int(row.get("tokenDecimal", 0) or 0)
+        from ..transaction_identity import normalize_event_index
+        try:
+            decimals = int(row.get("tokenDecimal", 0) or 0)
+            event_index = normalize_event_index(row.get("logIndex", row.get("log_index")))
+        except (TypeError, ValueError, OverflowError):
+            raise ChainDataError("Etherscan returned malformed token event metadata") from None
+        if decimals < 0 or decimals > 255:
+            raise ChainDataError("Etherscan returned malformed token event metadata")
+        contract = row.get("contractAddress", row.get("tokenContractAddress"))
+        if contract is not None:
+            if not isinstance(contract, str) or not re.fullmatch(r"0x[0-9a-fA-F]{40}", contract):
+                raise ChainDataError("Etherscan returned malformed token event metadata")
+            contract = contract.lower()
+        raw_value = str(row.get("value", "0"))
         divisor = Decimal(10) ** decimals
         sender = row.get("from", "")
         timestamp = row.get("timeStamp")
+        public = {
+            "asset_type": "erc20", "token_contract": contract,
+            "token_name": str(row.get("tokenName", ""))[:255],
+            "token_decimals": decimals, "raw_value": raw_value,
+        }
         return NormalizedTransaction(
             tx_hash=row.get("hash", ""),
             chain=self.chain,
             from_address=sender,
             to_address=row.get("to", "") or "",
-            value_native=str(Decimal(str(row.get("value", "0"))) / divisor),
-            token_symbol=row.get("tokenSymbol", "TOKEN"),
+            value_native=str(Decimal(raw_value) / divisor),
+            token_symbol=str(row.get("tokenSymbol", "TOKEN"))[:32],
             timestamp=datetime.fromtimestamp(int(timestamp), timezone.utc)
             if timestamp
             else None,
@@ -389,5 +400,7 @@ class EthereumAdapter(EvmAdapter):
             if focus_address and sender.lower() == focus_address.lower()
             else "incoming",
             source_api="etherscan_token",
-            raw_payload=row,
+            raw_payload={**row, "_public": public},
+            event_index=event_index,
+            asset_contract=contract,
         )

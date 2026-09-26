@@ -110,3 +110,13 @@ Audit categories:
 
 Normal additions do not require rewriting generic workspaces or a chain-enum migration.
 New algorithms, providers, token semantics or transforms still require their own tests.
+
+## Transaction event identity
+
+Migration `20260923_02` gives normalized transaction rows an `event_key` and uses
+`(chain, tx_hash, event_key)` for storage uniqueness. Native transactions use one
+`tx` event; EVM token logs use a validated canonical log index; TRON keeps its
+provider event ID; Bitcoin keeps stable wallet-relative activity identity. The
+nullable `event_index` and `asset_contract` columns preserve provider event
+metadata when available. See [Transaction event identity](TRANSACTION_EVENT_IDENTITY.md)
+for migration and downgrade behavior.

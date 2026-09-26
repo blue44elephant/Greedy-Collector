@@ -384,6 +384,11 @@ class TronAdapter(ChainAdapter):
             "event_index": row.get("event_index", row.get("log_index")),
         }
         event_id = self._event_id("trc20", event_values)
+        from ..transaction_identity import normalize_event_index
+        try:
+            event_index = normalize_event_index(event_values["event_index"])
+        except ValueError:
+            raise ChainDataError("tron_invalid_provider_response") from None
         public = {
             "asset_type": "trc20",
             "token_contract": contract,
@@ -406,4 +411,6 @@ class TronAdapter(ChainAdapter):
             direction="outgoing" if focus_address and sender == focus_address else "incoming",
             source_api="trongrid_trc20",
             raw_payload={"_event_id": event_id, "_public": public, "provider": row},
+            event_index=event_index,
+            asset_contract=contract,
         )

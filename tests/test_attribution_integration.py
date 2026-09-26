@@ -5,6 +5,7 @@ import pytest
 from tests.test_attribution_api import api,migrated_template,claim,attach,assess,ok,API,P,ETH,BTC
 from tests.test_ui import ui_client,no_monitoring
 from greedy_collector.models import Transaction,Address,RiskResult
+from greedy_collector.transaction_identity import legacy_event_key
 from sqlalchemy.orm import Session
 
 ROOT=Path(__file__).resolve().parents[1]
@@ -25,7 +26,9 @@ def test_graph_snapshot_and_saved_risk_do_not_change_from_claims(api):
     with Session(engine) as db:
         db.add(Address(chain='ethereum',address=address,balance_native='7'))
         for amount in ['1','2']:
-            db.add(Transaction(chain='ethereum',tx_hash='same-hash-test',from_address=address,to_address=other,value_native=amount,token_symbol='ETH',source_api='test-only'))
+            activity={'chain':'ethereum','tx_hash':'same-hash-test','from_address':address,
+                'to_address':other,'value_native':amount,'token_symbol':'ETH','asset_contract':None}
+            db.add(Transaction(**activity, event_key=legacy_event_key(activity), source_api='test-only'))
         db.commit()
     graph_path=API+'/address/ethereum/'+address+'/graph?hops=2'
     before=ok(client.get(graph_path))

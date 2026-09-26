@@ -22,6 +22,9 @@ class NormalizedTransaction(BaseModel):
     direction: str = "unknown"
     source_api: str
     raw_payload: dict[str, Any] = Field(default_factory=dict)
+    event_key: str | None = Field(default=None, max_length=160)
+    event_index: str | None = Field(default=None, max_length=80)
+    asset_contract: str | None = Field(default=None, max_length=128)
 
 
 class LookupRequest(BaseModel):

@@ -90,7 +90,7 @@ async def _monitor_chain(chain: str, wallet_id: str | None = None) -> dict:
                 if previous_tx is not None:
                     # Previous boundary exists - verify it's in current results
                     boundary_found = any(
-                        adapter.transfer_identity(tx) == previous_tx
+                        (adapter.transfer_identity(tx) == previous_tx or tx.get("tx_hash") == previous_tx)
                         for tx in transactions
                     )
                     
@@ -116,7 +116,7 @@ async def _monitor_chain(chain: str, wallet_id: str | None = None) -> dict:
                 # Normal operation: boundary found or this is first-run
                 new_rows = []
                 for tx in transactions:
-                    if previous_tx and adapter.transfer_identity(tx) == previous_tx:
+                    if previous_tx and (adapter.transfer_identity(tx) == previous_tx or tx.get("tx_hash") == previous_tx):
                         break
                     new_rows.append(tx)
 

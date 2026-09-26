@@ -42,6 +42,7 @@ class GraphStore:
     def store_transactions(self, transactions: list[NormalizedTransaction]) -> None:
         if self.backend != "neo4j" or not transactions:
             return
+        from .transaction_identity import build_event_key
         rows = []
         for tx in transactions:
             if not tx.from_address or not tx.to_address:
@@ -64,6 +65,9 @@ class GraphStore:
                     "timestamp": tx.timestamp.isoformat() if tx.timestamp else None,
                     "block_number": tx.block_number,
                     "source_api": tx.source_api,
+                    "event_key": tx.event_key or build_event_key(tx),
+                    "event_index": tx.event_index,
+                    "asset_contract": tx.asset_contract,
                 }
             )
         statement = """
@@ -177,6 +181,7 @@ class GraphStore:
         def node_id(chain,address):return address if len(chain_ids)<=1 else chain+':'+address
         nodes = {}
         edges = []
+        from .transaction_identity import build_event_key
         for tx in transactions:
             for address in [tx.from_address, tx.to_address]:
                 if not address:
@@ -203,6 +208,9 @@ class GraphStore:
                         "tx_hash": tx.tx_hash,
                         "value_native": tx.value_native,
                         "token_symbol": tx.token_symbol,
+                        "event_key": tx.event_key or build_event_key(tx),
+                        "event_index": tx.event_index,
+                        "asset_contract": tx.asset_contract,
                         "timestamp": tx.timestamp.isoformat() if tx.timestamp else None,
                     }
                 )

@@ -27,7 +27,7 @@ def test_clean_upgrade_parity_no_seeds(tmp_path,monkeypatch):
         for table in Base.metadata.tables:
             if table.startswith(('discovery_','attribution_')):assert signature(engine,table)==before_mc1(signature(orm,table)),table
         assert triggers(engine)==triggers(orm) and all(not rows for rows in snapshot(engine).values())
-        assert ScriptDirectory.from_config(cfg).get_heads()==['20260923_01']
+        assert ScriptDirectory.from_config(cfg).get_heads()==['20260923_02']
         with Session(engine) as db:require_schema(db)
     finally:engine.dispose();orm.dispose()
 
