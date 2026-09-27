@@ -1,3 +1,5 @@
+import {initFundFlow} from './fund_flow.js';
+import {initClustering} from './clustering.js';
 import {refreshLabelChains} from './label_ui.js';
 import {loadChains} from './chains.js';
 import {refreshAttribution} from "./attribution_summary.js";
@@ -33,6 +35,8 @@ function navigate(name, id, restore = false) {
   });
 }
 await loadChains();
+await initClustering(navigate);
+await initFundFlow(navigate);
 refreshLabelChains();
 initWallet(navigate);
 initGraph();

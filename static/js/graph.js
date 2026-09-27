@@ -1,3 +1,4 @@
+import {clusterOverlay} from './clustering.js';
 import {discoveryAction,graphWalletEligible} from "./discovery_handoff.js";
 import {attributionSummary,graphSubjectIsUnambiguous} from "./attribution_summary.js";
 import {attributionOverlay} from "./attribution_overlay.js";
@@ -139,4 +140,5 @@ export function renderGraph(host, graph, chain, labels = null) {
   records.addEventListener("toggle",()=>{if(records.open&&!records.querySelector("table"))records.append(edgeTable(graph.edges));});
   overlay=attributionOverlay({svg,tools,detail,layout,getView:()=>view,setView:value=>{view=[...value];setView();}});
   host.append(tools,svg,detail,attributionHost,records); setView(); clear();
+  clusterOverlay({tools,svg,graph,chain,detail});
 }

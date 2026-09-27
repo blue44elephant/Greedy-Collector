@@ -1,3 +1,4 @@
+import {walletClustering} from './clustering.js';
 import {chains, chainMetadata, hasCapability} from './chains.js';
 import {manualSourceAction} from './discovery_manual_source.js';
 import {discoveryAction} from "./discovery_handoff.js";
@@ -19,6 +20,7 @@ export function investigate(chain, address) {
 }
 function renderLookup(data, stored = false, labels = [], labelsUnavailable = false) {
   const profile = data.address;
+  byId("wallet-clustering").replaceChildren(walletClustering(profile.chain,profile.address));
   byId("observation-result").hidden = true;
   byId("wallet-case-action").replaceChildren(hasCapability(profile.chain, "cases") ? addToCaseButton("wallet", profile.chain, profile.address) : element("span", "Case references are unavailable for this chain."));
   byId("wallet-graph").hidden = !hasCapability(profile.chain, "graph");

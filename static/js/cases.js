@@ -1,3 +1,5 @@
+import {flowCard} from './fund_flow.js';
+import {clusterCard} from './clustering.js';
 import {openLabel} from "./label_ui.js";
 import {caseAttribution} from './case_attribution.js';
 import {api} from "./api.js";
@@ -57,6 +59,10 @@ export function initCases() {
       element("p", `Status: ${row.status} · Created: ${dateText(row.created_at)} · Updated: ${dateText(row.updated_at)}`, "muted small"),
       element("p", "Cases organize analyst-selected references. References do not establish identity or ownership. Updated time is the stored case timestamp, not a latest-evidence timestamp.", "bounded-note"));
     const entities = panel("Entities", "References do not automatically retrieve or expand blockchain history."); entities.id="case-entities";
+    for (const reference of row.entities) {
+      if(reference.entity_type === 'fund_flow' && reference.metadata_json?.fund_flow_pin) entities.append(flowCard(reference.metadata_json.fund_flow_pin,true));
+      if(reference.entity_type === "technical_cluster" && reference.metadata_json?.cluster_pin) entities.append(clusterCard(reference.metadata_json.cluster_pin,true));
+    }
     const attachments = row.entities.filter(item => item.entity_type === "attachment");
     entities.append(table(["Type", "Reference", "Metadata", "Actions"], row.entities.filter(item => !['attachment','entity','attribution_claim','discovery_observation'].includes(item.entity_type)).map(item => {
       const controls = element("div", undefined, "toolbar"); const chain=item.metadata_json?.chain;

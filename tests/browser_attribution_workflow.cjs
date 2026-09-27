@@ -14,7 +14,7 @@ module.exports=async({evaluate,call,work,mode,httpPort})=>{
     `import sqlite3,json; db=sqlite3.connect(${JSON.stringify(path.join(work,'attribution-test.db'))}); tables=[r[0] for r in db.execute("SELECT name FROM sqlite_master WHERE type='table'")]; print(json.dumps({t:db.execute('SELECT COUNT(*) FROM '+t).fetchone()[0] for t in tables}))`],{windowsHide:true,encoding:'utf8'}));
   await evaluate("window.attrRequests=[];window.attrOriginalFetch=window.fetch;window.fetch=(url,options)=>{attrRequests.push({url:String(url),method:options?.method||'GET',body:options?.body||null});if(!String(url).startsWith('/api/greedy-collector/attribution'))throw Error('Unexpected external/workspace request');return attrOriginalFetch(url,options);}");
   await evaluate("go('attribution')");
-  assert.equal(await evaluate("document.querySelectorAll('[data-workspace]').length"),8);
+  assert.equal(await evaluate("document.querySelectorAll('[data-workspace]').length"),11);
   if(mode==='unmigrated'){
     assert.ok((await text('#attribution-workspace > .operation-status')).includes('storage is not initialized'));
     assert.equal(Object.keys(state()).some(name=>name.startsWith('attribution_')),false);

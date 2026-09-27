@@ -270,3 +270,11 @@ input[type="checkbox"] { width:20px; height:20px; min-height:20px; }
 .discovery-graph-detail { padding:16px; border-left:3px solid #889caf; margin:16px 0; overflow-wrap:anywhere; }
 .discovery-graph-detail td { white-space:normal; overflow-wrap:anywhere; }
 @media(max-width:700px) { .discovery-graph-canvas { height:420px; } }
+
+.graph-node.has-technical-cluster > rect { stroke-dasharray: 6 3; stroke-width: 3; }
+.cluster-badge { fill: #7659b2; font-size: 12px; font-weight: 600; }
+#cluster-results .full-address { overflow-wrap: anywhere; }
+
+.flow-graph { width:100%; min-height:180px; max-height:340px; border:1px solid #aeb8c5; margin:1rem 0; }
+.flow-graph text { font:12px system-ui,sans-serif; fill:#243247; }
+#flow-results article { border-top:1px solid #aeb8c5; padding:0.7rem 0; }

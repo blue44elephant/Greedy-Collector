@@ -443,7 +443,14 @@ def test_openapi_explicit_models_enums_and_exact_surface(api):
     client, _ = api
     spec = ok(client.get('/openapi.json'))
     paths = {p: methods for p, methods in spec['paths'].items() if p.startswith(P)}
-    legacy_paths = {p for p in spec['paths'] if not p.startswith(API+'/discovery')}
+    legacy_paths = {p for p in spec['paths'] if not p.startswith((API+'/discovery', API+'/clustering', API+'/fund-flow'))}
+    assert {p.removeprefix(API+'/clustering') for p in spec['paths'] if p.startswith(API+'/clustering')} == {
+        '/capabilities', '/analyze', '/clusters/{cluster_id}', '/clusters/{cluster_id}/graph',
+        '/wallet/{chain}/{address}', '/evidence/{evidence_id}/exclude', '/cases/{case_id}/pin',
+    }
+    assert {p.removeprefix(API+'/fund-flow') for p in spec['paths'] if p.startswith(API+'/fund-flow')} == {
+        '/capabilities', '/path', '/neighborhood', '/runs/{run_id}', '/cases/{case_id}/pin',
+    }
     assert API+'/chains' in legacy_paths
     assert len(paths) == 25 and len(legacy_paths - {API+'/chains'}) == 54
     assert sum(len(methods) for methods in paths.values()) == 31
@@ -493,7 +500,7 @@ def test_current_routes_and_attribution_workspace_without_seed_records(api):
     for path in ('/', '/health', '/docs', '/openapi.json', '/static/js/app.js', '/static/app.css'):
         assert client.get(path).status_code == 200
     html = client.get('/').text
-    assert html.count('data-workspace=') == 9 and 'data-workspace="attribution"' in html
+    assert html.count('data-workspace=') == 11 and 'data-workspace="attribution"' in html
     assert counts(engine) == [0]*5
 
 
@@ -554,7 +561,7 @@ with patch.object(httpx.AsyncClient, 'request', side_effect=AssertionError('No p
         for path in ['/', '/health', '/docs', '/openapi.json']:
             assert client.get(path).status_code == 200
         assert client.get('/api/greedy-collector/attribution/entities').json()['total'] == 0
-        assert client.get('/').text.count('data-workspace=') == 9
+        assert client.get('/').text.count('data-workspace=') == 11
 assert not scheduler.running
 with engine.connect() as connection:
     assert connection.execute(text('SELECT version_num FROM alembic_version')).scalar_one() == before_revision

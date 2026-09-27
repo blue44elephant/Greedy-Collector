@@ -23,8 +23,12 @@
     <button type="button" data-workspace="research" aria-current="false">Research</button>
     <button type="button" data-workspace="attribution" aria-current="false">Attribution</button>
     <button type="button" data-workspace="discovery" aria-current="false">Discovery</button>
+    <button type="button" data-workspace="clustering" aria-current="false">Technical clusters</button>
+    <button type="button" data-workspace="fund-flow" aria-current="false">Fund Flow</button>
   </nav>
   <main>
+    <div id="fund-flow-workspace" class="workspace" hidden></div>
+    <div id="clustering-workspace" class="workspace" hidden></div>
     <div id="wallet-workspace" class="workspace">
     <section class="lookup-panel" aria-labelledby="page-title">
       <p class="eyebrow">Unified search</p>
@@ -59,6 +63,7 @@
         <p id="result-address" class="full-address"></p>
         <button id="wallet-graph" type="button" class="secondary">Open graph</button>
         <span id="wallet-case-action"></span>
+        <div id="wallet-clustering"></div>
         <div id="wallet-labels"></div>
         <dl class="metrics">
           <div><dt>Balance</dt><dd id="balance"></dd></div>

@@ -416,3 +416,21 @@ Polygon, TRON and Solana through its extensible chain registry. The EVM networks
 descriptor-configured Etherscan V2 adapter; see [generic EVM multi-chain support](docs/EVM_MULTICHAIN_SUPPORT.md)
 and [multi-chain architecture](docs/MULTICHAIN_ARCHITECTURE.md) and [Solana support](docs/SOLANA_SUPPORT.md) for provider coverage,
 capabilities, identifier hints and extension boundaries.
+
+### Technical wallet clustering (CL-1)
+
+Explicit local Bitcoin/Litecoin common-input analysis is available in Technical clusters and Wallet.
+Technical groups are not confirmed owners. Evidence, conservative collaborative-spend exclusions,
+analyst rationales and immutable versions remain inspectable. The optional transaction-graph overlay
+defaults off; Cases explicitly pin historical versions. No risk or monitoring propagates.
+Other chains have no automatic clustering heuristic. Storage requires explicit migration `20260927_01`;
+startup never applies it. See [Technical clustering](docs/TECHNICAL_CLUSTERING.md) for bounds and limitations.
+
+### Fund Flow (FL-1)
+
+The Fund Flow workspace analyzes bounded, locally stored single-chain activity with shortest,
+simple and observed-capacity paths, optional chronological/time filters, Label targets and
+asset-separated counterparty metrics. BTC/LTC paths describe transaction connectivity without
+exact input-output allocation. Monero is unsupported. Explicit Case pins preserve immutable runs.
+No providers, risk propagation or monitoring expansion are triggered. Storage requires explicit
+migration `20260927_02`; startup does not apply it. See [Fund-flow analysis](docs/FUND_FLOW_ANALYSIS.md).

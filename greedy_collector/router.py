@@ -453,3 +453,9 @@ router.include_router(attribution_router)
 
 from .discovery.router import router as discovery_router
 router.include_router(discovery_router)
+
+from .clustering.router import router as clustering_router
+router.include_router(clustering_router)
+
+from .fund_flow.router import router as fund_flow_router
+router.include_router(fund_flow_router)

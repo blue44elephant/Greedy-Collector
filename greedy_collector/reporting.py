@@ -1,3 +1,5 @@
+from .fund_flow.reporting import flow_lines
+from .clustering.reporting import cluster_lines
 from html import escape
 from io import BytesIO
 import json
@@ -57,6 +59,8 @@ def case_markdown(case: dict, entities: list[dict], alerts: list[dict], notes: l
     )
     lines.extend(["", "## Analyst Notes", ""])
     lines.extend(f"- {item['body']}" for item in notes)
+    lines.extend(flow_lines(entities))
+    lines.extend(cluster_lines(entities))
     lines.extend(attribution_lines(attribution))
     lines.extend(["", "## Disclaimer", "", DISCLAIMER])
     return "\n".join(lines)
@@ -140,7 +144,7 @@ def case_pdf(case: dict, entities: list[dict], alerts: list[dict], notes: list[d
     story.extend(
         Paragraph(escape(item["body"]), styles["BodyText"]) for item in notes
     )
-    for line in attribution_lines(attribution):
+    for line in flow_lines(entities) + cluster_lines(entities) + attribution_lines(attribution):
         story.append(Paragraph(escape(line), styles["BodyText"]) if line else Spacer(1,6))
     story.extend(
         [

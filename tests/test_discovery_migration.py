@@ -45,7 +45,7 @@ def discovery_schema(engine):
 def test_clean_upgrade_equivalence_and_successor_services(tmp_path,monkeypatch):
     url='sqlite:///'+(tmp_path/'migrated.db').as_posix();cfg=config(url,monkeypatch)
     command.upgrade(cfg,REVISION);command.current(cfg);command.heads(cfg)
-    assert cfg.stdout.getvalue().splitlines()==[REVISION,'20260923_02 (head)']
+    assert cfg.stdout.getvalue().splitlines()==[REVISION,'20260927_02 (head)']
     migrated=create_fk_enabled_engine(url)
     metadata=create_fk_enabled_engine('sqlite:///'+(tmp_path/'metadata.db').as_posix())
     try:
@@ -139,7 +139,7 @@ with patch.object(httpx.HTTPTransport,'handle_request',prohibited), patch.object
         for route in ['/','/health','/docs','/openapi.json','/static/js/app.js','/static/app.css']:
             assert client.get(route).status_code==200,route
         html=client.get('/').text
-        assert html.count('data-workspace=')==9
+        assert html.count('data-workspace=')==11
         assert 'data-workspace="discovery"' in html
         paths=client.get('/openapi.json').json()['paths']
         assert '/api/greedy-collector/discovery/runs' in paths

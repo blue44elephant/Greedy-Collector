@@ -13,7 +13,7 @@ module.exports=async({evaluate,call,work,mode,httpPort,traffic})=>{
     await evaluate(`document.querySelector('#discovery-subject input').value=${JSON.stringify(address)};document.querySelector('#discovery-subject input').dispatchEvent(new Event('input',{bubbles:true}));document.getElementById('discovery-subject').requestSubmit()`);await busy();
   };
   await evaluate(`go('discovery')`);await busy();
-  assert.equal(await evaluate(`document.querySelectorAll('[data-workspace]').length`),9);
+  assert.equal(await evaluate(`document.querySelectorAll('[data-workspace]').length`),11);
   assert.ok((await text()).includes('Public-source pivots & candidate evidence'));
   assert.equal(await evaluate(`document.querySelector('#discovery-workspace h1').textContent`),'Discovery');
   if(mode==='mc1'||mode==='mc2'){
