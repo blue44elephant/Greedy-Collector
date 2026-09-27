@@ -434,3 +434,13 @@ asset-separated counterparty metrics. BTC/LTC paths describe transaction connect
 exact input-output allocation. Monero is unsupported. Explicit Case pins preserve immutable runs.
 No providers, risk propagation or monitoring expansion are triggered. Storage requires explicit
 migration `20260927_02`; startup does not apply it. See [Fund-flow analysis](docs/FUND_FLOW_ANALYSIS.md).
+
+
+### Analyst graph arrangement and Discovery diagnostics (UX-1)
+
+Drag/pin nodes in Blockchain and Discovery graphs, retain arrangement for the browser
+session, and use Auto layout, Reset layout and Fit to graph. Manual proximity is
+presentation only, not evidence. See [Graph interaction](docs/GRAPH_INTERACTION.md).
+Discovery cards now explain transform types, configuration, chain compatibility,
+preflight eligibility, execution/cache accounting and bounded empty results. See
+[Discovery diagnostics and the deferred OSINT-2 roadmap](docs/DISCOVERY_DIAGNOSTICS.md).

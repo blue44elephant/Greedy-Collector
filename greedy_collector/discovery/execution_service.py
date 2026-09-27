@@ -126,7 +126,7 @@ class ExecutionService(DiscoveryService):
         row=self.get_run(identifier)
         for source in row['sources']:
             source['manual_actions']=source['quota_snapshot'].get('manual_actions',[]) if source['status']=='manual_ready' else []
-        return {**row,'subject':self.get_subject(row['subject_id']),
+        return {**row,'subject':self.get_subject(row['subject_id']),'refresh':bool(row['request_snapshot'].get('refresh',False)),
             'budget':row['request_snapshot'].get('execution_policy',{}).get('budget',{}),
             'returned_count':sum(s['returned_count'] for s in row['sources'])}
 

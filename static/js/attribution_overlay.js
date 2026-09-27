@@ -63,6 +63,7 @@ export function attributionOverlay({svg,tools,detail,layout,getView,setView}) {
     else {layer.replaceChildren();if(savedView)setView(savedView);savedView=null;note.textContent='Overlay off. Base transaction graph retained.';if(selected)detail.replaceChildren(element('p','Attribution overlay hidden. Select a wallet or transaction connection.'));selected=null;}
   });
   return {
+    reposition(){render();},
     bounds(){if(!enabled||!layer.childElementCount)return layout.bounds;const b=layer.getBBox(),[x,y,w,h]=layout.bounds;const left=Math.min(x,b.x-30),top=Math.min(y,b.y-30);return [left,top,Math.max(x+w,b.x+b.width+70)-left,Math.max(y+h,b.y+b.height+70)-top];},
     source(node,pos){source=node;position=pos;claims=[];render();},
     claims(rows){const wasSelected=selected;claims=rows;render();if(wasSelected)detail.replaceChildren(element('p','Attribution refreshed. Select a current entity or claim to inspect it.'));},

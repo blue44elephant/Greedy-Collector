@@ -278,3 +278,10 @@ input[type="checkbox"] { width:20px; height:20px; min-height:20px; }
 .flow-graph { width:100%; min-height:180px; max-height:340px; border:1px solid #aeb8c5; margin:1rem 0; }
 .flow-graph text { font:12px system-ui,sans-serif; fill:#243247; }
 #flow-results article { border-top:1px solid #aeb8c5; padding:0.7rem 0; }
+
+/* Analyst presentation controls; pins are distinct from focus/selection. */
+.graph-node, .discovery-graph-node { touch-action:none; cursor:grab; }
+.graph-node:active, .discovery-graph-node:active { cursor:grabbing; }
+.pin-badge { fill:var(--muted, #607080); font-size:11px; font-weight:700; pointer-events:none; }
+.is-pinned > rect { stroke-dasharray:5 3; }
+.discovery-diagnostic { border-left:3px solid #8499a7; padding-left:.75rem; }

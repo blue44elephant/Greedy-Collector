@@ -1,3 +1,4 @@
+import {typeName,explanation,networkBehavior,availability,preflightGroups,runSummary,zeroResult} from './discovery_diagnostics.js';
 import {supportedChain, addressKey} from './chains.js';
 import {graphSenseDetail} from './discovery_graphsense.js';
 import {manualSourceForm,manualSourceDetail,sourceReference} from './discovery_manual_source.js';
@@ -47,7 +48,7 @@ export function initDiscovery() {
   const top = element('div', undefined, 'workspace-heading');
   top.append(element('h1', 'Discovery'), element('span', 'Public-source pivots & candidate evidence', 'muted'));
   const message = element('p', '', 'operation-status'); message.setAttribute('role', 'status'); message.id = 'discovery-message';
-  const query = panel('New discovery', 'Use a public Bitcoin or Ethereum address. Never enter a private key or recovery phrase.');
+  const query = panel('New discovery', 'Use a supported public wallet address. Never enter a private key or recovery phrase.');
   const form = element('form', undefined, 'editor'); form.id = 'discovery-subject';
   form.append(fields([{name:'address', label:'Public wallet address', required:true, maxLength:128}]));
   form.elements.address.autocomplete = 'off'; form.elements.address.spellcheck = false;
@@ -102,10 +103,15 @@ export function initDiscovery() {
   function syncButtons() {
     planButton.disabled = busy || !subject || !choices.some(c => c.check.checked);
     runButton.hidden = !plan || !plan.selections.some(p => p.eligibility === 'eligible');
-    runButton.disabled = busy || !plan || plan.selections.some(p => p.eligibility !== 'eligible') || activeRun(current);
+    runButton.disabled = busy || !plan || !plan.selections.some(p => p.eligibility === 'eligible') || activeRun(current);
     host.querySelectorAll('button').forEach(b => { if (b !== planButton && b !== runButton) b.disabled = busy || b.dataset.unavailable === 'true'; });
     form.querySelectorAll('input').forEach(n => { n.disabled = busy; });
-    choices.forEach(c => { c.check.disabled = busy || !subject || !c.available || !c.transform.chains.includes(subject.chain); c.budget.disabled = busy; });
+    choices.forEach(c => { c.check.disabled = busy || !subject || !c.transform.chains.includes(subject.chain); c.budget.disabled = busy; });
+    for(const t of transforms){const card=pivots.querySelector(`[data-transform="${t.id}"]`);if(!card)continue;
+      const state=availability(t,subject?.chain);card.querySelector('.discovery-diagnostic').textContent=state.text;
+      card.querySelector('[data-executable]').textContent=`Executable for current context: ${state.executable?'Yes':'No'}`;
+      const capture=card.querySelector('[data-capture]');if(capture){capture.disabled=busy||!subject||!state.executable;capture.dataset.unavailable=String(!subject||!state.executable);}}
+
     options.querySelectorAll('input').forEach(n => { n.disabled = busy; });
   }
   function invalidate() { plan = intent = runKey = null; planned.replaceChildren(element('p', 'Prepare a plan after selecting eligible pivots.', 'muted')); syncButtons(); }
@@ -113,7 +119,7 @@ export function initDiscovery() {
   async function checkSubject(expectedChain) {
     invalidate(); subject = null;
     const value = form.elements.address.value.trim();
-    if (!value) throw new UserError('Enter a public Bitcoin or Ethereum wallet address.');
+    if (!value) throw new UserError('Enter a supported public wallet address.');
     let resolved;
     try { resolved = await api('/resolve', {method:'POST', body:{input:value,chain_hint:expectedChain}}); }
     catch { throw new UserError('Could not identify a supported wallet address.'); }
@@ -124,6 +130,7 @@ export function initDiscovery() {
     // (the general resolver preserves ETH input case). Base58 stays exact.
     const address = addressKey(resolved.chain,resolved.normalized);
     subject = {chain:resolved.chain,address};
+    choices.forEach(c=>{if(!c.transform.chains.includes(subject.chain))c.check.checked=false;});
     form.elements.address.value = subject.address;
     detected.textContent = `${label(subject.chain)} · ${subject.address} · Format checked locally; the Discovery planner remains authoritative.`;
   }
@@ -135,10 +142,13 @@ export function initDiscovery() {
     if (!transforms.some(t => t.executable)) pivots.append(element('p','No automated Discovery pivots are executable in this build yet.','bounded-note'));
     for (const t of transforms) {
       const card = element('article', undefined, 'discovery-pivot'); card.dataset.transform = t.id;
-      card.append(element('h3', t.display_name), element('p',t.id,'muted small'), element('p',t.description));
+      card.append(element('h3', t.display_name), element('p',t.id,'muted small'), element('p',`Type: ${typeName(t)}`));
+      card.append(element('p',`Supported chains: ${t.chains.join(', ')}${t.chains.length===1&&t.chains[0]==='ethereum'?' (Ethereum only)':''}`),element('p',`Network behavior: ${networkBehavior(t)}`));
+      const executable=element('p');executable.dataset.executable='true';card.append(executable,element('p','','discovery-diagnostic'));
+      const help=element('details');help.append(element('summary','What does this do?'),element('p',explanation(t)));card.append(help);
       card.append(element('p', `${label(t.mode)} · ${costNames[t.cost_class]} · ${t.implemented ? 'Implemented' : 'Not implemented'} / ${t.executable ? t.mode === 'manual' ? 'Manual action generation available' : 'Executable' : 'Not executable'} · ${t.configured ? 'Configured' : 'Not configured'}`));
       if(t.capture_only){
-        card.append(element('p','Manual · FREE_LOCAL · No network. Preview and confirm capture; no source retrieval.','bounded-note'),button('Record source observation',openCapture));pivots.append(card);continue;
+        const capture=button('Record source observation',openCapture);capture.dataset.capture='true';card.append(element('p',explanation(t),'bounded-note'),capture);pivots.append(card);continue;
       }
       if (t.mode === 'manual') card.append(element('p','Manual pivot: Run generates an outbound search action only. The search engine was not queried by Greedy Collector.','bounded-note'));
       if (t.mode === 'local') card.append(element('p','Always reads current stored annotations; no external requests.','muted small'));
@@ -172,7 +182,8 @@ export function initDiscovery() {
     invalidate();
     const chosen = choices.filter(c => c.check.checked);
     selections ||= chosen.map(c => ({transform_id:c.transform.id,source_id:c.source}));
-    if (!selections.length) throw new UserError('Select an executable pivot first.');
+    if (!selections.length) throw new UserError('Select a pivot to inspect its availability.');
+    if (selections.length > 3) throw new UserError('Select up to 3 pivots per run. Plan the remaining pivots separately.');
     const paid_units = {};
     for (const c of chosen.filter(c => c.transform.cost_class === 'PAID')) {
       const amount = Number(c.budget.value);
@@ -183,6 +194,8 @@ export function initDiscovery() {
     const response = await request('/plan',{body:payload});
     plan = response; intent = payload; runKey = crypto.randomUUID();
     planned.replaceChildren(element('h3',diagnostic ? 'Diagnostic plan — no execution' : 'Plan ready for inspection'), element('p', `${label(plan.subject.namespace)} · ${plan.subject.canonical_value}`, 'full-address'));
+    const groups=preflightGroups(plan),names=rows=>rows.map(p=>{const t=transforms.find(t=>t.id===p.transform_id);return `${t?.display_name||p.transform_id}${p.eligibility==='eligible'?'':': '+(t&&!t.executable?availability(t,subject.chain).text:reason(p.eligibility))}`;}).join('; ')||'None';
+    planned.append(element('p',`Will run / generate manual actions: ${names(groups.ready)}`),element('p',`Unavailable (will not execute): ${names(groups.unavailable)}`));
     planned.append(table(['Pivot / source','Eligibility','Cost / authorization','Allowed limits','Cache'],plan.selections.map(p => [`${p.transform_id} / ${p.source_id}`,reason(p.eligibility),`${costNames[p.cost_class]} · Maximum ${p.max_units} ${p.cost_unit}; paid authorized ${plan.budget.paid_units[p.source_id] || 0}`,`${p.parameters.max_results} results / ${p.max_requests} requests`,plan.refresh ? 'Explicit refresh; reuse bypassed' : `Compatible cache may be reused (${p.cache_seconds}s window)`])));
     planned.append(element('p',`Expires ${dateText(plan.expires_at)}. Planning did not query providers. Confirm Run discovery to execute eligible pivots.`, 'muted small'));
     if (plan.selections.some(p => transforms.find(t => t.id === p.transform_id)?.mode === 'manual')) planned.append(element('p','Selected manual pivots generate search actions only. GC does not conduct the search or collect webpages.','bounded-note'));
@@ -190,7 +203,7 @@ export function initDiscovery() {
     syncButtons();
   }
   async function startRun() {
-    if (!plan || !plan.selections.length || plan.selections.some(p => p.eligibility !== 'eligible')) throw new UserError('Create a plan with executable selected pivots first.');
+    if (!plan || !plan.selections.some(p => p.eligibility === 'eligible')) throw new UserError('Create a plan with executable selected pivots first.');
     const row = await request('/runs',{body:{...intent,expected_plan_fingerprint:plan.fingerprint},key:runKey});
     invalidate(); await selectRun(row.id, row); await loadHistory(0);
   }
@@ -239,6 +252,8 @@ export function initDiscovery() {
     currentPanel.dataset.status = current.status; currentPanel.dataset.runId = current.id;
     currentPanel.append(element('p',`${label(current.status)}${current.archived_at ? ' · Archived' : ''}`, 'badge'),element('p',current.id,'full-address'),element('p',`${label(current.subject.namespace)} · ${current.subject.canonical_value}`));
     currentPanel.append(element('p',`Started: ${dateText(current.started_at)} · Created: ${dateText(current.created_at)} · Records returned: ${current.returned_count}`));
+    const summary=runSummary(current);
+    currentPanel.append(element('p',`${summary.requested} transforms requested | ${summary.executed} executed/attempted | ${summary.unavailable} unavailable | ${summary.results} results | ${summary.partial} partial/incomplete sources | ${summary.cached} cached | ${summary.manual} manual links generated. ${summary.refresh?'Explicit refresh requested; cache bypassed.':'Compatible cache reuse allowed.'}`,'discovery-run-summary'));
     currentPanel.append(button('Refresh run', () => selectRun(current.id)));
     if (activeRun(current)) {
       currentPanel.append(button('Cancel', async () => {
@@ -253,7 +268,7 @@ export function initDiscovery() {
     if (current.cancel_requested_at) currentPanel.append(element('p',`Cancellation requested: ${dateText(current.cancel_requested_at)}`));
     currentPanel.append(table(['Pivot / source','Status / reason','Coverage / records','Cache','Accounting'],current.sources.map(s => [`${s.transform_id} / ${s.source_id}`,`${label(s.status)}${s.error_code ? ' · '+sourceReason(s) : ''}${s.retry_after_at ? ' · Retry after '+dateText(s.retry_after_at) : ''}`,`${label(s.coverage)} / ${s.returned_count}${s.provider_total == null ? '' : ' (provider count '+s.provider_total+')'}`,s.cache_from_id ? 'Cached observations — original retrieval times below' : 'No cache reuse',`Requests ${s.requests_attempted} attempted / ${s.requests_reserved} reserved; ${s.units_consumed} ${s.cost_unit} consumed / ${s.units_reserved} reserved; provider quota remaining: ${s.quota_snapshot?.remaining ?? 'Unknown'}`])));
     currentPanel.append(details('Run budget authorization', current.budget)); syncButtons();
-    for(const source of current.sources||[])if(source.transform_id==='wallet.graphsense_public_tags' && ['succeeded','cache_hit'].includes(source.status) && source.returned_count===0)currentPanel.append(element('p','No matching GraphSense public tag was returned within the bounded search.','empty'));
+    for(const source of current.sources||[]){const empty=zeroResult(source);if(empty)currentPanel.append(element('p',empty,'empty'));}
     const ensDiagnostics={empty_primary_name:'No verified ENS primary name returned.',reverse_forward_mismatch:'Reverse and forward addresses did not match. No verified ENS primary name returned.',ccip_read_unsupported:'This ENS resolution requires CCIP-Read, which is not supported.',invalid_ens_name:'ENS returned a name that could not be accepted by the normalizer.'};
     for(const source of current.sources) if(source.source_id==='ens_ethereum') {
       const diagnostic=source.quota_snapshot?.diagnostic;

@@ -1,3 +1,4 @@
+import {graphInteraction} from './graph_interaction.js';
 import {graphSenseDetail} from './discovery_graphsense.js';
 import {manualSourceDetail,sourceReference} from './discovery_manual_source.js';
 import {element,table,dateText,run,UserError} from './ui.js';
@@ -78,6 +79,10 @@ export function initDiscoveryGraph(host,{openResult}) {
       node.dataset.id=id;node.dataset.edge=String(edge);node.setAttribute('role','button');node.setAttribute('tabindex','0');node.setAttribute('aria-pressed','false');
       node.addEventListener('click',()=>select(id,edge));node.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();select(id,edge);}});
     }
+    const interaction=graphInteraction({svg,tools,layout,context:['discovery',graph.root.chain,graph.root.address,graph.run_id],centered:true,width:CARD.width,height:CARD.height,redraw:()=>{
+      for(const edge of graph.edges){const g=[...svg.querySelectorAll('.discovery-graph-edge')].find(n=>n.dataset.id===edge.id);g?.querySelectorAll('path').forEach(p=>p.setAttribute('d',discoveryPath(edge,layout)));
+        const a=layout.positions.get(edge.source),b=layout.positions.get(edge.target),text=g?.querySelector('.predicate');if(text){text.setAttribute('x',(a.x+b.x)/2);text.setAttribute('y',(a.y+b.y)/2-8);}}
+    }});
     for(const edge of graph.edges) {
       const g=svgNode('g',{class:'discovery-graph-edge','aria-label':edge.predicate});
       g.append(svgNode('path',{d:discoveryPath(edge,layout),'marker-end':'url(#discovery-arrow)'}),svgNode('path',{d:discoveryPath(edge,layout),class:'hit'}),svgNode('title',{},edge.predicate));
@@ -91,8 +96,9 @@ export function initDiscoveryGraph(host,{openResult}) {
         svgNode('text',{x:-138,y:-22},short(node.title||node.address)),svgNode('text',{x:-138,y:0},short(node.subtitle||node.chain)),
         svgNode('text',{x:-138,y:24,class:'status'},node.type==='wallet'?'Focus wallet':short(review(node),42)),
         svgNode('text',{x:-138,y:48,class:'status'},node.type==='wallet'?'Public identifier':`Observations: ${node.run_observation_count} · Promoted: ${node.promotion_count??'unavailable'}`));
-      selectable(g,node.id,false);svg.append(g);
+      selectable(g,node.id,false);svg.append(g);interaction.bind(g,node.id);
     }
+    interaction.update();
     tools.append(button('Fit to graph',()=>{state.view=[...layout.bounds];views();}),button('Zoom in',()=>{state.view=zoomView(state.view,.8);views();}),button('Zoom out',()=>{state.view=zoomView(state.view,1.25);views();}),button('Reset view',()=>{state.view=[...layout.bounds];views();select(graph.root.id);}));
     let drag=null;
     svg.addEventListener('pointerdown',e=>{if(e.target.closest('.discovery-graph-node,.discovery-graph-edge'))return;drag={x:e.clientX,y:e.clientY,view:[...state.view]};svg.setPointerCapture(e.pointerId);});
@@ -100,7 +106,7 @@ export function initDiscoveryGraph(host,{openResult}) {
     for(const type of ['pointerup','pointercancel','lostpointercapture'])svg.addEventListener(type,()=>{drag=null;});
     svg.addEventListener('wheel',e=>{e.preventDefault();state.view=zoomView(state.view,e.deltaY>0?1.12:1/1.12);views();},{passive:false});
     svg.addEventListener('keydown',e=>{if(e.key==='Escape')select(graph.root.id);});
-    host.append(element('p','Labels: wallet → annotation. Code: code location → wallet. ENS: name → wallet. Manual: source → mentions_wallet → wallet. Select a connection for its literal predicate and provenance. Drag empty space to pan.','muted small'),svg,inspector);
+    host.append(element('p','Labels: wallet → annotation. Code: code location → wallet. ENS: name → wallet. Manual: source → mentions_wallet → wallet. Select a connection for its literal predicate and provenance. Drag nodes to arrange and pin them; drag empty space to pan. Manual positions are presentation state, not evidence of relationship, ownership or cluster membership.','muted small'),svg,inspector);
     if(!graph.total)host.append(element('p','No Discovery results were returned for this run.','empty'));
     const fallback=element('details');fallback.append(element('summary','Accessible result list for this graph page'),table(['Type','Result','Predicate','Current review','Promoted',''],graph.items.map(n=>[kinds[n.type],n.title,n.predicate,review(n),n.promotion_count??'Unavailable',button('Select result',()=>select(n.id))]),'No Discovery results were returned for this run.'));host.append(fallback);
     views();const chosen=state.selected;if(chosen&&(chosen.id===graph.root.id||graph.items.some(n=>chosen.edge?n.result_id===chosen.id:n.id===chosen.id)))select(chosen.id,chosen.edge);else select(graph.root.id);

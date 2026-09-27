@@ -90,6 +90,8 @@ class SourceCapability(BaseModel):
     provenance_note:str
 
 class TransformCapability(BaseModel):
+    missing_configuration:list[str]=Field(default_factory=list)
+    dependency_unavailable:bool=False
     capture_only:bool=False
     id:str
     version:int
@@ -172,6 +174,7 @@ class SourceRead(Accounting):
     retry_after_at:datetime|None
 
 class RunRead(BaseModel):
+    refresh:bool=False
     id:str
     subject_id:str
     subject:SubjectRead

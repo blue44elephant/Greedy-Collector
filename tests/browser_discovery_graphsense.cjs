@@ -58,7 +58,7 @@ module.exports=async({evaluate,work,httpPort,traffic})=>{
   assert.ok(btcGraph.items.every(n=>n.type==='public_annotation'&&n.public_annotation.tag.actor==='synthetic-actor'));
   assert.equal((await api('/attribution/entities')).total,1);assert.equal((await api('/attribution/claims')).total,1);
   const empty=await run('empty');assert.equal(empty.items.length,0);assert.equal(empty.row.status,'completed');
-  assert.ok((await text('discovery')).includes('No matching GraphSense public tag was returned within the bounded search.'));
+  assert.ok((await text('discovery')).includes('No matching GraphSense public annotation was returned within the bounded search.'));
   assert.equal((await api('/attribution/claims/'+claim.id)).assessment,'unassessed');
   for(const scope of ['wallet','graph','monitoring','alerts','cases','labels','research','attribution','discovery']){await evaluate(`go('${scope}')`);await busy(scope);assert.equal(await evaluate(`document.getElementById('${scope}-workspace').hidden`),false);}
   for(const route of ['/','/health','/docs','/openapi.json','/static/js/discovery_graphsense.js'])assert.equal((await fetch(`http://127.0.0.1:${httpPort}${route}`)).status,200);

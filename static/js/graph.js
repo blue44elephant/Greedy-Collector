@@ -1,3 +1,4 @@
+import {graphInteraction} from './graph_interaction.js';
 import {clusterOverlay} from './clustering.js';
 import {discoveryAction,graphWalletEligible} from "./discovery_handoff.js";
 import {attributionSummary,graphSubjectIsUnambiguous} from "./attribution_summary.js";
@@ -61,6 +62,12 @@ export function renderGraph(host, graph, chain, labels = null) {
     node.addEventListener("click", activate);
     node.addEventListener("keydown", event => {if (["Enter", " "].includes(event.key)) {event.preventDefault(); activate();}});
   };
+  const interaction=graphInteraction({svg,tools,layout,context:['blockchain',chain,key(graph.nodes.find(n=>n.is_focus)?.id || '')],redraw:()=>{
+    for(const group of layout.connections){const from=layout.positions.get(key(group.source)),to=layout.positions.get(key(group.target));if(!from||!to)continue;
+      const edge=[...svg.querySelectorAll('.graph-edge')].find(n=>n.dataset.edgeKey===group.key);
+      edge?.querySelectorAll('path').forEach(p=>p.setAttribute('d',connectionPath(from,to,layout.bounds[1]+20)));}
+    overlay?.reposition();
+  }});
   const edgeTable = edges => table(["Transaction", "Source →", "Target", "Amount", "Asset", "Timestamp (UTC)"], edges.map(edge =>
     [shortValue(edge.tx_hash), shortValue(edge.source), shortValue(edge.target), edge.value_native, edge.token_symbol, dateText(edge.timestamp)]));
   for (const layer of layout.layers) {
@@ -112,8 +119,9 @@ export function renderGraph(host, graph, chain, labels = null) {
         attributionHost.replaceChildren(attributionSummary({chain:subject.chain,address:subject.id,graph:true,onPage:rows=>{if(epoch===selectionEpoch)overlay.claims(rows);}}));
       }else attributionHost.replaceChildren(element('h3','Attribution'),element('p','This graph contains ambiguous case-folded address keys. Inspect the exact public address in Wallet or Attribution before attaching claims.','bounded-note'));
     });
-    svg.append(group);
+    svg.append(group);interaction.bind(group,key(node.id));
   }
+  interaction.update();
   const ratio = 900 / 560;
   function fit() {
     const [x,y,w,h] = overlay?.bounds() || layout.bounds, width = Math.max(w,h*ratio), height=width/ratio;
@@ -139,6 +147,6 @@ export function renderGraph(host, graph, chain, labels = null) {
   const records = element("details"); records.append(element("summary", `All returned transaction records (${graph.edges.length})`));
   records.addEventListener("toggle",()=>{if(records.open&&!records.querySelector("table"))records.append(edgeTable(graph.edges));});
   overlay=attributionOverlay({svg,tools,detail,layout,getView:()=>view,setView:value=>{view=[...value];setView();}});
-  host.append(tools,svg,detail,attributionHost,records); setView(); clear();
+  host.append(element('p','Drag nodes to arrange and pin them. Manual arrangement is presentation only; spatial proximity has no analytical meaning.','muted small'),tools,svg,detail,attributionHost,records); setView(); clear();
   clusterOverlay({tools,svg,graph,chain,detail});
 }

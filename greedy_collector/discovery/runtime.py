@@ -54,6 +54,10 @@ class DiscoveryRuntime:
             states=[self.eligibility(t,self.registry.sources[x],s.Budget()) for x in t.source_ids]
             values=t.model_dump();values.update(implemented=any(self.executors.get(t.id,x) is not None or self.executors.manual(t.id,x) is not None or self.executors.capture(t.id,x) is not None for x in t.source_ids),executable='eligible' in states,
                 configured=all(self._configured(self.registry.sources[x]) for x in t.source_ids),unavailable_reason=None if 'eligible' in states else states[0])
+            # Names are code-owned configuration references, never secret values.
+            values['missing_configuration'] = sorted({source.credential_env for x in t.source_ids
+                if (source := self.registry.sources[x]).credential_env and not os.getenv(source.credential_env, '').strip()})
+            values['dependency_unavailable'] = not values['configured'] and not values['missing_configuration']
             transforms.append(s.TransformCapability.model_validate(values).model_dump(mode='json'))
         return {'sources':sources,'transforms':transforms}
 
