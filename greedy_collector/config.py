@@ -20,6 +20,7 @@ class GreedyCollectorSettings(BaseModel):
     alchemy_api_key: str = os.getenv("ALCHEMY_API_KEY", "")
     tron_pro_api_key: str = os.getenv("TRON_PRO_API_KEY", "")
     solana_rpc_url: str = os.getenv("SOLANA_RPC_URL", "")
+    litecoin_api_url: str = os.getenv("LITECOIN_API_URL", "https://litecoinspace.org/api")
     opensanctions_api_key: str = os.getenv("OPENSANCTIONS_API_KEY", "")
     urlscan_api_key: str = os.getenv("URLSCAN_API_KEY", "")
     virustotal_api_key: str = os.getenv("VIRUSTOTAL_API_KEY", "")
@@ -38,6 +39,9 @@ class GreedyCollectorSettings(BaseModel):
     )
     solana_monitor_minutes: int = int(
         os.getenv("GREEDY_COLLECTOR_SOLANA_MONITOR_MINUTES", "10")
+    )
+    litecoin_monitor_minutes: int = int(
+        os.getenv("GREEDY_COLLECTOR_LTC_MONITOR_MINUTES", "20")
     )
     graph_backend: str = os.getenv(
         "GREEDY_COLLECTOR_GRAPH_BACKEND", "sqlite"

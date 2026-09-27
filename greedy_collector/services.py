@@ -120,12 +120,14 @@ class GreedyCollectorService:
         return self._tx_dict(tx)
 
     def address_record(self, db: Session, chain: str, address: str) -> dict | None:
+        get_chain(chain).require(Capability.BALANCE)
         row = db.scalar(
             select(Address).where(Address.chain == chain, self._address_membership(chain,Address.address,{get_chain(chain).adapter().address_key(address)}))
         )
         return row_dict(row) if row else None
 
     def address_transactions(self, db: Session, chain: str, address: str) -> list[dict]:
+        get_chain(chain).require(Capability.TRANSACTION_HISTORY)
         rows = db.scalars(
             select(Transaction)
             .where(
@@ -140,6 +142,7 @@ class GreedyCollectorService:
         return [row_dict(row) for row in rows]
 
     def address_risk(self, db: Session, chain: str, address: str) -> dict | None:
+        get_chain(chain).require(Capability.RISK)
         row = db.scalar(
             select(RiskResult)
             .where(RiskResult.chain == chain, self._address_membership(chain,RiskResult.address,{get_chain(chain).adapter().address_key(address)}))

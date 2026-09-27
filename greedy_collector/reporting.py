@@ -11,6 +11,27 @@ DISCLAIMER = (
 )
 
 
+def chain_limitations(entities: list[dict]) -> list[str]:
+    from .chains import Capability, get_chain
+    chains = set()
+    for entity in entities:
+        metadata = entity.get("metadata_json") or entity.get("metadata") or {}
+        if isinstance(metadata, dict) and isinstance(metadata.get("chain"), str):
+            chains.add(metadata["chain"])
+    limitations = []
+    for chain in sorted(chains):
+        try:
+            definition = get_chain(chain)
+        except ValueError:
+            continue
+        if Capability.TRANSACTION_HISTORY not in definition.capabilities:
+            limitations.append(
+                f"{definition.display_name}: Public address-level transaction reconstruction unavailable. "
+                "This limitation does not indicate inactivity."
+            )
+    return limitations
+
+
 def case_markdown(case: dict, entities: list[dict], alerts: list[dict], notes: list[dict], attribution: dict | None = None) -> str:
     lines = [
         f"# {case['title']}",
@@ -25,6 +46,10 @@ def case_markdown(case: dict, entities: list[dict], alerts: list[dict], notes: l
     lines.extend(
         f"- {item['entity_type']}: `{item['entity_ref']}`" for item in entities
     )
+    limitations = chain_limitations(entities)
+    if limitations:
+        lines.extend(["", "## Chain capability limitations", ""])
+        lines.extend(f"- {item}" for item in limitations)
     lines.extend(["", "## Alerts", ""])
     lines.extend(
         f"- [{item['severity']}] {item['trigger_type']}: {item['explanation']}"
@@ -58,6 +83,7 @@ def case_json(case: dict, entities: list[dict], alerts: list[dict], notes: list[
             "entities": entities,
             "alerts": alerts,
             "notes": notes,
+            "limitations": chain_limitations(entities),
             "disclaimer": DISCLAIMER,
             **({"attribution": {**safe_snapshot(attribution), "disclaimer": ATTRIBUTION_DISCLAIMER}} if attribution is not None else {}),
         },
@@ -97,6 +123,10 @@ def case_pdf(case: dict, entities: list[dict], alerts: list[dict], notes: list[d
         )
         for item in entities
     )
+    limitations = chain_limitations(entities)
+    if limitations:
+        story.append(Paragraph("Chain capability limitations", styles["Heading2"]))
+        story.extend(Paragraph(escape(item), styles["BodyText"]) for item in limitations)
     story.append(Paragraph("Alerts", styles["Heading2"]))
     story.extend(
         Paragraph(

@@ -44,14 +44,15 @@
           <button id="stored-button" type="button" class="secondary">View stored</button>
         </fieldset>
       </form>
-      <p class="muted small">Supported: Bitcoin, Ethereum, Base, Arbitrum, BNB Smart Chain, Polygon and TRON addresses, plus supported transaction identifiers.</p>
+      <p class="muted small">Supported: Bitcoin, Ethereum-compatible networks, TRON, Solana, Litecoin transparent addresses, and Monero addresses. Monero is observation-only.</p>
       <p id="input-note" class="input-note">Use public blockchain identifiers only. Never enter a private key or recovery phrase.</p>
-      <p id="chain-hint-note" class="muted small">Ethereum is the default for shared EVM syntax. Choose a network hint for Base, Arbitrum, BNB Smart Chain, Polygon or TRON transaction IDs.</p>
+      <p id="chain-hint-note" class="muted small">Ethereum is the default for shared EVM syntax. Choose a network hint for other EVM networks, TRON or Litecoin transaction IDs.</p>
       <p class="muted small">Bitcoin needs no key. EVM lookups use Etherscan on the server; Ethereum may use optional Alchemy balance fallback. Etherscan plan coverage varies by chain.</p>
       
     </section>
 
     <section id="transaction-result" class="panel" hidden></section>
+    <section id="observation-result" class="panel" hidden></section>
     <div id="results" hidden>
       <section class="panel" aria-labelledby="overview-heading">
         <div class="section-heading"><h2 id="overview-heading" tabindex="-1">Overview</h2><span id="data-mode" class="badge"></span><span id="result-chain" class="badge"></span></div>

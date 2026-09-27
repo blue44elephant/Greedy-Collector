@@ -14,6 +14,7 @@ class UnsupportedCapability(ChainError):
 class ChainFamily(str, Enum):
     UTXO = 'utxo'
     ACCOUNT = 'account'
+    PRIVACY = 'privacy'
 
 class Capability(str, Enum):
     ADDRESS_VALIDATION = 'address_validation'
@@ -111,11 +112,15 @@ def _builtins():
     from .ethereum import EthereumAdapter
     from .tron import TronAdapter
     from .solana import SolanaAdapter
+    from .litecoin import LitecoinAdapter
+    from .monero import MoneroAdapter
     from .evm_networks import BaseAdapter,ArbitrumAdapter,BnbAdapter,PolygonAdapter
     common=frozenset({Capability.ADDRESS_VALIDATION,Capability.BALANCE,
         Capability.TRANSACTION_HISTORY,Capability.TRANSACTION_LOOKUP,Capability.COUNTERPARTIES,
         Capability.GRAPH,Capability.MONITORING,Capability.DISCOVERY,Capability.LABELS,
         Capability.CASES,Capability.ATTRIBUTION,Capability.RISK})
+    privacy=frozenset({Capability.ADDRESS_VALIDATION,Capability.DISCOVERY,Capability.LABELS,
+        Capability.CASES,Capability.ATTRIBUTION})
     return ChainRegistry((
         ChainDefinition('bitcoin','Bitcoin','BTC',ChainFamily.UTXO,BitcoinAdapter,common|{Capability.PENDING_TRANSACTIONS},8),
         ChainDefinition('ethereum','Ethereum','ETH',ChainFamily.ACCOUNT,EthereumAdapter,common|{Capability.TOKEN_TRANSFERS},18,True,1,'https://etherscan.io'),
@@ -124,7 +129,9 @@ def _builtins():
         ChainDefinition('bsc','BNB Smart Chain','BNB',ChainFamily.ACCOUNT,BnbAdapter,common|{Capability.TOKEN_TRANSFERS},18,True,56,'https://bscscan.com'),
         ChainDefinition('polygon','Polygon','POL',ChainFamily.ACCOUNT,PolygonAdapter,common|{Capability.TOKEN_TRANSFERS},18,True,137,'https://polygonscan.com'),
         ChainDefinition('tron','TRON','TRX',ChainFamily.ACCOUNT,TronAdapter,common|{Capability.TOKEN_TRANSFERS},6),
-        ChainDefinition('solana','Solana','SOL',ChainFamily.ACCOUNT,SolanaAdapter,common|{Capability.TOKEN_TRANSFERS},9,False,None,'https://explorer.solana.com')))
+        ChainDefinition('solana','Solana','SOL',ChainFamily.ACCOUNT,SolanaAdapter,common|{Capability.TOKEN_TRANSFERS},9,False,None,'https://explorer.solana.com'),
+        ChainDefinition('litecoin','Litecoin','LTC',ChainFamily.UTXO,LitecoinAdapter,common|{Capability.PENDING_TRANSACTIONS},8,False,None,'https://litecoinspace.org'),
+        ChainDefinition('monero','Monero','XMR',ChainFamily.PRIVACY,MoneroAdapter,privacy,12)))
 
 REGISTRY=_builtins()
 def get_chain(chain_id):return REGISTRY.get_chain(chain_id)

@@ -100,10 +100,10 @@ export function makeForm(definitions, label, handler) {
   });
   return form;
 }
-import {chains} from './chains.js';
+import {chains,hasCapability} from './chains.js';
 export {chains};
-export const chainAddress = () => [
-  {name:"chain", label:"Chain", options:chains},
+export const chainAddress = capability => [
+  {name:"chain", label:"Chain", options:capability ? chains.filter(([id]) => hasCapability(id, capability)) : chains},
   {name:"address", label:"Public wallet address", required:true},
 ];
 export function heading(host, name, reload) {

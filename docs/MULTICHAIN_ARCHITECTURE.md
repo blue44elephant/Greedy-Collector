@@ -2,14 +2,17 @@
 
 Greedy Collector registers **Bitcoin (`bitcoin`)**, **Ethereum (`ethereum`)**, **Base (`base`)**,
 **Arbitrum One (`arbitrum`)**, **BNB Smart Chain (`bsc`)**, **Polygon (`polygon`)**, and
-**TRON (`tron`)**, and **Solana (`solana`)**. IDs are stable persisted identifiers. The four added EVM networks share
-one descriptor-configured Etherscan V2 adapter; Solana uses a separate read-only JSON-RPC adapter. No database migration or fake runtime data is used.
+**TRON (`tron`)**, **Solana (`solana`)**, **Litecoin (`litecoin`)**, and **Monero (`monero`)**.
+IDs are stable persisted identifiers. The four added EVM networks share one descriptor-configured
+Etherscan V2 adapter; Solana uses a separate read-only JSON-RPC adapter; Litecoin uses bounded
+LitecoinSpace REST requests; Monero has local mainnet address validation only. No database
+migration or fake runtime data is used.
 
 ## Registry and adapter boundary
 
 `chains/registry.py` contains an ordered internal registry of frozen, typed
-`ChainDefinition` records: ID, display name, native symbol/precision, UTXO or
-account family, EVM compatibility and chain ID, explorer URL, adapter class and bounded
+`ChainDefinition` records: ID, display name, native symbol/precision, UTXO, account, or
+privacy family, EVM compatibility and chain ID, explorer URL, adapter class and bounded
 `Capability` flags.
 Registration rejects duplicate IDs, missing adapters and inconsistent operations.
 Optional methods on the existing `ChainAdapter` raise `unsupported_chain_capability`.
@@ -22,6 +25,8 @@ pagination and fallback remain inside each provider adapter. TRON uses the serve
 `TRON_PRO_API_KEY`; credentials never enter registry metadata or browser code.
 Solana uses `SOLANA_RPC_URL` or the documented rate-limited public mainnet endpoint;
 the credential-bearing URL never enters responses or logs.
+Litecoin reads the server-side `LITECOIN_API_URL` setting, defaults to LitecoinSpace, and
+accepts only HTTPS requests. Monero address resolution is offline and has no provider URL.
 
 `GET /api/greedy-collector/chains` exposes a deliberate safe metadata projection,
 never adapter objects, settings, credentials or request URLs. Browser modules load
@@ -55,6 +60,11 @@ identifier to Base, Arbitrum, BNB Smart Chain or Polygon. A hint selects one ada
 mismatch returns unknown. Existing TRON transaction IDs also use an explicit hint.
 Solana base58 accounts and 64-byte transaction signatures resolve locally when no
 higher-priority existing chain syntax matches.
+Litecoin transparent address forms resolve locally. Shared Litecoin/Bitcoin script-address
+syntax and some case-insensitive Bech32/Base58 overlap can be ambiguous, so the optional
+network hint remains available. Bare 64-hex transaction IDs keep their Bitcoin precedence;
+Litecoin transaction IDs require an explicit Litecoin hint. Monero standard, subaddress, and
+integrated mainnet forms resolve locally to an observation-only wallet view.
 The Wallet workspace populates the optional selector from `/chains`; investigation handoffs
 carry the selected chain directly.
 
@@ -69,6 +79,12 @@ risk evaluation or monitoring without explicitly declaring those capabilities.
 TRON uses generic source-backed label exposure but opts out of the existing BTC/ETH
 behavioral indicators. Solana also opts out of chain-specific behavioral risk rules.
 No TRON- or Solana-specific heuristic or neutral evidence is invented.
+Litecoin declares the transparent UTXO operations it implements, including bounded history,
+transaction lookup, graph and monitoring, and does not declare token transfers. Monero declares
+only address validation, Discovery, Labels, Cases, and Attribution. Balance, transaction lookup
+and history, risk, counterparties, graph, monitoring, pending records, and token operations are
+absent. Reports identify Monero's unavailable public address-level transaction reconstruction;
+that limitation is not presented as inactivity.
 
 Discovery chain support and transform compatibility remain separate. Generic wallet
 transforms materialize compatible registered chains at startup; execution checks
@@ -82,6 +98,9 @@ No ownership/claim semantics change.
 Solana's adapter supports bounded parsed history and instruction-derived SOL/SPL events.
 See [Solana support](SOLANA_SUPPORT.md) for RPC bounds, version support, ownership limits,
 event keys, and monitoring behavior.
+Litecoin's read provider and transparent-history bounds are in [Litecoin support](LITECOIN_SUPPORT.md).
+Monero's locally validated address types and strict observation boundary are in
+[Monero observation support](MONERO_OBSERVATION_SUPPORT.md).
 
 `chains/evm.py` owns common EVM address/transaction syntax and case normalization.
 `chains/etherscan_v2.py` owns shared V2 balance, bounded transaction/token pagination,

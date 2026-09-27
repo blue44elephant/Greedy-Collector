@@ -19,9 +19,9 @@ function svgNode(tag, attrs = {}, label) {
 export function initGraph() {
   const host = byId("graph-workspace");
   const controls = panel("Graph", "This graph represents relationships currently stored by Greedy Collector. Hop depth does not imply complete blockchain coverage.");
-  controls.append(element("p", "Counterparties are not recursively fetched. Bitcoin relationships use representative endpoints; arrows do not imply ownership or wrongdoing.", "muted small"));
+  controls.append(element("p", "Counterparties are not recursively fetched. Litecoin edges appear only when provider data returns one distinct input and one distinct output address; complex UTXO records remain available without inferred edges. Arrows do not imply ownership or wrongdoing.", "muted small"));
   const output = panel("Stored relationships");
-  const form = makeForm([...chainAddress(), {name:"hops", label:"Hops", options:["1", "2", "3"]}], "Load graph", async data => {
+  const form = makeForm([...chainAddress("graph"), {name:"hops", label:"Hops", options:["1", "2", "3"]}], "Load graph", async data => {
     output.replaceChildren(element("h2", "Stored relationships"));
     if (!data.address.trim()) throw new UserError("Enter a public wallet address.");
     const graph = await api(`/address/${data.chain}/${encodeURIComponent(data.address.trim())}/graph?hops=${data.hops}`);
@@ -87,7 +87,8 @@ export function renderGraph(host, graph, chain, labels = null) {
   for (const node of layout.nodes) {
     const position = layout.positions.get(key(node.id));
     const annotations = labelsFor(labels || [], node.chain || chain, node.id);
-    const entityKind = chainMetadata(node.chain || chain)?.family === "account" ? "Account/address" : "Wallet";
+    const family = chainMetadata(node.chain || chain)?.family;
+    const entityKind = family === "privacy" ? "Privacy address" : family === "account" ? "Account/address" : "Wallet";
     const displayLabel = annotations[0]?.label || (labels === null ? node.label : node.id);
     const named = displayLabel && displayLabel !== node.id;
     const group = svgNode("g", {class:`graph-node${node.is_focus ? " is-focus" : ""}`, "data-node-id":node.id,

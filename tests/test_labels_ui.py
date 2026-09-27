@@ -49,6 +49,14 @@ def test_create_manual_label_defaults_and_provenance(ui_client,chain,address):
     assert row['source']=='Manual analyst label' and row['confidence']==0.7 and row['last_updated']
     assert row['chain']==chain and row['address']==address
 
+
+def test_litecoin_uppercase_bech32_label_keeps_explicit_chain_context(ui_client):
+    client,_=ui_client
+    address='LTC1QQQQSYQCYQ5RQWZQFPG9SCRGWPUGPZYSN3S44DY'
+    response=client.post(PREFIX+'/labels/manual',json=payload(chain='litecoin',address=address,label='Litecoin fixture'))
+    assert response.status_code==200,response.text
+    assert response.json()['chain']=='litecoin' and response.json()['address']==address
+
 def test_csv_upsert_key_count_and_export(ui_client):
     client,_=ui_client
     assert client.get(PREFIX+'/labels').json()=={'labels':[]}

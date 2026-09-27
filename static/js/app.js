@@ -49,6 +49,12 @@ document.addEventListener("return-discovery", event => {
 });
 document.addEventListener("open-attribution", event => navigate("attribution", event.detail));
 document.addEventListener("open-label", event => navigate("labels", event.detail.id));
+document.addEventListener("open-label-address", event => {
+  const form = byId("label-create");
+  form.elements.chain.value = event.detail.chain;
+  form.elements.address.value = event.detail.address;
+  navigate("labels");
+});
 document.addEventListener("open-case", event => navigate("cases", event.detail.id));
 document.addEventListener("open-alert", event => navigate("alerts", event.detail.id));
 document.querySelectorAll("[data-workspace]").forEach(button => button.addEventListener("click", () => navigate(button.dataset.workspace)));

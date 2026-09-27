@@ -6,7 +6,8 @@ import {addToCaseButton} from "./case_actions.js";
 import {readLabels, labelsFor, labelCards} from "./label_ui.js";
 import {api} from "./api.js";
 import {byId, text, element, dateText, shortValue, action, run, UserError} from "./ui.js";
-const providerNames = {blockstream:"Blockstream", mempool_space:"Mempool.space", etherscan:"Etherscan", alchemy:"Alchemy", trongrid:"TronGrid", trongrid_trc20:"TronGrid TRC-20", "solana-json-rpc":"Solana JSON-RPC"};
+const providerNames = {blockstream:"Blockstream", mempool_space:"Mempool.space", litecoinspace:"Litecoin Space", etherscan:"Etherscan", alchemy:"Alchemy", trongrid:"TronGrid", trongrid_trc20:"TronGrid TRC-20", "solana-json-rpc":"Solana JSON-RPC"};
+const supportedIdentifierTypes = "Supported: Bitcoin addresses and bare 64-hex transaction IDs; Ethereum-compatible 0x + 40-hex addresses and 0x + 64-hex transaction hashes; TRON addresses and hinted transaction IDs; Solana addresses and transaction signatures; Litecoin transparent addresses and hinted 64-hex transaction IDs; Monero mainnet addresses (observation only).";
 let navigate;
 export function investigate(chain, address) {
   if (byId("lookup-form").dataset.busy === "true") return;
@@ -18,7 +19,9 @@ export function investigate(chain, address) {
 }
 function renderLookup(data, stored = false, labels = [], labelsUnavailable = false) {
   const profile = data.address;
-  byId("wallet-case-action").replaceChildren(addToCaseButton("wallet", profile.chain, profile.address));
+  byId("observation-result").hidden = true;
+  byId("wallet-case-action").replaceChildren(hasCapability(profile.chain, "cases") ? addToCaseButton("wallet", profile.chain, profile.address) : element("span", "Case references are unavailable for this chain."));
+  byId("wallet-graph").hidden = !hasCapability(profile.chain, "graph");
   byId("wallet-labels").replaceChildren(element("h3", "Wallet labels"),
     labelCards(labelsFor(labels, profile.chain, profile.address), "No stored labels for this wallet."));
   byId("wallet-labels").append(element("p", labelsUnavailable ? "Current labels could not be loaded. Returned lookup annotations are shown where available." : "Current stored annotations. Risk evidence reflects labels at evaluation time; labels do not prove ownership.", "muted small"));
@@ -43,8 +46,9 @@ function renderLookup(data, stored = false, labels = [], labelsUnavailable = fal
   text("retrieved-at", dateText(data.provenance?.retrieved_at ?? profile.updated_at));
   // Ethereum metadata uses the fetched count, not a separate provider total.
   const providerCount = profile.metadata_json?.transaction_count;
-  byId("provider-count").hidden = !bitcoin || providerCount === null || providerCount === undefined;
-  text("provider-count", bitcoin ? `Provider-reported Bitcoin transaction count: ${providerCount ?? "Not available"}. This may differ from records returned.` : "");
+  const hasProviderCount = bitcoin || profile.chain === "litecoin";
+  byId("provider-count").hidden = !hasProviderCount || providerCount === null || providerCount === undefined;
+  text("provider-count", hasProviderCount ? "Provider-reported " + (chainMetadata(profile.chain)?.display_name ?? profile.chain) + " address transaction count: " + (providerCount ?? "Not available") + ". This may differ from bounded records returned." : "");
 
   const rows = document.createDocumentFragment();
   for (const tx of transactions) {
@@ -130,11 +134,40 @@ function renderLookup(data, stored = false, labels = [], labelsUnavailable = fal
 }
 
 
+function renderObservationOnly(chain, address, labels = [], labelsUnavailable = false) {
+  const host = byId("observation-result");
+  const heading = element("h2", "Public-source observation"); heading.tabIndex = -1;
+  const metadata = chainMetadata(chain);
+  host.replaceChildren(heading, element("p", metadata?.display_name ?? chain, "badge"), element("p", address, "full-address"),
+    element("p", "Observation-only / public-source investigation.", "bounded-note"),
+    element("p", "Public on-chain address history is unavailable from the address alone.", "bounded-note"),
+    element("p", "This limitation is not evidence of inactivity, and Greedy Collector has not checked a public balance or transaction history.", "muted small"));
+  const available = (metadata?.capabilities || []).map(value => ({address_validation:"Address validation",labels:"Local Labels",cases:"Cases",attribution:"Attribution",discovery:"Discovery"}[value])).filter(Boolean);
+  host.append(element("p", "Available actions: " + (available.join(", ") || "None") + ".", "muted small"));
+  host.append(element("h3", "Wallet labels"), labelCards(labelsFor(labels, chain, address), "No stored labels for this address."));
+  host.append(element("p", labelsUnavailable ? "Current labels could not be loaded." : "Labels are analyst/source annotations, not proof of ownership.", "muted small"));
+  const actions = element("div", undefined, "toolbar");
+  if (hasCapability(chain, "labels")) actions.append(action("Add local label", () => {
+    document.dispatchEvent(new CustomEvent("open-label-address", {detail:{chain,address}}));
+  }));
+  if (hasCapability(chain, "cases")) actions.append(addToCaseButton("wallet", chain, address));
+  const current = () => host.isConnected && !host.hidden && byId("lookup-form").dataset.busy !== "true";
+  if (hasCapability(chain, "discovery")) {
+    actions.append(manualSourceAction({chain,address}, current));
+    actions.append(discoveryAction({chain,address}, "wallet", current));
+  }
+  if (hasCapability(chain, "attribution")) host.append(attributionSummary({chain,address}));
+  host.append(actions, element("p", "No blockchain provider request is made when this address is resolved.", "muted small"));
+  host.hidden = false;
+  heading.focus();
+}
+
 async function lookup(stored, chain_hint = undefined) {
   const form = byId("lookup-form");
   const input = byId("wallet-address").value.trim();
   if (form.dataset.busy === "true") return;
   byId("results").hidden = byId("transaction-result").hidden = true;
+  byId("observation-result").hidden = true;
   return run(form, async () => {
     if (!input) throw new UserError("Enter a supported wallet address or transaction hash.");
     const selectedHint = chain_hint ?? (byId("chain-hint").value || undefined);
@@ -144,7 +177,7 @@ async function lookup(stored, chain_hint = undefined) {
       throw new UserError(`This value matches more than one supported identifier format (${choices}). Choose a Network hint to continue.`);
     }
     if (!["address", "transaction"].includes(resolved.kind)) {
-      throw new UserError(`Greedy Collector could not identify this value as a supported wallet address or transaction hash. Supported: ${chains.map(row => row[1]).join("/")} addresses and supported transaction identifiers.`);
+      throw new UserError(`Greedy Collector could not identify this value as a supported wallet address or transaction hash. ${supportedIdentifierTypes}`);
     }
     const chain = resolved.chain, address = resolved.normalized;
     byId("wallet-address").value = address;
@@ -152,6 +185,12 @@ async function lookup(stored, chain_hint = undefined) {
       if (stored) throw new UserError("Stored-state views require a wallet address. Use Search to retrieve this transaction.");
       const tx = await api("/lookup/tx", {method:"POST", body:{chain, tx_hash:address}});
       renderTransaction(tx);
+      return;
+    }
+    if (!hasCapability(chain, "balance") || !hasCapability(chain, "transaction_history")) {
+      let labelsUnavailable = false;
+      const labels = await readLabels().catch(() => {labelsUnavailable = true; return [];});
+      renderObservationOnly(chain, address, labels, labelsUnavailable);
       return;
     }
     const path = `/address/${chain}/${encodeURIComponent(address)}`;

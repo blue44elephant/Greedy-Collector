@@ -25,6 +25,7 @@ dependencies = [
     "alembic>=1.13,<2.0",
     "APScheduler>=3.10,<4.0",
     "reportlab>=4.0,<5.0",
+    "pycryptodomex>=3.23,<4.0",
 ]
 
 [project.optional-dependencies]

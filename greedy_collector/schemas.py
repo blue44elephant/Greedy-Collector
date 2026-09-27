@@ -75,7 +75,12 @@ class CaseEntityCreate(BaseModel):
     def chain_context(self):
         if self.entity_type in ('wallet','transaction','graph_snapshot') and 'chain' in self.metadata:
             from .chains import get_chain,Capability
-            get_chain(self.metadata['chain']).require(Capability.CASES)
+            required = [Capability.CASES]
+            if self.entity_type == 'transaction':
+                required.append(Capability.TRANSACTION_LOOKUP)
+            elif self.entity_type == 'graph_snapshot':
+                required.append(Capability.GRAPH)
+            get_chain(self.metadata['chain']).require(*required)
         return self
 
 

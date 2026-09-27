@@ -1,7 +1,8 @@
 # Greedy Collector
 
-Greedy Collector is a standalone application for inspecting public Bitcoin, Ethereum, Base,
-Arbitrum One, BNB Smart Chain, Polygon, TRON, and Solana account activity. It retrieves records from configured providers, stores normalized results
+Greedy Collector is a standalone application for inspecting public Bitcoin, Litecoin, Ethereum, Base,
+Arbitrum One, BNB Smart Chain, Polygon, TRON, and Solana account activity, plus observation-only
+Monero address references. It retrieves records from configured providers, stores normalized results
 in SQLite, applies deterministic risk rules, and provides Wallet, Graph, Monitoring, Alerts, Cases, and Labels workspaces.
 Other existing backend workflows remain accessible through Swagger at `/docs`; they are
 not exposed in this frontend increment.
@@ -58,6 +59,26 @@ is normally required. History retrieves up to approximately 500 confirmed record
 the initial provider mempool set. A failure on any Blockstream history page discards that
 attempt and restarts with Mempool.space.
 
+### Litecoin
+
+Litecoin transparent-address balance and history use the read-only LitecoinSpace API
+(`LITECOIN_API_URL`, default `https://litecoinspace.org/api`); no API key is required.
+Balance uses exact litoshi conversion. Returned address history is bounded to at most
+75 confirmed records across three pages plus up to 50 initial mempool records. It is not
+unlimited lifetime history. Transactions with multiple distinct inputs or outputs retain
+provider data but do not become a guessed single sender/recipient graph edge. MWEB addresses
+and activity are outside this transparent-chain integration. See
+[Litecoin support](docs/LITECOIN_SUPPORT.md).
+
+### Monero
+
+Monero is observation-only. Mainnet standard, subaddress, and integrated address checksums
+are validated locally. Local labels, cases, attribution, and generic discovery are available.
+Greedy Collector makes no Monero provider request and does not retrieve a balance,
+address-level transaction history, counterparties, or graph. Unavailable public address
+history is not evidence of inactivity. View keys and private wallet material are not requested.
+See [Monero observation support](docs/MONERO_OBSERVATION_SUPPORT.md).
+
 ### Ethereum
 
 Full address lookup and transaction retrieval require `ETHERSCAN_API_KEY`.
@@ -99,7 +120,12 @@ hint for Base, Arbitrum, BNB Smart Chain or Polygon. TRON hashes need an explici
 hint. Solana account and signature checks make no provider call during resolution. Paste a supported identifier and press **Search** or Enter.
 The local `POST /api/greedy-collector/resolve` endpoint classifies syntax without provider
 requests. The chain selector is optional; Ethereum is the default for shared EVM syntax.
-Unknown values produce a supported-types message and no lookup request.
+Unknown values produce a supported-types message and no lookup request. Litecoin transparent
+addresses and transaction IDs are supported. Bare 64-hex transaction IDs keep their existing
+Bitcoin precedence; use an explicit Litecoin network hint for Litecoin transaction IDs.
+Bitcoin and Litecoin prefix-5 script addresses overlap, and uppercase `LTC1` text can overlap
+a supported Base58 syntax, so select a network hint when the resolver reports ambiguity. Monero
+mainnet addresses resolve to an observation-only view and do not dispatch provider lookup.
 ENS remains Ethereum-only, and GraphSense remains Bitcoin/Ethereum-only. Support can be extended
 through chain descriptors and adapters; other networks and naming systems are not implemented.
 

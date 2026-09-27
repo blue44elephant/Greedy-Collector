@@ -2,7 +2,7 @@
 import pytest
 from fastapi.testclient import TestClient
 import main
-from greedy_collector.chains import BitcoinAdapter, EthereumAdapter, TronAdapter
+from greedy_collector.chains import BitcoinAdapter, EthereumAdapter, TronAdapter, LitecoinAdapter
 from greedy_collector.chains.base import ChainAdapter
 
 
@@ -12,10 +12,11 @@ def client(monkeypatch):
     monkeypatch.setattr(main, "stop_monitoring", lambda: None)
     def forbidden(*args, **kwargs):
         pytest.fail("Resolver attempted a provider operation")
-    for adapter in [BitcoinAdapter, EthereumAdapter, TronAdapter]:
+    for adapter in [BitcoinAdapter, EthereumAdapter, TronAdapter, LitecoinAdapter]:
         monkeypatch.setattr(adapter, "lookup_address", forbidden)
         monkeypatch.setattr(adapter, "lookup_transaction", forbidden)
         monkeypatch.setattr(adapter, "transactions", forbidden)
+    monkeypatch.setattr(LitecoinAdapter, "_request_json", forbidden)
     monkeypatch.setattr(ChainAdapter, "_get", forbidden)
     monkeypatch.setattr(ChainAdapter, "_post", forbidden)
     # No startup scheduler needed for pure resolver routes.
@@ -25,7 +26,6 @@ def client(monkeypatch):
 
 @pytest.mark.parametrize("value,chain,kind", [
     ("1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa", "bitcoin", "address"),
-    ("3J98t1WpEZ73CNmQviecrnyiWrnqRhWNLy", "bitcoin", "address"),
     ("bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kygt080", "bitcoin", "address"),
     ("0x" + "A1" * 20, "ethereum", "address"),
     ("a" * 64, "bitcoin", "transaction"),
@@ -36,6 +36,17 @@ def test_supported_identifier(client, value, chain, kind):
     response = client.post("/api/greedy-collector/resolve", json={"input": value})
     assert response.status_code == 200
     assert response.json() == {"kind":kind, "chain":chain, "normalized":value.lower() if kind == "transaction" else value, "lookup_type":kind}
+
+
+def test_shared_bitcoin_litecoin_script_address_requires_a_hint(client):
+    value = "3J98t1WpEZ73CNmQviecrnyiWrnqRhWNLy"
+    response = client.post("/api/greedy-collector/resolve", json={"input":value})
+    assert response.status_code == 200
+    assert response.json()["kind"] == "ambiguous"
+    assert {item["chain"] for item in response.json()["possibilities"]} == {"bitcoin", "litecoin"}
+    for chain in ("bitcoin", "litecoin"):
+        selected = client.post("/api/greedy-collector/resolve", json={"input":value, "chain_hint":chain})
+        assert selected.status_code == 200 and selected.json()["chain"] == chain
 
 
 def test_resolver_reuses_adapter_validation(client, monkeypatch):
@@ -56,7 +67,11 @@ def test_unknown_returns_safe_result_without_lookup(client, value):
     response = client.post("/api/greedy-collector/resolve", json={"input":value})
     assert response.status_code == 200
     assert response.json()["kind"] == "unknown"
-    assert len(response.json()["supported"]) == 16
+    supported = response.json()["supported"]
+    assert len(supported) == 19
+    assert "Litecoin address" in supported and "Litecoin transaction ID" in supported
+    assert "Monero address" in supported
+    assert not any(item.startswith("Monero ") and item != "Monero address" for item in supported)
     assert "normalized" not in response.json()
 
 

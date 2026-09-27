@@ -89,7 +89,7 @@ const failures = [];
   assert.equal(await evaluate("!!document.querySelector('#graph-workspace svg')"), false);
   await evaluate(`go('wallet'); document.getElementById('wallet-address').value='0x'+'8'.repeat(40); document.getElementById('stored-button').click(); waitFor(()=>document.getElementById('lookup-form').dataset.busy==='false')`);
   assert.ok(await evaluate("document.querySelector('#lookup-form .operation-status').textContent.includes('This address has not been stored locally yet.')"));
-  for (const [address, expected] of [['', 'Enter a supported wallet address or transaction hash.'], ['invalid-address', 'Greedy Collector could not identify this value as a supported wallet address or transaction hash. Supported: Bitcoin/Ethereum/Base/Arbitrum One/BNB Smart Chain/Polygon/TRON/Solana addresses and supported transaction identifiers.'], ['0x'+'5'.repeat(40), 'Ethereum provider configuration is unavailable.'], ['0x'+'6'.repeat(40), 'Blockchain provider request failed. Try again later.']]) {
+  for (const [address, expected] of [['', 'Enter a supported wallet address or transaction hash.'], ['invalid-address', 'Greedy Collector could not identify this value as a supported wallet address or transaction hash. Supported: Bitcoin addresses and bare 64-hex transaction IDs; Ethereum-compatible 0x + 40-hex addresses and 0x + 64-hex transaction hashes; TRON addresses and hinted transaction IDs; Solana addresses and transaction signatures; Litecoin transparent addresses and hinted 64-hex transaction IDs; Monero mainnet addresses (observation only).'], ['0x'+'5'.repeat(40), 'Ethereum provider configuration is unavailable.'], ['0x'+'6'.repeat(40), 'Blockchain provider request failed. Try again later.']]) {
     await evaluate(`document.getElementById('wallet-address').value=${JSON.stringify(address)}; document.getElementById('lookup-form').requestSubmit(); waitFor(()=>document.getElementById('lookup-form').dataset.busy==='false')`);
     assert.equal(await evaluate("document.querySelector('#lookup-form .operation-status').textContent"), expected);
     assert.equal(await evaluate("document.getElementById('results').hidden"), true);
@@ -105,8 +105,9 @@ const failures = [];
   await require("./browser_cases.cjs")({evaluate,call,work});
   await require("./browser_labels.cjs")({evaluate,call,work});
   await require("./browser_research.cjs")({evaluate,call,work});
+  await require("./browser_mc5.cjs")({evaluate});
   assert.deepEqual(failures, []);
-  console.log('Browser smoke passed: Wallet BTC/ETH, token/mempool records, stored views/timestamps, counterparty investigation, graph hops/selection/investigation/zoom, empty states, missing stored address, and safe errors.');
+  console.log('Browser smoke passed: Wallet BTC/ETH/LTC, Monero observation, token/mempool records, stored views/timestamps, counterparty investigation, graph interactions, monitoring, empty states, and safe errors.');
   console.log('Screenshot:', path.join(work,'wallet.png'));
   await call('Browser.close').catch(()=>{});
 })().catch(error => {console.error(error); console.error('Test diagnostics:',work); process.exitCode=1;}).finally(()=> {socket?.close(); browser?.kill(); server?.kill();});

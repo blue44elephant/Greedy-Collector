@@ -1,0 +1,48 @@
+// MC-5 flows run inside the single existing isolated browser smoke session.
+const assert=require('node:assert/strict');
+module.exports=async({evaluate})=>{
+  const idle="waitFor(()=>document.getElementById('lookup-form').dataset.busy==='false')";
+  const text=selector=>evaluate(`document.querySelector(${JSON.stringify(selector)}).innerText`);
+  await evaluate(`go('wallet');window.mc5Requests=[];window.mc5Fetch=window.fetch;window.fetch=(url,options)=>{mc5Requests.push({url:String(url),body:options?.body});return mc5Fetch(url,options)}`);
+  await evaluate(`document.getElementById('chain-hint').value='';document.getElementById('wallet-address').value='LTC1QQQQSYQCYQ5RQWZQFPG9SCRGWPUGPZYSN3S44DY';document.getElementById('lookup-form').requestSubmit();waitFor(()=>document.getElementById('lookup-form').dataset.busy==='false')`);
+  assert.ok((await text('#lookup-form > .operation-status')).includes('matches more than one'));
+  assert.deepEqual(await evaluate('mc5Requests.map(item=>item.url)'),['/api/greedy-collector/resolve']);
+  await evaluate(`document.getElementById('chain-hint').value='litecoin';document.getElementById('lookup-form').requestSubmit();waitFor(()=>document.getElementById('results').hidden===false&&document.getElementById('lookup-form').dataset.busy==='false')`);
+  assert.equal(await text('#result-chain'),'Litecoin');
+  assert.equal(await text('#balance'),'3.25 LTC');
+  assert.ok((await text('#provider-count')).includes('Litecoin address transaction count: 6'));
+  assert.ok((await text('#transaction-rows')).includes('Unconfirmed'));
+  assert.ok(await evaluate("document.getElementById('provider').textContent==='Litecoin Space'"));
+  assert.ok(await evaluate("mc5Requests.some(item=>item.url.endsWith('/lookup/address'))"));
+  await evaluate("document.getElementById('wallet-graph').click();document.querySelector('#graph-workspace form').requestSubmit();waitFor(()=>document.querySelector('#graph-workspace form').dataset.busy==='false')");
+  assert.ok(await evaluate("document.querySelectorAll('#graph-workspace .graph-node').length>=2"));
+  await evaluate(`go('wallet');document.getElementById('chain-hint').value='litecoin';document.getElementById('wallet-address').value='e'.repeat(64);document.getElementById('lookup-form').requestSubmit();waitFor(()=>document.getElementById('transaction-result').hidden===false&&document.getElementById('lookup-form').dataset.busy==='false')`);
+  assert.ok((await text('#transaction-result')).includes('Litecoin'));
+  assert.ok(await evaluate("!!button('#transaction-result','Investigate wallet')"));
+  await evaluate("button('#transaction-result','Investigate wallet').click();waitFor(()=>document.getElementById('results').hidden===false&&document.getElementById('lookup-form').dataset.busy==='false')");
+  assert.equal(await text('#result-chain'),'Litecoin');
+  await evaluate(`go('monitoring')`);
+  assert.ok(await evaluate("[...document.querySelector('#monitoring-create [name=chain]').options].some(option=>option.value==='litecoin')"));
+  assert.equal(await evaluate("[...document.querySelector('#monitoring-create [name=chain]').options].some(option=>option.value==='monero')"),false);
+  await evaluate(`{const f=document.getElementById('monitoring-create');f.elements.chain.value='litecoin';f.elements.address.value='LKDyUEtTR1HXamkiEphisSiBJu6o3ZPE34';f.elements.label.value='Litecoin smoke watch';f.requestSubmit();waitFor(()=>document.getElementById('monitoring-workspace').dataset.busy==='false')}`);
+  assert.ok((await text('#monitoring-list')).includes('Litecoin smoke watch'));
+  assert.ok((await text('#monitoring-scheduler')).includes('Litecoin interval'));
+  await evaluate("button('#monitoring-selected','Check now').click();waitFor(()=>document.getElementById('monitoring-workspace').dataset.busy==='false')");
+  assert.ok((await text('#monitoring-result')).includes('first observation establishes a silent baseline'));
+
+  await evaluate(`go('wallet');window.mc5Requests.length=0;document.getElementById('chain-hint').value='';document.getElementById('wallet-address').value=${JSON.stringify(require('./browser_monero_address.cjs'))};document.getElementById('lookup-form').requestSubmit();waitFor(()=>document.getElementById('observation-result').hidden===false&&document.getElementById('lookup-form').dataset.busy==='false')`);
+  assert.ok((await text('#observation-result')).includes('Observation-only / public-source investigation.'));
+  assert.ok((await text('#observation-result')).includes('not evidence of inactivity'));
+  assert.equal(await evaluate("document.querySelector('#observation-result').innerText.includes('Balance')"),false);
+  assert.equal(await evaluate("document.querySelector('#observation-result').innerText.includes('Graph')"),false);
+  assert.equal(await evaluate("document.querySelector('#observation-result').innerText.includes('Monitoring')"),false);
+  assert.equal(await evaluate("mc5Requests.some(item=>/lookup\\/(address|tx)|\\/graph|watchlist/.test(item.url))"),false);
+  assert.ok(await evaluate("!!button('#observation-result','Add local label')"));
+  await evaluate("button('#observation-result','Add local label').click();waitFor(()=>document.getElementById('labels-workspace').hidden===false&&document.getElementById('labels-workspace').dataset.busy==='false')");
+  assert.equal(await evaluate("document.querySelector('#label-create [name=chain]').value"),'monero');
+  assert.equal(await evaluate("document.querySelector('#label-create [name=address]').value"),require('./browser_monero_address.cjs'));
+  await evaluate(`{const f=document.getElementById('label-create');f.elements.label.value='Monero browser fixture';f.requestSubmit();waitFor(()=>document.getElementById('labels-workspace').dataset.busy==='false')}`);
+  assert.ok((await text('#labels-list')).includes('Monero browser fixture'));
+  await evaluate('window.fetch=window.mc5Fetch');
+  console.log('MC-5 browser flow passed: Litecoin wallet, graph, and monitoring use isolated mocked provider data; Monero stays provider-free and observation-only with label handoff.');
+};

@@ -48,6 +48,8 @@ def _provider_error(exc: ChainDataError, chain: str | None = None) -> str:
         return "TRON provider configuration is unavailable."
     if "solana_configuration_unavailable" in str(exc):
         return "Solana RPC configuration is unavailable."
+    if "litecoin_configuration_unavailable" in str(exc):
+        return "Litecoin provider configuration is unavailable."
     return "Blockchain provider request failed. Try again later."
 
 
@@ -145,6 +147,9 @@ def add_watchlist(payload: WatchlistCreate, db: Session = Depends(get_db)):
     try:
         return service.add_watchlist(db, payload)
     except ValueError as exc:
+        detail = getattr(exc, "code", None)
+        if detail == "unsupported_chain_capability":
+            raise HTTPException(status_code=422, detail=detail) from exc
         raise HTTPException(status_code=422, detail="Invalid public wallet address") from exc
 
 

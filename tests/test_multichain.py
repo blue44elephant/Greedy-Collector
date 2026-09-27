@@ -58,9 +58,9 @@ def no_network(monkeypatch):
 def test_production_registry_order_and_safe_metadata(monkeypatch):
     monkeypatch.setenv('ETHERSCAN_API_KEY','secret-not-public')
     rows=[d.public_metadata() for d in cr.list_chains()]
-    assert [r['id'] for r in rows]==['bitcoin','ethereum','base','arbitrum','bsc','polygon','tron','solana']
-    assert [r['native_symbol'] for r in rows]==['BTC','ETH','ETH','ETH','BNB','POL','TRX','SOL']
-    assert [r['family'] for r in rows]==['utxo','account','account','account','account','account','account','account']
+    assert [r['id'] for r in rows]==['bitcoin','ethereum','base','arbitrum','bsc','polygon','tron','solana','litecoin','monero']
+    assert [r['native_symbol'] for r in rows]==['BTC','ETH','ETH','ETH','BNB','POL','TRX','SOL','LTC','XMR']
+    assert [r['family'] for r in rows]==['utxo','account','account','account','account','account','account','account','utxo','privacy']
     assert 'secret' not in json.dumps(rows) and 'adapter' not in json.dumps(rows)
     assert cr.is_supported_chain('ethereum') and not cr.is_supported_chain('test_chain')
 
@@ -93,7 +93,7 @@ def test_hint_unknown_mismatch_and_ambiguity(third):
     assert resolve_identifier('arbitrary text')['kind']=='unknown'
     assert resolve_identifier(ETH)['chain']=='ethereum'
     assert resolve_identifier(ETH,'test_chain')['chain']=='test_chain'
-    assert LookupRequest.model_json_schema()['properties']['chain']['enum']==['bitcoin','ethereum','base','arbitrum','bsc','polygon','tron','solana','test_chain']
+    assert LookupRequest.model_json_schema()['properties']['chain']['enum']==['bitcoin','ethereum','base','arbitrum','bsc','polygon','tron','solana','litecoin','monero','test_chain']
     assert resolve_identifier(ETH,'ethereum')['chain']=='ethereum'
 
 @pytest.mark.parametrize('chain,has,absent',[('bitcoin',C.PENDING_TRANSACTIONS,C.TOKEN_TRANSFERS),('ethereum',C.TOKEN_TRANSFERS,C.PENDING_TRANSACTIONS)])
@@ -190,7 +190,7 @@ def test_metadata_and_controlled_route_errors():
     import main
     with TestClient(main.app) as client:
         rows=client.get('/api/greedy-collector/chains').json()['chains']
-        assert [r['id'] for r in rows]==['bitcoin','ethereum','base','arbitrum','bsc','polygon','tron','solana']
+        assert [r['id'] for r in rows]==['bitcoin','ethereum','base','arbitrum','bsc','polygon','tron','solana','litecoin','monero']
         for path in ['/','/health','/docs','/openapi.json','/static/js/chains.js']:
             assert client.get(path).status_code==200
         r=client.post('/api/greedy-collector/resolve',json={'input':ETH,'chain_hint':'unknown'})

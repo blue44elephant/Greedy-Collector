@@ -32,7 +32,7 @@ export function initLabels() {
     const address=data.address.trim();
     if(!address || !data.label.trim() || !data.source.trim())throw new UserError("Enter an address, label, and source.");
     if(data.chain!=="any") {
-      const resolved=await api("/resolve",{method:"POST",body:{input:address}});
+      const resolved=await api("/resolve",{method:"POST",body:{input:address,...(data.chain!=="any"?{chain_hint:data.chain}:{})}});
       if(resolved.kind!=="address" || resolved.chain!==data.chain)throw new UserError("The address does not match the selected supported chain.");
     }
     const confidence=Number(data.confidence);
@@ -60,7 +60,7 @@ export function initLabels() {
     }
     const id=element("details");id.append(element("summary","Stored reference"),element("p",row.id,"full-address"));
     const controls=element("div",undefined,"toolbar");controls.append(action("Investigate wallet",()=>investigate(row.chain,row.address)),action("Open graph",async()=>{
-      const resolved=await api("/resolve",{method:"POST",body:{input:row.address}});
+      const resolved=await api("/resolve",{method:"POST",body:{input:row.address,...(row.chain!=="any"?{chain_hint:row.chain}:{})}});
       if(resolved.kind!=="address")throw new UserError("This annotation does not reference a supported wallet address.");
       if(row.chain!=="any" && resolved.chain!==row.chain)throw new UserError("This stored label has incompatible chain/address metadata.");
       openGraph(resolved.chain,resolved.normalized);

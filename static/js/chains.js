@@ -11,5 +11,5 @@ export const supportedChain = id => definitions.has(id);
 export const hasCapability = (id, capability) => definitions.get(id)?.capabilities.includes(capability) ?? false;
 export function addressKey(chain, address) {
   const mode = definitions.get(chain)?.address_case;
-  return mode === 'insensitive' || (mode === 'bech32_insensitive' && /^bc1/i.test(address)) ? address.toLowerCase() : address;
+  return mode === 'insensitive' || (mode === 'bech32_insensitive' && /^(?:bc1|ltc1)/i.test(address)) ? address.toLowerCase() : address;
 }

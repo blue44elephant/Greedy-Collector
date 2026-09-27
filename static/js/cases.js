@@ -73,7 +73,7 @@ export function initCases() {
       let reference=data.entity_ref.trim(), metadata={};
       if (!reference) throw new UserError("Enter an entity reference.");
       if (["wallet","transaction"].includes(data.entity_type)) {
-        const resolved=await api("/resolve", {method:"POST",body:{input:reference}});
+        const resolved=await api("/resolve", {method:"POST",body:{input:reference,chain_hint:data.chain}});
         if (resolved.kind !== (data.entity_type === "wallet" ? "address" : "transaction") || resolved.chain !== data.chain) throw new UserError("The reference does not match the selected entity type and chain. Supported wallet or transaction identifiers are required.");
         reference=resolved.normalized; metadata={chain:resolved.chain,[data.entity_type === "wallet" ? "address" : "tx_hash"]:reference};
       }

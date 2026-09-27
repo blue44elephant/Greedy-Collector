@@ -87,7 +87,7 @@ export function initMonitoring() {
     ];
   }
   const payload = data => ({label:data.label, priority:data.priority, notes:data.notes, case_id:data.case_id.trim() || null, enabled:data.enabled === "on"});
-  const createForm = editor([...chainAddress(), ...editable()], "Add watch", async (data, form) => {
+  const createForm = editor([...chainAddress("monitoring"), ...editable()], "Add watch", async (data, form) => {
     const wallet = await request("/watchlist", {method:"POST", body:{chain:data.chain, address:data.address.trim(), ...payload(data)}});
     selectedId = wallet.id; offset = 0; selected.hidden = history.hidden = alerts.hidden = lastResult.hidden = true;
     form.reset();
