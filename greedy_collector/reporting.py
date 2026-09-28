@@ -59,6 +59,8 @@ def case_markdown(case: dict, entities: list[dict], alerts: list[dict], notes: l
     )
     lines.extend(["", "## Analyst Notes", ""])
     lines.extend(f"- {item['body']}" for item in notes)
+    from .discovery.broad.service import report_lines
+    lines.extend(report_lines(entities))
     lines.extend(flow_lines(entities))
     lines.extend(cluster_lines(entities))
     lines.extend(attribution_lines(attribution))

@@ -160,3 +160,27 @@ def manual_source_preview(payload:ManualSourceInput,runtime:Runtime):
 @router.post('/manual-source/capture',status_code=201,response_model=ManualSourceCaptured)
 def manual_source_capture(payload:ManualSourceConfirm,runtime:Runtime):
     with runtime.sessions() as db:return capture_service(runtime,db).capture(payload)
+
+
+# Broad projections share existing run, observation, review and promotion endpoints.
+class BroadCandidateReview(s.Input):
+    status:s.ReviewState
+    note:str=s.Field(min_length=1,max_length=2000)
+    expected_version:int=s.Field(strict=True,ge=1)
+class BroadPin(s.Input):
+    run_id:str=s.Field(min_length=1,max_length=36)
+
+@router.get('/broad/runs/{run_id}')
+def broad_run(run_id:str,runtime:Runtime)->dict:
+    from .broad.service import BroadService
+    with runtime.service() as svc:return BroadService(svc.db,svc).snapshot(run_id)
+
+@router.post('/broad/candidates/{candidate_id}/review')
+def broad_review(candidate_id:str,payload:BroadCandidateReview,runtime:Runtime)->dict:
+    from .broad.service import BroadService
+    with runtime.service() as svc:return BroadService(svc.db,svc).review_candidate(candidate_id,payload.status.value,payload.note,payload.expected_version)
+
+@router.post('/broad/cases/{case_id}/pin')
+def broad_pin(case_id:str,payload:BroadPin,runtime:Runtime)->dict:
+    from .broad.service import BroadService
+    with runtime.service() as svc:return BroadService(svc.db,svc).pin(case_id,payload.run_id)

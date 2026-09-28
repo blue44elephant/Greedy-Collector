@@ -1,3 +1,4 @@
+import {broadAction} from './discovery_broad.js';
 import {walletClustering} from './clustering.js';
 import {chains, chainMetadata, hasCapability} from './chains.js';
 import {manualSourceAction} from './discovery_manual_source.js';
@@ -130,6 +131,7 @@ function renderLookup(data, stored = false, labels = [], labelsUnavailable = fal
   byId("wallet-discovery").replaceChildren(element("h3", "Discovery"),
     element("p", "Public-source pivots and candidate clues. Choose pivots explicitly in Discovery.", "muted small"),
     manualSourceAction({chain:profile.chain,address:profile.address}, () => !byId("results").hidden && byId("lookup-form").dataset.busy !== "true"),
+    broadAction({chain:profile.chain,address:profile.address}, "wallet", () => !byId("results").hidden && byId("lookup-form").dataset.busy !== "true"),
     discoveryAction({chain:profile.chain,address:profile.address}, "wallet", () => !byId("results").hidden && byId("lookup-form").dataset.busy !== "true"));
   byId("wallet-attribution").replaceChildren(attributionSummary({chain:profile.chain,address:profile.address}));
   byId("results").hidden = false;
@@ -156,6 +158,7 @@ function renderObservationOnly(chain, address, labels = [], labelsUnavailable = 
   const current = () => host.isConnected && !host.hidden && byId("lookup-form").dataset.busy !== "true";
   if (hasCapability(chain, "discovery")) {
     actions.append(manualSourceAction({chain,address}, current));
+    actions.append(broadAction({chain,address}, "wallet", current));
     actions.append(discoveryAction({chain,address}, "wallet", current));
   }
   if (hasCapability(chain, "attribution")) host.append(attributionSummary({chain,address}));

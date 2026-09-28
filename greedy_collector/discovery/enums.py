@@ -12,7 +12,7 @@ ERRORS = ('configuration_unavailable','entitlement_unavailable','retention_not_p
 TERMINAL_RUNS = frozenset(RUN_STATES)-{'queued','running'}
 TERMINAL_SOURCES = frozenset(SOURCE_STATES)-{'queued','running'}
 # Future predicates are reserved in the schema; only these type pairs are active.
-PAIRS = {'publicly_labeled_as':(('blockchain_address','annotation'),),'mentions_wallet':(('url','blockchain_address'),('annotation','blockchain_address')),
+PAIRS = {'mentioned_at':(('blockchain_address','url'),),'publicly_labeled_as':(('blockchain_address','annotation'),),'mentions_wallet':(('url','blockchain_address'),('annotation','blockchain_address')),
          'mentioned_at':(('blockchain_address','url'),),
          'publicly_listed_by':(('blockchain_address','url'),),
          'repository_contains':(('repository','blockchain_address'),),

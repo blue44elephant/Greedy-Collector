@@ -60,7 +60,9 @@ class PromotionService(AttributionService):
         from .graphsense import public_material
         endpoint=self.db.get(Subject,result.to_subject_id) if result.predicate=='publicly_labeled_as' else None
         public=public_material(result,observation,source,subject,endpoint)
-        eligible_source = bool((local or github or ens or manual or public) and policy and transform and policy.storage_allowed
+        from .broad.providers import promotable
+        broad=promotable(result,observation,source,subject)
+        eligible_source = bool((local or github or ens or manual or public or broad) and policy and transform and policy.storage_allowed
             and policy.retention_policy_id == source.retention_policy_id
             and (policy.version,transform.version) == (source.source_version,source.transform_version)
             and source.descriptor_snapshot.get('source',{}).get('storage_allowed')
@@ -81,6 +83,7 @@ class PromotionService(AttributionService):
             'source_id':source.source_id, 'source_version':source.source_version,
             'coverage':source.coverage, 'provider_total':source.provider_total,
             'observation':observation_values,
+            'analyst_review_note':review.reason if review else None,
         }
         if manual or public:
             # A manual capture repeats its quoted context in the observation
@@ -91,9 +94,9 @@ class PromotionService(AttributionService):
         else:snapshot=clean(snapshot)
         evidence_fields = dict(
             evidence_type='discovery_snapshot',
-            title='GC Discovery - Local Label' if local else 'GC Discovery - ENS primary name' if ens else 'GC Discovery - Manual source observation' if manual else 'GC Discovery - GraphSense public tag' if public else 'GC Discovery - GitHub code mention',
+            title='GC Discovery - Local Label' if local else 'GC Discovery - ENS primary name' if ens else 'GC Discovery - Manual source observation' if manual else 'GC Discovery - GraphSense public tag' if public else 'GC Discovery - Broad public source' if broad else 'GC Discovery - GitHub code mention',
             summary=observation.summary, excerpt=observation.excerpt,
-            source_name='Greedy Collector Label via Discovery' if local else 'ENS / Ethereum via Discovery' if ens else 'Manual analyst capture via Discovery' if manual else 'GraphSense public TagPacks via Discovery' if public else 'GitHub via Discovery',
+            source_name='Greedy Collector Label via Discovery' if local else 'ENS / Ethereum via Discovery' if ens else 'Manual analyst capture via Discovery' if manual else 'GraphSense public TagPacks via Discovery' if public else 'Brave Web Search via Discovery' if broad else 'GitHub via Discovery',
             source_url=observation.source_url, source_locator='discovery-observation:'+observation.id,
             source_catalog_id=source.source_id, origin='analyst_added' if local or manual else 'public_osint',
             observed_on=observation.observed_on or (observation.observed_at.date() if observation.observed_at else None),

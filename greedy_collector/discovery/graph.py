@@ -22,7 +22,7 @@ class GraphRoot(BaseModel):
 
 class GraphResult(BaseModel):
     id: str
-    type: Literal['label_annotation','code_location','ens_name','source_page','public_annotation']
+    type: Literal['label_annotation','code_location','ens_name','source_page','public_annotation','web_source','alias_candidate','entity_candidate','domain_candidate']
     result_id: str
     observation_id: str
     observation_fingerprint: str
@@ -30,10 +30,12 @@ class GraphResult(BaseModel):
     subtitle: str
     source_id: str
     transform_id: str
-    predicate: Literal['locally_labeled_as','repository_contains','resolves_to','mentions_wallet','publicly_labeled_as']
+    predicate: Literal['locally_labeled_as','repository_contains','resolves_to','mentions_wallet','publicly_labeled_as','mentioned_at','search_candidate','names_alias','names_entity','references_domain']
     summary: str
     excerpt: str | None
     url: str | None
+    broad_material: dict | None = None
+    candidate: dict | None = None
     public_annotation: dict | None = None
     manual_source: dict | None = None
     captured_at: datetime | None = None
@@ -65,7 +67,7 @@ class GraphEdge(BaseModel):
     source: str
     target: str
     result_id: str
-    predicate: Literal['locally_labeled_as','repository_contains','resolves_to','mentions_wallet','publicly_labeled_as']
+    predicate: Literal['locally_labeled_as','repository_contains','resolves_to','mentions_wallet','publicly_labeled_as','mentioned_at','search_candidate','names_alias','names_entity','references_domain']
 
 
 class GraphUnrenderedResult(BaseModel):
@@ -79,8 +81,8 @@ class GraphUnrenderedResult(BaseModel):
 class GraphRead(BaseModel):
     run_id: str
     root: GraphRoot
-    items: list[GraphResult] = Field(max_length=100)
-    edges: list[GraphEdge] = Field(max_length=100)
+    items: list[GraphResult] = Field(max_length=1100)
+    edges: list[GraphEdge] = Field(max_length=1100)
     total: int
     limit: int
     offset: int
@@ -137,7 +139,8 @@ def graph_summary(service, run_id, *, limit=100, offset=0, metadata_only=False):
         from .graphsense import public_material
         endpoint=db.get(Subject,result.to_subject_id) if result.predicate=='publicly_labeled_as' else None
         public=public_material(result,observation,source,subject,endpoint)
-        if not (local or code or ens or manual or public):
+        broad=(source.transform_id,observation.kind,result.predicate)==('wallet.broad_web','search_result','mentioned_at')
+        if not (local or code or ens or manual or public or broad):
             endpoint=ens_subjects.get(result.from_subject_id)
             if (result.predicate,observation.kind)==('resolves_to','name_service_record') and endpoint and (endpoint.kind,endpoint.namespace)==('ens_name','ethereum') and subject.namespace=='ethereum' and result.to_subject_id==subject.id:
                 # Retain page membership/counts and inspectable IDs, without
@@ -147,7 +150,7 @@ def graph_summary(service, run_id, *, limit=100, offset=0, metadata_only=False):
             raise DiscoveryError('Unsupported Discovery graph relationship')
         snapshot=clean(observation.source_snapshot);record=snapshot.get('record',{})
         count,first,last=included[result.id]
-        node=dict(id='discovery:result:'+result.id,type='label_annotation' if local else 'ens_name' if ens else 'source_page' if manual else 'public_annotation' if public else 'code_location',
+        node=dict(id='discovery:result:'+result.id,type='web_source' if broad else 'label_annotation' if local else 'ens_name' if ens else 'source_page' if manual else 'public_annotation' if public else 'code_location',
             result_id=result.id,observation_id=observation.id,observation_fingerprint=observation.content_sha256,
             title=record.get('label',observation.title) if local else snapshot.get('repository_full_name',observation.title),
             subtitle=record.get('source','') if local else snapshot.get('file_path',''),
@@ -157,7 +160,8 @@ def graph_summary(service, run_id, *, limit=100, offset=0, metadata_only=False):
             current_observation_count=counts[result.id],current_review_status=result.review_status,
             current_review_required=result.reviewed_material_revision>0 and result.material_revision>result.reviewed_material_revision,
             promotion_count=promotions.get(result.id,0) if promotion_available else None)
-        if local:node.update(label_type=record.get('type'),annotation_source=record.get('source'),confidence=record.get('confidence'))
+        if broad:node.update(broad_material=snapshot,subtitle=snapshot.get('source_category','other'),predicate='mentioned_at' if snapshot.get('exact_match') else 'search_candidate')
+        elif local:node.update(label_type=record.get('type'),annotation_source=record.get('source'),confidence=record.get('confidence'))
         elif public:node.update(title=snapshot['tag']['label'],subtitle='GraphSense / Third-party public annotation',public_annotation=snapshot,repository=snapshot['repository'],path=snapshot['file_path'],blob_sha=snapshot['blob_sha'])
         elif manual:node.update(title=snapshot.get('title') or 'Manual source observation',subtitle=snapshot['source_type'],manual_source=snapshot,captured_at=observation.created_at)
         elif ens:
@@ -165,8 +169,16 @@ def graph_summary(service, run_id, *, limit=100, offset=0, metadata_only=False):
         else:node.update(repository=snapshot.get('repository_full_name'),path=snapshot.get('file_path'),blob_sha=snapshot.get('blob_sha'))
         nodes.append(clean(node))
         # Preserve the architecture's literal direction, not query direction.
-        edges.append(dict(id=result.id,result_id=result.id,predicate=result.predicate,
-            source=root['id'] if local or public else node['id'],target=node['id'] if local or public else root['id']))
+        edges.append(dict(id=result.id,result_id=result.id,predicate=node['predicate'],
+            source=root['id'] if local or public or broad else node['id'],target=node['id'] if local or public or broad else root['id']))
+        if broad:
+            from .broad.models import Candidate
+            from .service import row_data
+            for candidate in db.scalars(select(Candidate).where(Candidate.observation_id==observation.id).order_by(Candidate.kind,Candidate.value,Candidate.id)):
+                predicate={'alias':'names_alias','entity':'names_entity','domain':'references_domain'}[candidate.kind]
+                child={**node,'id':'discovery:candidate:'+candidate.id,'type':candidate.kind+'_candidate','title':candidate.value,'subtitle':candidate.material['confidence_type'],
+                    'candidate':row_data(candidate),'current_review_status':candidate.status,'current_review_required':False,'predicate':predicate,'broad_material':None}
+                nodes.append(clean(child));edges.append(dict(id='candidate:'+candidate.id,result_id=result.id,predicate=predicate,source=node['id'],target=child['id']))
     return GraphRead.model_validate(dict(run_id=run_id,root=clean(root),items=nodes,edges=edges,total=total,
         limit=limit,offset=offset,next_offset=offset+limit if offset+limit<total else None,
         promotion_available=promotion_available,unrendered_results=unrendered))

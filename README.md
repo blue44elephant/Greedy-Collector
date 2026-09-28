@@ -444,3 +444,12 @@ presentation only, not evidence. See [Graph interaction](docs/GRAPH_INTERACTION.
 Discovery cards now explain transform types, configuration, chain compatibility,
 preflight eligibility, execution/cache accounting and bounded empty results. See
 [Discovery diagnostics and the deferred OSINT-2 roadmap](docs/DISCOVERY_DIAGNOSTICS.md).
+
+
+## Broad Wallet Discovery
+
+Wallet > Broad Discovery provides explicit preflight and bounded public-source search,
+source/candidate review, existing Attribution promotion and immutable Case pins.
+Brave Web Search is optional and requires a server-side key plus appropriate storage
+rights. Other Discovery sources remain independently available. No automatic identity
+claims, crawling or recursive searching. See [Broad Wallet Discovery](docs/BROAD_WALLET_DISCOVERY.md).

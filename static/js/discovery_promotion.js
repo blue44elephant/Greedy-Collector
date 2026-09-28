@@ -17,6 +17,8 @@ export function discoveryProvenance(snapshot) {
     const r=s.record||{};
     node.append(table(['Underlying Label','Stored annotation'],[['Label',r.label],['Original source',r.source],['Annotation confidence',r.confidence],['Last updated',dateText(r.last_updated)]]),
       element('p','Label confidence is source annotation metadata, not Attribution confidence.','bounded-note'));
+  } else if(o.kind==='search_result' && snapshot.source_id==='brave_search') {
+    node.append(table(['Broad search provenance','Stored value'],[['Provider',s.provider],['Query',s.query],['URL',o.source_url],['Title',s.title],['Source category',s.source_category],['Exact wallet token present',String(s.exact_match)],['Analyst note',snapshot.analyst_review_note]]),element('blockquote',o.excerpt||o.summary),element('p','Search metadata only; GC did not fetch this source or verify its statements.'));
   } else if(o.kind==='analyst_capture' && snapshot.source_id==='manual_source') {
     node.append(manualSourceDetail(s,o.created_at));
   } else if(o.kind==='name_service_record' && snapshot.source_id==='ens_ethereum') {

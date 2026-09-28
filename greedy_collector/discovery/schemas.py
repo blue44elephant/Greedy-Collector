@@ -48,10 +48,16 @@ class Budget(Input):
         return self
 
 class PlanRequest(Input):
+    broad:bool=False
     subject:SubjectInput
-    selections:list[Selection]=Field(min_length=1,max_length=3)
+    selections:list[Selection]=Field(min_length=1,max_length=6)
     refresh:bool=False
     budget:Budget=Field(default_factory=Budget)
+
+    @model_validator(mode='after')
+    def scope_bound(self):
+        if not self.broad and len(self.selections)>3:raise ValueError('Standard run maximum is three')
+        return self
 
 class RunCreate(PlanRequest):
     expected_plan_fingerprint:str=Field(pattern=r'^[0-9a-f]{64}$')
@@ -174,6 +180,7 @@ class SourceRead(Accounting):
     retry_after_at:datetime|None
 
 class RunRead(BaseModel):
+    broad:bool=False
     refresh:bool=False
     id:str
     subject_id:str
@@ -308,7 +315,7 @@ class GitHubResourceQuota(Input):
 class QuotaReport(Input):
     github_resources:dict[Literal['code_search','search','core'],GitHubResourceQuota]|None=None
     # Closed source diagnostic persisted in the existing execution metadata.
-    diagnostic:Literal['empty_primary_name','reverse_forward_mismatch','ccip_read_unsupported','resolver_not_found','resolver_not_contract','unsupported_resolver_profile','resolver_error','rpc_error','malformed_abi','invalid_ens_name','normalizer_unavailable','normalizer_timeout','normalizer_protocol_error','ens_configuration_unavailable']|None=None
+    diagnostic:Literal['bounded_search','unsafe_results_omitted','result_cap','request_cap','later_page_timeout','later_page_failed','empty_primary_name','reverse_forward_mismatch','ccip_read_unsupported','resolver_not_found','resolver_not_contract','unsupported_resolver_profile','resolver_error','rpc_error','malformed_abi','invalid_ens_name','normalizer_unavailable','normalizer_timeout','normalizer_protocol_error','ens_configuration_unavailable']|None=None
     limit:int|None=Field(default=None,strict=True,ge=0)
     resource:Literal['code_search','search','core']|None=None
     remaining:int|None=Field(default=None,strict=True,ge=0)

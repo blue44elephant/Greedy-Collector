@@ -1,0 +1,10 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {broadMatches} from '../static/js/discovery_broad.js';
+import {discoveryLayout,discoveryPath} from '../static/js/discovery_graph_layout.js';
+import {setChainMetadata} from '../static/js/chains.js';
+import {walletContext} from '../static/js/discovery_handoff.js';
+const group={canonical_url:'https://example.org',observations:[{id:'o',provider:'brave_search',review_status:'relevant',source_snapshot:{source_category:'other',snippet:'wallet metadata'}}]};
+test('broad filters are local and source-specific',()=>{assert.ok(broadMatches(group,{provider:'brave_search',review:'relevant'},[]));assert.equal(broadMatches(group,{provider:'github'},[]),false);assert.ok(broadMatches(group,{search:'vendor123'},[{observation_id:'o',value:'vendor123'}]));assert.equal(broadMatches(group,{search:'absent'},[]),false);});
+test('broad graph typed nodes have stable distinct positions',()=>{const g={root:{id:'wallet'},items:['web_source','alias_candidate','entity_candidate','domain_candidate'].map((type,i)=>({id:String(i),type}))};const a=discoveryLayout(g),b=discoveryLayout({...g,items:[...g.items].reverse()});assert.deepEqual(a.positions,b.positions);assert.equal(new Set([...a.positions.values()].map(JSON.stringify)).size,5);assert.match(discoveryPath({source:'0',target:'1'},a),/^M/);});
+test('broad handoff preserves wallet context without execution',()=>{setChainMetadata([{id:'bitcoin',display_name:'Bitcoin',capabilities:[]}]);assert.equal(walletContext({origin:'wallet',chain:'bitcoin',address:'test',broad:true}).broad,true);assert.equal(walletContext({origin:'invalid',chain:'bitcoin',address:'test',broad:true}),null);});

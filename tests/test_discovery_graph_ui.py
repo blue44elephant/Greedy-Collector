@@ -19,7 +19,7 @@ def test_graph_workspace_and_existing_workflows_reused():
     assert "button('Graph'" in source and 'initDiscoveryGraph' in source
     assert 'await graph.setRun(current.id)' in source and 'Back to Discovery graph' in source
     graph=(ROOT/'static/js/discovery_graph.js').read_text(encoding='utf8')
-    assert 'Showing ${graph.items.length} of ${graph.total}' in graph
+    assert 'Showing ${graph.items.length} nodes from ${graph.total} Discovery results' in graph
     assert 'Current review' in graph and 'Promoted (current)' in graph
     assert 'sourceReference(node.url)' in graph
     links=(ROOT/'static/js/discovery_manual_source.js').read_text(encoding='utf8')

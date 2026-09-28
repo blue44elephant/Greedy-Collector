@@ -85,8 +85,8 @@ def test_clean_upgrade_discovery_attribution_parity_and_no_seeds(tmp_path,monkey
             assert c.exec_driver_sql('PRAGMA foreign_keys').scalar_one()==1
             assert c.exec_driver_sql('PRAGMA foreign_key_check').all()==[]
         scripts=ScriptDirectory.from_config(cfg)
-        assert scripts.get_heads()==['20260927_02']
-        assert [r.revision for r in scripts.walk_revisions()]==['20260927_02','20260927_01','20260923_02','20260923_01','20260922_02','20260922_01',REVISION,PARENT,'20260913_01','20260912_01','20260630_01']
+        assert scripts.get_heads()==['20260928_01']
+        assert [r.revision for r in scripts.walk_revisions()]==['20260928_01', '20260927_02','20260927_01','20260923_02','20260923_01','20260922_02','20260922_01',REVISION,PARENT,'20260913_01','20260912_01','20260630_01']
     finally:engine.dispose();orm.dispose()
 
 

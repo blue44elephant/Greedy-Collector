@@ -22,6 +22,9 @@ export function discoveryLayout(graph) {
   const right=Math.max(...[...positions.values()].map(p=>p.x))+520;
   const tagRows=Math.max(1,Math.ceil(Math.sqrt(tags.length*2)));
   tags.forEach((n,i)=>positions.set(n.id,{x:right+Math.floor(i/tagRows)*410,y:(i%tagRows-(tagRows-1)/2)*190}));
+  const broad=graph.items.filter(n=>['web_source','alias_candidate','entity_candidate','domain_candidate'].includes(n.type)).sort((a,b)=>a.id.localeCompare(b.id));
+  const base=Math.max(...[...positions.values()].map(p=>p.y))+300;
+  broad.forEach((n,i)=>positions.set(n.id,{x:(i%4)*410,y:base+Math.floor(i/4)*190}));
   const points=[...positions.values()],xs=points.map(p=>p.x),ys=points.map(p=>p.y);
   return {positions,bounds:[Math.min(...xs)-200,Math.min(...ys)-120,Math.max(...xs)-Math.min(...xs)+400,Math.max(...ys)-Math.min(...ys)+240]};
 }

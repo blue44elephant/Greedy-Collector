@@ -1,3 +1,4 @@
+import {broadSnapshotCard} from './discovery_broad.js';
 import {flowCard} from './fund_flow.js';
 import {clusterCard} from './clustering.js';
 import {openLabel} from "./label_ui.js";
@@ -113,9 +114,10 @@ export function initCases() {
       const url=URL.createObjectURL(blob); const link=element("a"); link.href=url; link.download=`case-${row.id}.${extension}`;
       document.body.append(link); link.click(); link.remove(); setTimeout(()=>URL.revokeObjectURL(url),1000);
     }));
+    const broadPins=row.entities.filter(e=>e.entity_type==='broad_discovery'&&e.metadata_json?.broad_discovery_pin).map(e=>broadSnapshotCard(e.metadata_json.broad_discovery_pin));
     const sourceObservations=panel('Source observations','Explicit investigation references; not acceptance of an identity claim.');sourceObservations.id='case-source-observations';
     sourceObservations.append(table(['Source','Wallet',''],row.entities.filter(e=>e.entity_type==='discovery_observation').map(e=>{const m=e.metadata_json||{};return [m.title||m.source_type,m.address,action('Open Discovery observation',()=>document.dispatchEvent(new CustomEvent('open-discovery',{detail:{action:'open_observation',observation_id:e.entity_ref,run_id:m.run_id,result_id:m.result_id}})))];}),'No source observations associated.'));
-    selected.replaceChildren(overview,entities,sourceObservations,caseAttribution(row.id),alerts,notes,files,reports);
+    selected.replaceChildren(overview,entities,...broadPins,sourceObservations,caseAttribution(row.id),alerts,notes,files,reports);
   }
   return id => {if(host.dataset.busy === "true") return; if(id) selectedId=id; return perform(refresh);};
 }

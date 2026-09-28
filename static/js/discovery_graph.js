@@ -5,7 +5,7 @@ import {element,table,dateText,run,UserError} from './ui.js';
 import {discoveryRequest as request} from './discovery_api.js';
 import {discoveryLayout,discoveryPath,zoomView,CARD} from './discovery_graph_layout.js';
 
-const kinds={wallet:'Wallet',label_annotation:'Label annotation',code_location:'Code location',ens_name:'ENS primary name',source_page:'Source observation',public_annotation:'GraphSense public tag'};
+const kinds={web_source:'Public search source',alias_candidate:'Alias candidate',entity_candidate:'Entity candidate',domain_candidate:'Domain candidate',wallet:'Wallet',label_annotation:'Label annotation',code_location:'Code location',ens_name:'ENS primary name',source_page:'Source observation',public_annotation:'GraphSense public tag'};
 const short=(value,n=36)=>String(value??'Not available').length>n?String(value).slice(0,n-1)+'…':String(value??'Not available');
 const review=node=>node.current_review_required?`Review required · previous ${node.current_review_status}`:node.current_review_status;
 function svgNode(tag,attrs={},text) {
@@ -33,7 +33,7 @@ export function initDiscoveryGraph(host,{openResult}) {
   function render(graph) {
     host.replaceChildren(element('h2','Discovery graph'),element('p','Public-source relationships, not blockchain transactions or Attribution. Graph proximity does not imply common ownership.','bounded-note'),
       element('p',`Run: ${graph.run_id}`,'small full-address'),
-      element('p',`Showing ${graph.items.length} of ${graph.total} Discovery results${graph.offset?` · offset ${graph.offset}`:''}.`,'discovery-graph-count'),
+      element('p',`Showing ${graph.items.length} nodes from ${graph.total} Discovery results${graph.offset?` · offset ${graph.offset}`:''}.`,'discovery-graph-count'),
       element('p','Node material belongs to this run. Review, total observation counts and promotion counts are current analytic status across runs.','muted small'));
     if(!graph.promotion_available)host.append(element('p','Promotion metadata is unavailable; the stored Discovery graph remains usable.','bounded-note'));
     const tools=element('div',undefined,'toolbar');host.append(tools);
@@ -46,13 +46,15 @@ export function initDiscoveryGraph(host,{openResult}) {
     const views=()=>{if(!state.view)state.view=[...layout.bounds];svg.setAttribute('viewBox',state.view.join(' '));};
     const select=(id,edge=false)=>{
       state.selected={id,edge};svg.querySelectorAll('[aria-pressed]').forEach(n=>{const selected=n.dataset.id===id&&n.dataset.edge===String(edge);n.classList.toggle('selected',selected);n.setAttribute('aria-pressed',String(selected));});
-      const node=id===graph.root.id?graph.root:graph.items.find(n=>edge?n.result_id===id:n.id===id);
+      const selectedEdge=edge?graph.edges.find(e=>e.id===id):null;
+      const node=id===graph.root.id?graph.root:graph.items.find(n=>edge?(n.id===(selectedEdge?.target===graph.root.id?selectedEdge?.source:selectedEdge?.target)):n.id===id);
       if(!node)return;
       inspector.replaceChildren(element('h3',edge?'Relationship detail':kinds[node.type]));
       if(node.type==='wallet') {
         inspector.append(table(['Field','Value'],[['Chain',node.chain],['Full wallet',node.address]]),button('Copy wallet address',async()=>{try{await navigator.clipboard.writeText(node.address);}catch{throw new UserError('Copy the full wallet address from the detail table.');}}),
           button('Open blockchain graph',()=>document.dispatchEvent(new CustomEvent('open-discovery-blockchain-graph',{detail:{chain:node.chain,address:node.address}}))),element('p','Opens the separate blockchain workspace with this wallet prefilled. Load graph there to read stored transfer relationships.','muted small'));return;
       }
+      if(node.broad_material||node.candidate){inspector.append(element('p','Source metadata / candidate only. No ownership or common-control claim.'),element('pre',JSON.stringify(node.candidate||node.broad_material,null,2)),button('Review source and candidates',()=>openResult(node.result_id,node.observation_id)));return;}
       inspector.append(element('p',node.type==='public_annotation'?'Third-party public annotation. This does not establish current or legal ownership, wallet control or common ownership.':node.type==='source_page'?'The analyst recorded that this source referenced the wallet. This does not establish source/operator ownership or common ownership.':node.type==='ens_name'?'At observation time, this primary name was forward verified to the wallet. This technical naming relationship does not establish real-world identity or wallet control.':node.predicate==='repository_contains'?'The wallet identifier was observed in this public code location. Code mention does not establish repository owner control of the wallet.':'This wallet had the displayed stored Label annotation. This is secondary annotation metadata.'),
         table(['Field','Value'],[['Predicate',node.predicate],['Result',node.result_id],['Selected run observation',node.observation_id],['Source / transform',`${node.source_id} / ${node.transform_id}`],
           ...(node.type==='source_page'?[['Provenance','Manual analyst capture'],['Source type',node.manual_source?.source_type]]:node.type==='ens_name'?[['ENS primary name',node.primary_name],['Namespace',node.namespace],['Wallet',node.wallet],['Verification','Forward verified'],['Verification method',node.verification_method],['Universal Resolver',node.universal_resolver],['Resolver',node.resolver],['Reverse resolver',node.reverse_resolver]]:node.type==='label_annotation'?[['Label',node.title],['Label type',node.label_type],['Original source',node.annotation_source],['Annotation confidence (metadata)',node.confidence]]:[['Repository',node.repository],['File',node.path],['Blob SHA',node.blob_sha]]),
@@ -95,7 +97,7 @@ export function initDiscoveryGraph(host,{openResult}) {
         svgNode('title',{},node.title||node.address),svgNode('text',{x:-138,y:-47,class:'kind'},kinds[node.type]),
         svgNode('text',{x:-138,y:-22},short(node.title||node.address)),svgNode('text',{x:-138,y:0},short(node.subtitle||node.chain)),
         svgNode('text',{x:-138,y:24,class:'status'},node.type==='wallet'?'Focus wallet':short(review(node),42)),
-        svgNode('text',{x:-138,y:48,class:'status'},node.type==='wallet'?'Public identifier':`Observations: ${node.run_observation_count} · Promoted: ${node.promotion_count??'unavailable'}`));
+        svgNode('text',{x:-138,y:48,class:'status'},node.type==='wallet'?'Public identifier':node.candidate?'Source-bound candidate':`Observations: ${node.run_observation_count} · Promoted: ${node.promotion_count??'unavailable'}`));
       selectable(g,node.id,false);svg.append(g);interaction.bind(g,node.id);
     }
     interaction.update();

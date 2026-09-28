@@ -1,3 +1,4 @@
+import {renderBroad} from './discovery_broad.js';
 import {typeName,explanation,networkBehavior,availability,preflightGroups,runSummary,zeroResult} from './discovery_diagnostics.js';
 import {supportedChain, addressKey} from './chains.js';
 import {graphSenseDetail} from './discovery_graphsense.js';
@@ -35,7 +36,8 @@ export function initDiscovery() {
   let visible = false, loaded = false, busy = false, transforms = [], sources = [], subject = null;
   let plan = null, intent = null, runKey = null, current = null, result = null, observation = null;
   let resultsOffset = 0, historyOffset = 0, observationsOffset = 0, reviewsOffset = 0;
-  const choices = [];
+  const choices = [];let broadMode=false;
+  const broadBound=element('select');broadBound.id='broad-bound';for(const value of [20,50]){const option=element('option',String(value));option.value=String(value);broadBound.append(option);}broadBound.addEventListener('change',invalidate);
   let entry = null, pendingHandoff = null;
   const entryPanel = element('section',undefined,'panel'); entryPanel.id = 'discovery-entry'; entryPanel.hidden = true;
   const capturePanel=element('div');
@@ -89,7 +91,7 @@ export function initDiscovery() {
   function button(text, fn) { const b = element('button', text, 'secondary'); b.type = 'button'; b.addEventListener('click', () => perform(fn)); return b; }
   const planButton = button('Plan selected pivots', () => makePlan()); planButton.id = 'discovery-plan-button';
   const runButton = button('Run discovery', startRun); runButton.id = 'discovery-run-button';
-  planning.append(options, planButton, planned, runButton);
+  planning.append(element('label','Broad maximum results per provider'),broadBound,button('Broad Discovery preflight',async()=>{if(!subject)throw new UserError('Check a wallet first.');broadMode=true;choices.forEach(c=>{c.check.checked=c.transform.mode!=='manual'&&c.transform.chains.includes(subject.chain);});await makePlan();}),button('Detailed transform mode',()=>{broadMode=false;choices.forEach(c=>c.check.checked=false);invalidate();}),options, planButton, planned, runButton);
   top.append(button('Refresh capabilities', async () => { invalidate(); await capabilities(); }));
   currentPanel.append(element('p', 'No run selected.', 'empty'));
   results.append(element('p', 'Select a stored run to inspect its candidate results.', 'empty'));
@@ -183,19 +185,21 @@ export function initDiscovery() {
     const chosen = choices.filter(c => c.check.checked);
     selections ||= chosen.map(c => ({transform_id:c.transform.id,source_id:c.source}));
     if (!selections.length) throw new UserError('Select a pivot to inspect its availability.');
-    if (selections.length > 3) throw new UserError('Select up to 3 pivots per run. Plan the remaining pivots separately.');
+    if (selections.length > (broadMode?6:3)) throw new UserError('Select up to 3 pivots per run. Plan the remaining pivots separately.');
     const paid_units = {};
     for (const c of chosen.filter(c => c.transform.cost_class === 'PAID')) {
       const amount = Number(c.budget.value);
       if (!Number.isSafeInteger(amount) || amount < 0 || amount > 1000000) throw new UserError('Paid authorization must be a bounded nonnegative integer.');
       if (!diagnostic) paid_units[c.source] = amount;
     }
-    const payload = {subject:{...subject}, selections, refresh:options.querySelector('[name=refresh]').checked, budget:{allow_free_local:true,allow_free_remote:true,allow_limited_free:true,paid_units}};
+    if(broadMode)selections=selections.map(p=>({...p,parameters:{max_results:Math.min(Number(broadBound.value),transforms.find(t=>t.id===p.transform_id).max_results)}}));
+    const payload = {broad:broadMode,subject:{...subject}, selections, refresh:options.querySelector('[name=refresh]').checked, budget:{allow_free_local:true,allow_free_remote:true,allow_limited_free:true,paid_units}};
     const response = await request('/plan',{body:payload});
     plan = response; intent = payload; runKey = crypto.randomUUID();
     planned.replaceChildren(element('h3',diagnostic ? 'Diagnostic plan — no execution' : 'Plan ready for inspection'), element('p', `${label(plan.subject.namespace)} · ${plan.subject.canonical_value}`, 'full-address'));
     const groups=preflightGroups(plan),names=rows=>rows.map(p=>{const t=transforms.find(t=>t.id===p.transform_id);return `${t?.display_name||p.transform_id}${p.eligibility==='eligible'?'':': '+(t&&!t.executable?availability(t,subject.chain).text:reason(p.eligibility))}`;}).join('; ')||'None';
     planned.append(element('p',`Will run / generate manual actions: ${names(groups.ready)}`),element('p',`Unavailable (will not execute): ${names(groups.unavailable)}`));
+    if(broadMode)planned.append(element('p',`Not applicable: ${transforms.filter(t=>!t.chains.includes(subject.chain)).map(t=>t.display_name).join('; ')||'None'}`),element('p',`Manual pivots (explicit action only): ${transforms.filter(t=>t.mode==='manual').map(t=>t.display_name).join('; ')}`));
     planned.append(table(['Pivot / source','Eligibility','Cost / authorization','Allowed limits','Cache'],plan.selections.map(p => [`${p.transform_id} / ${p.source_id}`,reason(p.eligibility),`${costNames[p.cost_class]} · Maximum ${p.max_units} ${p.cost_unit}; paid authorized ${plan.budget.paid_units[p.source_id] || 0}`,`${p.parameters.max_results} results / ${p.max_requests} requests`,plan.refresh ? 'Explicit refresh; reuse bypassed' : `Compatible cache may be reused (${p.cache_seconds}s window)`])));
     planned.append(element('p',`Expires ${dateText(plan.expires_at)}. Planning did not query providers. Confirm Run discovery to execute eligible pivots.`, 'muted small'));
     if (plan.selections.some(p => transforms.find(t => t.id === p.transform_id)?.mode === 'manual')) planned.append(element('p','Selected manual pivots generate search actions only. GC does not conduct the search or collect webpages.','bounded-note'));
@@ -232,7 +236,7 @@ export function initDiscovery() {
         detected.textContent=`${label(subject.chain)} · ${subject.address} · Stored observation wallet.`;
         await openResult(incoming.result_id,incoming.observation_id);return;
       }
-      entry = walletContext(incoming);
+      entry = walletContext(incoming); broadMode=!!entry?.broad;
       subject = null; choices.forEach(c => { c.check.checked = false; c.budget.value = '0'; });
       options.querySelector('[name=refresh]').checked = false; invalidate(); renderEntry();
       if (!entry) throw new UserError('Discovery handoff requires a supported wallet and origin workspace.');
@@ -240,6 +244,7 @@ export function initDiscovery() {
       form.elements.address.value = entry.address;
       await checkSubject(entry.chain); entry.address = subject.address; renderEntry();
       await capabilities();
+      if(broadMode){choices.forEach(c=>{c.check.checked=c.transform.mode!=='manual'&&c.transform.chains.includes(subject.chain);});await makePlan();}
       // Read global history only; never auto-open a previous run or execute a pivot.
       await loadHistory(historyOffset);
       if(incoming.action==='manual_source')openCapture();
@@ -289,6 +294,7 @@ export function initDiscovery() {
   }
   async function loadResults(offset = 0) {
     if (!current) return;
+    if(current.broad){const snapshot=await request(`/broad/runs/${encode(current.id)}`);renderBroad(results,snapshot,{openResult,perform,reload:()=>loadResults(0)});await graph.setRun(current.id);return;}
     const page = await request(`/runs/${encode(current.id)}/results?limit=20&offset=${offset}`); resultsOffset = offset;
     results.replaceChildren(element('h2','Results'),element('p','Candidate relationships are not ownership claims. Review summaries are current; observations retain their historical material.','muted small'));
     results.append(table(['Candidate / relationship','Reference / source','Original observation times','Review','Provenance','Action'],page.items.map(item => {

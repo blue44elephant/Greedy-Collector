@@ -120,6 +120,8 @@ def production_executors(sessions):
     from .ens import EnsPrimaryNameExecutor,configured
     from .manual_source import ManualSourceService
     registry=ExecutorRegistry()
+    from .broad.providers import WebSearchExecutor
+    registry.register(Binding('wallet.broad_web','brave_search',1,1,WebSearchExecutor(),QuotaPolicy(daily_units=100,monthly_units=1000)))
     registry.register(Binding('wallet.graphsense_public_tags','github',1,1,GraphSenseExecutor(),QuotaPolicy(daily_units=100,monthly_units=3000)))
     registry.register_capture(CaptureBinding('wallet.manual_source_observation','manual_source',1,1,ManualSourceService))
     registry.register(Binding('wallet.ens_primary_name','ens_ethereum',1,1,EnsPrimaryNameExecutor(),QuotaPolicy(daily_units=100,monthly_units=3000),available=configured))

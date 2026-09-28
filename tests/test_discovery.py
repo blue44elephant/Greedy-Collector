@@ -245,7 +245,7 @@ def test_existing_subsystem_boundaries(svc):
 
 def test_registry_capabilities_do_not_execute_or_leak(monkeypatch):
     monkeypatch.setenv('DISCOVERY_GITHUB_TOKEN','test-only-credential')
-    values=REGISTRY.capabilities();assert len(values['transforms'])==6
+    values=REGISTRY.capabilities();assert len(values['transforms'])==7
     assert all(not t['implemented'] and not t['executable'] for t in values['transforms'])
     assert next(s for s in values['sources'] if s['id']=='github')['configured'] is True
     assert 'test-only-credential' not in json.dumps(values)

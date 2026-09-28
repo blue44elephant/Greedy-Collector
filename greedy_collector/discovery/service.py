@@ -105,7 +105,7 @@ class DiscoveryService:
         if subject.kind!='blockchain_address':raise DiscoveryError('Only wallet subjects can define V1 runs')
         if not isinstance(idempotency_key,str) or not 1<=len(idempotency_key)<=128 or clean(idempotency_key)!=idempotency_key:raise DiscoveryError('Invalid idempotency key')
         if type(refresh) is not bool or not isinstance(config_generation,str) or not config_generation.isalnum() or len(config_generation)>64:raise DiscoveryError('Invalid run options')
-        if not isinstance(selections,list) or not 1<=len(selections)<=3:raise DiscoveryError('Select one to three transform/source pairs')
+        if not isinstance(selections,list) or not 1<=len(selections)<=(6 if execution_policy and execution_policy.get('broad') else 3):raise DiscoveryError('Select one to three transform/source pairs')
         plans=[];seen=set()
         for selected in selections:
             if not isinstance(selected,dict) or set(selected)-{'transform_id','source_id','parameters'}:raise DiscoveryError('Invalid transform selection')
@@ -253,6 +253,9 @@ class DiscoveryService:
                     self._bump(result,result.version,material_revision=result.material_revision+(0 if known else 1),first_seen_at=min(aware(result.first_seen_at),now),last_seen_at=max(aware(result.last_seen_at),now))
                 observation=Observation(result_id=result.id,execution_id=source.id,content_sha256=content_hash,**values)
                 self.db.add(observation);self.db.flush()
+            if source.transform_id=='wallet.broad_web':
+                from .broad.service import capture_candidates
+                capture_candidates(self.db,observation,source,query)
             self._attach(source,observation,'local' if source_descriptor['mode']=='local' or descriptor.get('capture_only') else 'retrieved')
             written.append(observation.id)
         source.status='succeeded';source.completed_at=utcnow();source.coverage=coverage;source.provider_total=provider_total

@@ -39,6 +39,7 @@ class DiscoveryRuntime:
         if not binding.quota.enabled:return 'disabled'
         if not self._configured(source):return 'configuration_unavailable'
         if not source.storage_allowed:return 'retention_not_permitted'
+        if source.id=='brave_search' and os.getenv('BRAVE_SEARCH_STORAGE_ALLOWED','').lower() not in ('1','true','yes'):return 'retention_not_permitted'
         allowed={'FREE_LOCAL':budget.allow_free_local,'FREE_REMOTE':budget.allow_free_remote,
                  'LIMITED_FREE':budget.allow_limited_free,'PAID':budget.paid_units.get(source.id,0)>0}
         if not allowed[source.cost_class]:return 'budget_exhausted'
@@ -66,6 +67,9 @@ class DiscoveryRuntime:
     def plan(self,request):
         request=s.PlanRequest.model_validate(request.model_dump(exclude={'expected_plan_fingerprint'}) if isinstance(request,s.RunCreate) else request)
         subject=canonical_subject('blockchain_address',request.subject.chain,request.subject.address)
+        if request.broad or any(x.transform_id=='wallet.broad_web' for x in request.selections):
+            from .broad.service import ensure
+            with self.sessions() as db:ensure(db)
         selected=[];seen=set()
         # Configuration identity is code/operator-owned, never selection-owned.
         config={source_id:{t.id:(binding.quota.model_dump() if (binding:=self.executors.get(t.id,source_id)) else {'manual_version':manual.transform_version} if (manual:=self.executors.manual(t.id,source_id)) else {'unimplemented':True})
@@ -79,10 +83,11 @@ class DiscoveryRuntime:
             if request.subject.chain not in transform.chains:raise DiscoveryError('Unsupported transform subject')
             if (transform.id,source.id) in seen:raise DiscoveryError('Duplicate transform selection')
             seen.add((transform.id,source.id))
-            maximum=item.parameters.max_results or transform.max_results
+            maximum=item.parameters.max_results or (min(20,transform.max_results) if request.broad or transform.id=='wallet.broad_web' else transform.max_results)
             if maximum>transform.max_results:raise DiscoveryError('Result limit exceeds descriptor')
             binding=self.executors.get(transform.id,source.id)
             selected.append((transform,source,maximum,binding))
+        if request.broad and sum(maximum for _,_,maximum,_ in selected)>200:raise DiscoveryError('Aggregate result cap is 200')
         if set(request.budget.paid_units)-{source.id for _,source,_,_ in selected}:raise DiscoveryError('Budget source was not selected')
         generation=fingerprint(config)
         pairs=[s.PlannedSource(transform_id=t.id,source_id=source.id,transform_version=t.version,source_version=source.version,
@@ -106,7 +111,7 @@ class DiscoveryRuntime:
             if any(not task.done() for task in self._tasks.values()):raise Conflict('A Discovery executor is still active')
             plan,generation=self.plan(request)
             if request.expected_plan_fingerprint!=plan.fingerprint:raise Conflict('Plan changed or expired; plan again')
-            policy={'intent':intent,'budget':request.budget.model_dump(mode='json'),'plan_fingerprint':plan.fingerprint,
+            policy={'broad':request.broad,'intent':intent,'budget':request.budget.model_dump(mode='json'),'plan_fingerprint':plan.fingerprint,
                 'selections':[p.model_dump(mode='json') for p in plan.selections]}
             selections=[{'transform_id':p.transform_id,'source_id':p.source_id,'parameters':p.parameters.model_dump(exclude_none=True)} for p in plan.selections]
             with self.service() as svc:
