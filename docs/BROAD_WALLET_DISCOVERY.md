@@ -9,7 +9,88 @@ Discovery executor, quota, run, result and immutable observation architecture.
 Manual Exact Web and Manual Source Observation remain explicit manual operations.
 Unrelated Research APIs are not queried with arbitrary wallet strings.
 
-## Optional official search provider
+## Tavily Basic Search (OSINT-2A)
+
+`wallet.web_search.tavily` / `tavily_search` uses the documented
+`POST https://api.tavily.com/search` API. It is classified LIMITED_FREE.
+A server-side `TAVILY_API_KEY` takes precedence. With no key,
+`TAVILY_KEYLESS_ENABLED=true` (default) enables the documented
+`X-Tavily-Access-Mode: keyless` header. Set it to `false` to require a key.
+No credential value is returned to the browser. Preflight is local and makes no
+provider request. Keyless access is rate-limited, not unlimited or an uptime promise.
+The free keyed plan currently provides 1,000 monthly credits without a payment card.
+A key belonging to a paid account uses that account's allowance; GC cannot infer
+account billing status. GC never upgrades accounts or switches to a paid mode.
+
+Official references checked 2026-09-29:
+[Search API](https://docs.tavily.com/documentation/api-reference/endpoint/search),
+[keyless contract](https://docs.tavily.com/documentation/keyless),
+[credits](https://docs.tavily.com/documentation/api-credits),
+[pricing](https://www.tavily.com/pricing), and
+[platform terms](https://www.tavily.com/terms).
+
+One explicit run makes at most **one Basic Search request**, default/maximum
+**20 results** (Tavily's lower bound within GC's broad maximum of 50). The canonical
+wallet is quoted with `exact_match=true`; local whole-token checks remain
+necessary because provider matching is not authoritative. `auto_parameters=false`
+prevents an automatic advanced-search upgrade. Answers, raw content, images,
+image descriptions and favicons are disabled. No Extract, Crawl, Research,
+result-page fetching, redirect following or recursive queries occur.
+
+Retained fields are canonical URL, title (255 characters), search snippet (2,000
+characters), positional provider rank, retrieval time, exact query, chain/wallet,
+exact-match state, bounded request metadata and existing candidate/provenance data.
+The API's Basic result `content` is treated as a search snippet, not a captured page.
+Generated answers, raw pages, images and unrelated response fields are neither
+requested nor retained. The reviewed platform terms permit documented API integration;
+no specific search-metadata retention prohibition was identified. This is not a
+license to republish third-party content: third-party rights and operator obligations
+still apply. GC retains only bounded metadata for analyst review and does not
+assert ownership of provider output. If applicable account/source terms prohibit
+retaining these fields, disable this optional provider before execution. No fields
+with an identified prohibition are intentionally persisted.
+
+Positive bounded results reuse the existing **6-hour** cache; empty results use
+**1 hour**. Incomplete/capped executions are not reused as complete cached results.
+Cache identity includes source, transform/query version, chain, canonical wallet,
+requested result limit, fixed request policy version and keyed/keyless mode.
+Historical observations and analyst reviews remain immutable after cache expiry;
+cache expiry does not delete retained case/evidence metadata.
+
+Preflight shows Tavily and Brave separately. Available Tavily is selected by default;
+otherwise available Brave is used. Analysts may visibly select both. GC never sends
+a failed Tavily request to Brave automatically. Manual Exact Web remains a manual
+pivot when remote providers are unavailable. Public web search supports the existing
+Discovery chains, including textual Monero addresses; **Monero blockchain tracing
+remains unsupported** and identical EVM address strings stay chain-scoped.
+
+Failure diagnostics distinguish missing key (when keyless is disabled), failed
+authentication, account quota exhaustion, rate limit, timeout, provider error,
+invalid response and keyless allowance exhaustion. HTTP 432/433 are account quota
+failures; keyless 429/432/433 identify keyless exhaustion. Upstream error text is
+never retained or displayed. Other selected providers' results remain available
+in a partial run. There are no automatic retries, purchases or paid fallbacks.
+The keyless documentation does not promise a numeric allowance; GC makes none.
+
+### Optional operator smoke (not run by automated tests)
+
+Leave `TAVILY_API_KEY` empty and `TAVILY_KEYLESS_ENABLED=true`, restart GC, open a
+wallet, choose Broad Discovery and inspect preflight. Confirm Tavily is selected,
+then explicitly run once. Inspect provider status, query, retrieval time and exact
+versus candidate results; an empty bounded response is valid. If the free keyless
+allowance is exhausted, optionally create a free/no-card key through Tavily's
+linked account flow, set `TAVILY_API_KEY` server-side and restart. Do not enable
+billing merely to run this check.
+
+### Serper
+
+Deferred. The [official offer](https://serper.dev/) advertises no-card trial queries,
+but adding another adapter now would require separate transport, quota/error,
+retention and provenance verification. Its [terms](https://serper.dev/terms) also
+require preservation of source/author notices. That work is outside this bounded
+Tavily increment; no Serper configuration or production fallback is installed.
+
+## Existing optional Brave provider
 
 Brave Web Search uses its documented server-side API at
 `https://api.search.brave.com/res/v1/web/search`. Set `BRAVE_SEARCH_API_KEY` in the

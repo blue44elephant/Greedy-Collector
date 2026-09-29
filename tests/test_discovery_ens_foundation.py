@@ -84,7 +84,7 @@ def test_only_new_kind_and_pair_enabled():
     assert enums.PAIRS['repository_contains']==(('repository','blockchain_address'),)
     assert enums.RESULT_KINDS==('candidate_evidence','candidate_identifier','candidate_relationship')
     assert 'name_service_record' in enums.OBSERVATION_KINDS
-    assert set(REGISTRY.transforms)=={'wallet.local_labels','wallet.manual_exact_web','wallet.public_code_mentions','wallet.ens_primary_name','wallet.manual_source_observation','wallet.graphsense_public_tags','wallet.broad_web'}
+    assert set(REGISTRY.transforms)=={'wallet.local_labels','wallet.manual_exact_web','wallet.public_code_mentions','wallet.ens_primary_name','wallet.manual_source_observation','wallet.graphsense_public_tags','wallet.broad_web','wallet.web_search.tavily'}
 
 
 @pytest.mark.parametrize('value',['fixture.eth','é.eth','e\u0301.eth','MiXeD.eth','🦊.eth'])

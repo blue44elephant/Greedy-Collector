@@ -450,6 +450,11 @@ preflight eligibility, execution/cache accounting and bounded empty results. See
 
 Wallet > Broad Discovery provides explicit preflight and bounded public-source search,
 source/candidate review, existing Attribution promotion and immutable Case pins.
+Tavily Basic Search supports free, rate-limited keyless access; an optional server-side
+`TAVILY_API_KEY` takes precedence. Set `TAVILY_KEYLESS_ENABLED=false` to require a key.
+Broad Discovery prefers available Tavily; additional providers require visible selection.
+See [Broad Wallet Discovery](docs/BROAD_WALLET_DISCOVERY.md) for bounds and free setup.
+
 Brave Web Search is optional and requires a server-side key plus appropriate storage
 rights. Other Discovery sources remain independently available. No automatic identity
 claims, crawling or recursive searching. See [Broad Wallet Discovery](docs/BROAD_WALLET_DISCOVERY.md).

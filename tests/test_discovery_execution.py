@@ -109,7 +109,7 @@ def test_multiple_success_and_provenance(h):
 
 def test_unimplemented_and_production_registry(h):
     production=production_executors(h.sessions)
-    assert set(production._bindings)=={('wallet.local_labels','gc_labels'),('wallet.public_code_mentions','github'),('wallet.ens_primary_name','ens_ethereum'),('wallet.graphsense_public_tags','github'),('wallet.broad_web','brave_search')}
+    assert set(production._bindings)=={('wallet.local_labels','gc_labels'),('wallet.public_code_mentions','github'),('wallet.ens_primary_name','ens_ethereum'),('wallet.graphsense_public_tags','github'),('wallet.broad_web','brave_search'),('wallet.web_search.tavily','tavily_search')}
     assert set(production._manual)=={('wallet.manual_exact_web','google')}
     row=asyncio.run(job(h));assert row['status']=='failed'
     assert row['sources'][0]['status']=='unavailable'

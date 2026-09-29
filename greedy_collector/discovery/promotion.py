@@ -96,7 +96,7 @@ class PromotionService(AttributionService):
             evidence_type='discovery_snapshot',
             title='GC Discovery - Local Label' if local else 'GC Discovery - ENS primary name' if ens else 'GC Discovery - Manual source observation' if manual else 'GC Discovery - GraphSense public tag' if public else 'GC Discovery - Broad public source' if broad else 'GC Discovery - GitHub code mention',
             summary=observation.summary, excerpt=observation.excerpt,
-            source_name='Greedy Collector Label via Discovery' if local else 'ENS / Ethereum via Discovery' if ens else 'Manual analyst capture via Discovery' if manual else 'GraphSense public TagPacks via Discovery' if public else 'Brave Web Search via Discovery' if broad else 'GitHub via Discovery',
+            source_name='Greedy Collector Label via Discovery' if local else 'ENS / Ethereum via Discovery' if ens else 'Manual analyst capture via Discovery' if manual else 'GraphSense public TagPacks via Discovery' if public else self.registry.sources[source.source_id].display_name+' via Discovery' if broad else 'GitHub via Discovery',
             source_url=observation.source_url, source_locator='discovery-observation:'+observation.id,
             source_catalog_id=source.source_id, origin='analyst_added' if local or manual else 'public_osint',
             observed_on=observation.observed_on or (observation.observed_at.date() if observation.observed_at else None),

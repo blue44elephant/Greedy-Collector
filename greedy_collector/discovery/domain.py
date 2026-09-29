@@ -20,10 +20,11 @@ def clean(value):
     try:
         result=safe_snapshot(value)
         secret=os.getenv('DISCOVERY_GITHUB_TOKEN','').strip()
-        broad_secret=os.getenv('BRAVE_SEARCH_API_KEY','').strip()
+        broad_secrets=[os.getenv(name,'').strip() for name in ('BRAVE_SEARCH_API_KEY','TAVILY_API_KEY')]
         def redact(item):
-            if isinstance(item,str) and broad_secret:
-                for variant in {broad_secret,quote(broad_secret,safe=''),quote_plus(broad_secret,safe='')}:item=item.replace(variant,'[redacted]')
+            if isinstance(item,str):
+                for broad_secret in filter(None,broad_secrets):
+                    for variant in sorted({broad_secret,quote(broad_secret,safe=''),quote_plus(broad_secret,safe='')},key=len,reverse=True):item=item.replace(variant,'[redacted]')
             if isinstance(item,str) and secret:
                 for variant in sorted({secret,quote(secret,safe=''),quote_plus(secret,safe='')},key=len,reverse=True):
                     item=item.replace(variant,'[redacted]')

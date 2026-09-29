@@ -11,6 +11,8 @@ os.environ['DISCOVERY_GITHUB_TOKEN']=''
 os.environ['ALCHEMY_API_KEY']=''
 os.environ['BRAVE_SEARCH_API_KEY']='osint2-browser-only'
 os.environ['BRAVE_SEARCH_STORAGE_ALLOWED']='true'
+os.environ['TAVILY_API_KEY']=''
+os.environ['TAVILY_KEYLESS_ENABLED']='false'
 from alembic import command
 from alembic.config import Config
 cfg=Config(str(ROOT/'alembic.ini'));cfg.set_main_option('script_location',str(ROOT/'migrations'));command.upgrade(cfg,'head')

@@ -139,7 +139,8 @@ def graph_summary(service, run_id, *, limit=100, offset=0, metadata_only=False):
         from .graphsense import public_material
         endpoint=db.get(Subject,result.to_subject_id) if result.predicate=='publicly_labeled_as' else None
         public=public_material(result,observation,source,subject,endpoint)
-        broad=(source.transform_id,observation.kind,result.predicate)==('wallet.broad_web','search_result','mentioned_at')
+        from .broad import is_web_source
+        broad=is_web_source(source.transform_id,source.source_id) and (observation.kind,result.predicate)==('search_result','mentioned_at')
         if not (local or code or ens or manual or public or broad):
             endpoint=ens_subjects.get(result.from_subject_id)
             if (result.predicate,observation.kind)==('resolves_to','name_service_record') and endpoint and (endpoint.kind,endpoint.namespace)==('ens_name','ethereum') and subject.namespace=='ethereum' and result.to_subject_id==subject.id:

@@ -11,6 +11,8 @@ from .domain import canonical_subject,query_fingerprint,Conflict,SchemaUnavailab
 from ..attribution.domain import fingerprint,canonical_json
 from .executors import production_executors,ExecutionContext,ExecutionSignal
 from .execution_service import ExecutionService
+from .broad import WEB_PROVIDERS
+from .broad.tavily import access_mode as tavily_access_mode
 
 class DiscoveryRuntime:
     def __init__(self,sessions,executors=None,*,metadata_only=False):
@@ -50,14 +52,15 @@ class DiscoveryRuntime:
         sources=[];transforms=[]
         for source in self.registry.sources.values():
             executable=any(self.eligibility(t,source,s.Budget())=='eligible' for t in self.registry.transforms.values() if source.id in t.source_ids)
-            sources.append(s.SourceCapability(**source.model_dump(exclude={'credential_env'}),configured=self._configured(source),credential_required=bool(source.credential_env),executable=executable).model_dump(mode='json'))
+            sources.append(s.SourceCapability(**source.model_dump(exclude={'credential_env'}),configured=self._configured(source),credential_required=bool(source.credential_env) and not (source.id=='tavily_search' and tavily_access_mode()=='keyless'),access_mode=tavily_access_mode() if source.id=='tavily_search' else None,executable=executable).model_dump(mode='json'))
         for t in self.registry.transforms.values():
             states=[self.eligibility(t,self.registry.sources[x],s.Budget()) for x in t.source_ids]
             values=t.model_dump();values.update(implemented=any(self.executors.get(t.id,x) is not None or self.executors.manual(t.id,x) is not None or self.executors.capture(t.id,x) is not None for x in t.source_ids),executable='eligible' in states,
                 configured=all(self._configured(self.registry.sources[x]) for x in t.source_ids),unavailable_reason=None if 'eligible' in states else states[0])
             # Names are code-owned configuration references, never secret values.
+            values['access_mode'] = tavily_access_mode() if t.id=='wallet.web_search.tavily' else None
             values['missing_configuration'] = sorted({source.credential_env for x in t.source_ids
-                if (source := self.registry.sources[x]).credential_env and not os.getenv(source.credential_env, '').strip()})
+                if (source := self.registry.sources[x]).credential_env and not os.getenv(source.credential_env, '').strip() and not (source.id=='tavily_search' and tavily_access_mode()=='keyless')})
             values['dependency_unavailable'] = not values['configured'] and not values['missing_configuration']
             transforms.append(s.TransformCapability.model_validate(values).model_dump(mode='json'))
         return {'sources':sources,'transforms':transforms}
@@ -67,13 +70,14 @@ class DiscoveryRuntime:
     def plan(self,request):
         request=s.PlanRequest.model_validate(request.model_dump(exclude={'expected_plan_fingerprint'}) if isinstance(request,s.RunCreate) else request)
         subject=canonical_subject('blockchain_address',request.subject.chain,request.subject.address)
-        if request.broad or any(x.transform_id=='wallet.broad_web' for x in request.selections):
+        if request.broad or any(x.transform_id in WEB_PROVIDERS for x in request.selections):
             from .broad.service import ensure
             with self.sessions() as db:ensure(db)
         selected=[];seen=set()
         # Configuration identity is code/operator-owned, never selection-owned.
         config={source_id:{t.id:(binding.quota.model_dump() if (binding:=self.executors.get(t.id,source_id)) else {'manual_version':manual.transform_version} if (manual:=self.executors.manual(t.id,source_id)) else {'unimplemented':True})
             for t in self.registry.transforms.values() if source_id in t.source_ids} for source_id in self.registry.sources}
+        if 'tavily_search' in config:config['tavily_search']['access_mode']=tavily_access_mode()
         for item in request.selections:
             transform=self.registry.transforms.get(item.transform_id)
             if not transform:raise DiscoveryError('Unknown transform')
@@ -83,7 +87,7 @@ class DiscoveryRuntime:
             if request.subject.chain not in transform.chains:raise DiscoveryError('Unsupported transform subject')
             if (transform.id,source.id) in seen:raise DiscoveryError('Duplicate transform selection')
             seen.add((transform.id,source.id))
-            maximum=item.parameters.max_results or (min(20,transform.max_results) if request.broad or transform.id=='wallet.broad_web' else transform.max_results)
+            maximum=item.parameters.max_results or (min(20,transform.max_results) if request.broad or transform.id in WEB_PROVIDERS else transform.max_results)
             if maximum>transform.max_results:raise DiscoveryError('Result limit exceeds descriptor')
             binding=self.executors.get(transform.id,source.id)
             selected.append((transform,source,maximum,binding))
@@ -159,7 +163,7 @@ class DiscoveryRuntime:
         eligible=self.eligibility(t,descriptor,budget)
         if eligible!='eligible':
             category={'budget_exhausted':'budget_exhausted','retention_not_permitted':'retention_not_permitted'}.get(eligible,'configuration_unavailable')
-            with self.service() as svc:svc.fail_source(sid,category,eligibility=eligible)
+            with self.service() as svc:svc.fail_source(sid,category,eligibility=eligible,quota=s.QuotaReport(diagnostic='missing_api_key') if descriptor.id=='tavily_search' and eligible=='configuration_unavailable' else None)
             return
         binding=self.executors.get(t.id,descriptor.id)
         try:

@@ -1,5 +1,5 @@
 import {renderBroad} from './discovery_broad.js';
-import {typeName,explanation,networkBehavior,availability,preflightGroups,runSummary,zeroResult} from './discovery_diagnostics.js';
+import {typeName,explanation,networkBehavior,availability,preflightGroups,runSummary,zeroResult,broadDefaults,providerDiagnostic} from './discovery_diagnostics.js';
 import {supportedChain, addressKey} from './chains.js';
 import {graphSenseDetail} from './discovery_graphsense.js';
 import {manualSourceForm,manualSourceDetail,sourceReference} from './discovery_manual_source.js';
@@ -14,7 +14,7 @@ const costNames = {FREE_LOCAL:'Free local', FREE_REMOTE:'Free remote', LIMITED_F
 const reasons = {eligible:'Eligible', not_implemented:'Not implemented', configuration_unavailable:'Not configured', retention_not_permitted:'Storage permission unavailable', disabled:'Disabled', budget_exhausted:'Budget unavailable', rate_limited:'Rate limited', timeout:'Timed out', transport_failed:'Provider error', invalid_provider_response:'Invalid provider response', entitlement_unavailable:'Source entitlement unavailable', unsupported_input:'Unsupported subject', cancelled:'Cancelled', interrupted:'Interrupted', storage_unavailable:'Storage unavailable'};
 const label = value => String(value || 'Not available').replaceAll('_', ' ').replace(/^./, c => c.toUpperCase());
 const reason = value => reasons[value] || 'Source unavailable';
-const sourceReason = source => source.quota_snapshot?.eligibility === 'not_implemented' ? reason('not_implemented') : reason(source.error_code);
+const sourceReason = source => providerDiagnostic(source) || (source.quota_snapshot?.eligibility === 'not_implemented' ? reason('not_implemented') : reason(source.error_code));
 const encode = encodeURIComponent;
 function reference(value) {
   if (!value) return element('span', 'No source reference returned');
@@ -91,7 +91,7 @@ export function initDiscovery() {
   function button(text, fn) { const b = element('button', text, 'secondary'); b.type = 'button'; b.addEventListener('click', () => perform(fn)); return b; }
   const planButton = button('Plan selected pivots', () => makePlan()); planButton.id = 'discovery-plan-button';
   const runButton = button('Run discovery', startRun); runButton.id = 'discovery-run-button';
-  planning.append(element('label','Broad maximum results per provider'),broadBound,button('Broad Discovery preflight',async()=>{if(!subject)throw new UserError('Check a wallet first.');broadMode=true;choices.forEach(c=>{c.check.checked=c.transform.mode!=='manual'&&c.transform.chains.includes(subject.chain);});await makePlan();}),button('Detailed transform mode',()=>{broadMode=false;choices.forEach(c=>c.check.checked=false);invalidate();}),options, planButton, planned, runButton);
+  planning.append(element('label','Broad maximum results per provider'),broadBound,button('Broad Discovery preflight',async()=>{if(!subject)throw new UserError('Check a wallet first.');if(!broadMode){const defaults=broadDefaults(transforms,subject.chain);choices.forEach(c=>{c.check.checked=defaults.includes(c.transform.id);});}broadMode=true;await makePlan();}),button('Detailed transform mode',()=>{broadMode=false;choices.forEach(c=>c.check.checked=false);invalidate();}),options, planButton, planned, runButton);
   top.append(button('Refresh capabilities', async () => { invalidate(); await capabilities(); }));
   currentPanel.append(element('p', 'No run selected.', 'empty'));
   results.append(element('p', 'Select a stored run to inspect its candidate results.', 'empty'));
@@ -244,7 +244,7 @@ export function initDiscovery() {
       form.elements.address.value = entry.address;
       await checkSubject(entry.chain); entry.address = subject.address; renderEntry();
       await capabilities();
-      if(broadMode){choices.forEach(c=>{c.check.checked=c.transform.mode!=='manual'&&c.transform.chains.includes(subject.chain);});await makePlan();}
+      if(broadMode){const defaults=broadDefaults(transforms,subject.chain);choices.forEach(c=>{c.check.checked=defaults.includes(c.transform.id);});await makePlan();}
       // Read global history only; never auto-open a previous run or execute a pivot.
       await loadHistory(historyOffset);
       if(incoming.action==='manual_source')openCapture();

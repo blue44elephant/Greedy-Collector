@@ -80,6 +80,7 @@ class SubjectRead(BaseModel):
     identity_sha256:str
 
 class SourceCapability(BaseModel):
+    access_mode:Literal['api_key','keyless']|None=None
     id:str
     version:int
     display_name:str
@@ -96,6 +97,7 @@ class SourceCapability(BaseModel):
     provenance_note:str
 
 class TransformCapability(BaseModel):
+    access_mode:Literal['api_key','keyless']|None=None
     missing_configuration:list[str]=Field(default_factory=list)
     dependency_unavailable:bool=False
     capture_only:bool=False
@@ -315,7 +317,7 @@ class GitHubResourceQuota(Input):
 class QuotaReport(Input):
     github_resources:dict[Literal['code_search','search','core'],GitHubResourceQuota]|None=None
     # Closed source diagnostic persisted in the existing execution metadata.
-    diagnostic:Literal['bounded_search','unsafe_results_omitted','result_cap','request_cap','later_page_timeout','later_page_failed','empty_primary_name','reverse_forward_mismatch','ccip_read_unsupported','resolver_not_found','resolver_not_contract','unsupported_resolver_profile','resolver_error','rpc_error','malformed_abi','invalid_ens_name','normalizer_unavailable','normalizer_timeout','normalizer_protocol_error','ens_configuration_unavailable']|None=None
+    diagnostic:Literal['missing_api_key','authentication_failed','quota_exhausted','rate_limited','provider_timeout','provider_error','invalid_response','keyless_allowance_exhausted','bounded_search','unsafe_results_omitted','result_cap','request_cap','later_page_timeout','later_page_failed','empty_primary_name','reverse_forward_mismatch','ccip_read_unsupported','resolver_not_found','resolver_not_contract','unsupported_resolver_profile','resolver_error','rpc_error','malformed_abi','invalid_ens_name','normalizer_unavailable','normalizer_timeout','normalizer_protocol_error','ens_configuration_unavailable']|None=None
     limit:int|None=Field(default=None,strict=True,ge=0)
     resource:Literal['code_search','search','core']|None=None
     remaining:int|None=Field(default=None,strict=True,ge=0)

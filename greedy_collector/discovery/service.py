@@ -253,7 +253,8 @@ class DiscoveryService:
                     self._bump(result,result.version,material_revision=result.material_revision+(0 if known else 1),first_seen_at=min(aware(result.first_seen_at),now),last_seen_at=max(aware(result.last_seen_at),now))
                 observation=Observation(result_id=result.id,execution_id=source.id,content_sha256=content_hash,**values)
                 self.db.add(observation);self.db.flush()
-            if source.transform_id=='wallet.broad_web':
+            from .broad import is_web_source
+            if is_web_source(source.transform_id,source.source_id):
                 from .broad.service import capture_candidates
                 capture_candidates(self.db,observation,source,query)
             self._attach(source,observation,'local' if source_descriptor['mode']=='local' or descriptor.get('capture_only') else 'retrieved')

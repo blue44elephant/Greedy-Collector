@@ -50,6 +50,7 @@ class DiscoveryExecutionResult:
     observations:list[DiscoveryObservation]=field(default_factory=list)
     truncated:bool=False
     reason:str|None=None
+    metadata:dict=field(default_factory=dict)
 
 class DiscoveryProvider(Protocol):
     id:str
@@ -94,7 +95,7 @@ def candidates(text,host,exact):
             for match in re.finditer(pattern,text):found.append(DiscoveryCandidate(kind,match.group(1).strip(),'Explicit labelled source text','EXPLICIT_SOURCE_TEXT'))
     return list({(c.kind,c.value):c for c in found}.values())[:10]
 
-def normalize_result(provider,query,item,retrieved_at):
+def normalize_result(provider,query,item,retrieved_at,metadata=None):
     url=canonical_url(item.url);host=urlsplit(url).hostname
     title=html.unescape(re.sub('<[^>]*>','',item.title))[:255] or 'Public search result'
     snippet=html.unescape(re.sub('<[^>]*>','',item.snippet))[:2000]
@@ -106,7 +107,8 @@ def normalize_result(provider,query,item,retrieved_at):
         candidates=[c.__dict__ for c in candidates(title+'\n'+snippet,host,exact)],
         quality={'provenance':'search API metadata','wallet_present':exact,'institutional_host':category(host) in ('government/regulator','court/legal','sanctions/watchlist'),
             'structure':'search result metadata','primary_secondary':'unknown','retrieval_timestamp_available':True,'source_timestamp_available':False,'source_reachability':'not checked'},
-        bounds={'max_results':query.limit,'max_requests':3,'timeout_seconds':15}))
+        provider_metadata=metadata or {},
+        bounds={'max_results':min(query.limit,20) if provider=='tavily_search' else query.limit,'max_requests':1 if provider=='tavily_search' else 3,'timeout_seconds':15}))
     return {'kind':'candidate_evidence' if exact else 'candidate_identifier','predicate':'mentioned_at',
         'from':{'kind':'blockchain_address','namespace':query.chain,'value':query.wallet},
         'to':{'kind':'url','namespace':'https','value':url},'fact_key':{'query_type':'EXACT_WALLET','exact_match':exact},
@@ -163,14 +165,16 @@ class BraveProvider:
         else:result.truncated=True;result.reason='request_cap'
         return result
 
-PROVIDERS=ProviderRegistry();PROVIDERS.register(BraveProvider())
+from .tavily import TavilyProvider
+from . import is_web_source
+PROVIDERS=ProviderRegistry();PROVIDERS.register(BraveProvider());PROVIDERS.register(TavilyProvider())
 class WebSearchExecutor:
     async def execute(self,context):
         query=DiscoveryQuery(context.subject['namespace'],context.subject['canonical_value'],context.parameters['max_results'])
         result=await PROVIDERS.get(context.source_id).search(query,context)
         now=datetime.now(timezone.utc);records=[];seen=set();skipped=0
         for item in result.observations[:query.limit]:
-            try:record=normalize_result(context.source_id,query,item,now)
+            try:record=normalize_result(context.source_id,query,item,now,result.metadata)
             except DiscoveryError:skipped+=1;continue
             url=record['observation']['source_url']
             if url in seen:continue
@@ -179,6 +183,6 @@ class WebSearchExecutor:
 
 def promotable(result,observation,source,subject):
     snap=observation.source_snapshot
-    return (source.transform_id=='wallet.broad_web' and source.source_id=='brave_search' and result.predicate=='mentioned_at' and observation.kind=='search_result'
+    return (is_web_source(source.transform_id,source.source_id) and result.predicate=='mentioned_at' and observation.kind=='search_result'
         and snap.get('exact_match') is True and snap.get('chain')==subject.namespace and snap.get('wallet')==subject.canonical_value
         and observation.verification=='exact_in_excerpt' and observation.source_url==snap.get('canonical_url'))
