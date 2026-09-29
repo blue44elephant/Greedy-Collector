@@ -153,4 +153,4 @@ def test_graph_re_sanitizes_and_has_explicit_schema(env,monkeypatch):
     r=env[0].get(P+'/runs/'+run_id(env,ob)+'/graph');assert r.status_code==200
     assert 'later-configured-graph-secret' not in r.text
     schemas=env[0].get('/openapi.json').json()['components']['schemas']
-    assert schemas['GraphRead']['properties']['items'] and schemas['GraphEdge']['properties']['predicate']['enum']==['locally_labeled_as','repository_contains','resolves_to','mentions_wallet','publicly_labeled_as','mentioned_at','search_candidate','names_alias','names_entity','references_domain']
+    assert schemas['GraphRead']['properties']['items'] and schemas['GraphEdge']['properties']['predicate']['enum']==['locally_labeled_as','repository_contains','resolves_to','mentions_wallet','publicly_labeled_as','mentioned_at','search_candidate','names_alias','names_entity','references_domain','captured_as']

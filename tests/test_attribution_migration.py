@@ -46,7 +46,7 @@ def test_clean_upgrade_schema_equivalence_and_foreign_keys(tmp_path,monkeypatch)
     url='sqlite:///'+(tmp_path/'migrated.db').as_posix()
     cfg=config(url,monkeypatch)
     command.upgrade(cfg,'head'); command.current(cfg); command.heads(cfg)
-    assert '20260928_01' in cfg.stdout.getvalue()
+    assert '20260929_01_public_source_capture' in cfg.stdout.getvalue()
     migrated=create_fk_enabled_engine(url)
     metadata=create_fk_enabled_engine('sqlite:///'+(tmp_path/'metadata.db').as_posix())
     Base.metadata.create_all(metadata)
@@ -54,8 +54,8 @@ def test_clean_upgrade_schema_equivalence_and_foreign_keys(tmp_path,monkeypatch)
         assert schema(migrated)==schema(metadata)
         with migrated.connect() as connection:
             assert connection.execute(text('PRAGMA foreign_key_check')).all()==[]
-            assert connection.execute(text('SELECT version_num FROM alembic_version')).scalar_one()=='20260928_01'
-            assert len(connection.execute(text("SELECT name FROM sqlite_master WHERE type='trigger'")).all())==45
+            assert connection.execute(text('SELECT version_num FROM alembic_version')).scalar_one()=='20260929_01_public_source_capture'
+            assert len(connection.execute(text("SELECT name FROM sqlite_master WHERE type='trigger'")).all())==59
         with Session(migrated) as db:
             svc=AttributionService(db)
             assert svc.list_entities()['total']==0

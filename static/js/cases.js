@@ -1,3 +1,4 @@
+import {capturePinCard} from './public_source_capture.js';
 import {broadSnapshotCard} from './discovery_broad.js';
 import {flowCard} from './fund_flow.js';
 import {clusterCard} from './clustering.js';
@@ -117,7 +118,8 @@ export function initCases() {
     const broadPins=row.entities.filter(e=>e.entity_type==='broad_discovery'&&e.metadata_json?.broad_discovery_pin).map(e=>broadSnapshotCard(e.metadata_json.broad_discovery_pin));
     const sourceObservations=panel('Source observations','Explicit investigation references; not acceptance of an identity claim.');sourceObservations.id='case-source-observations';
     sourceObservations.append(table(['Source','Wallet',''],row.entities.filter(e=>e.entity_type==='discovery_observation').map(e=>{const m=e.metadata_json||{};return [m.title||m.source_type,m.address,action('Open Discovery observation',()=>document.dispatchEvent(new CustomEvent('open-discovery',{detail:{action:'open_observation',observation_id:e.entity_ref,run_id:m.run_id,result_id:m.result_id}})))];}),'No source observations associated.'));
-    selected.replaceChildren(overview,entities,...broadPins,sourceObservations,caseAttribution(row.id),alerts,notes,files,reports);
+    const capturePins=row.entities.filter(e=>e.entity_type==='public_source_capture'&&e.metadata_json?.public_source_capture_pin).map(e=>capturePinCard(e.metadata_json.public_source_capture_pin));
+    selected.replaceChildren(overview,entities,...broadPins,...capturePins,sourceObservations,caseAttribution(row.id),alerts,notes,files,reports);
   }
   return id => {if(host.dataset.busy === "true") return; if(id) selectedId=id; return perform(refresh);};
 }

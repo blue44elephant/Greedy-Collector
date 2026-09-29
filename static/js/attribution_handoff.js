@@ -1,3 +1,4 @@
+import {captureProvenance} from './public_source_capture.js';
 import {chains as chainChoices, supportedChain} from './chains.js';
 import {discoveryRequest} from './discovery_api.js';
 import {discoveryProvenance} from './discovery_promotion.js';
@@ -13,6 +14,7 @@ export function evidenceHandoffButton(kind,id) {
 }
 
 export function snapshotProvenance(snapshot) {
+  if(snapshot.source_subsystem==='Greedy Collector Public Source Capture')return captureProvenance(snapshot);
   if(snapshot.source_subsystem==='Greedy Collector Discovery')return discoveryProvenance(snapshot);
   const node=element('section',undefined,'attr-source-provenance'),row=snapshot.record||{};
   node.append(element('h3',snapshot.source_subsystem||'Source snapshot'));
@@ -45,18 +47,18 @@ export function initEvidenceHandoff(parent,{createClaim,openClaim}) {
     if(!preview)throw new UserError('Load and review the stored source snapshot first.');
     awaitingClaim=true;target=null;form.hidden=true;chosen.replaceChildren();
     const row=preview.snapshot.record;
-    if(source.kind==='discovery'){await createClaim({chain:preview.chain,address:preview.address});return;}
+    if(['discovery','public_capture'].includes(source.kind)){await createClaim({chain:preview.chain,address:preview.address});return;}
     await createClaim(source.kind==='label'&&supportedChain(row.chain)?{chain:row.chain,address:row.address}:null);
   });
   host.append(element('h2','Use as attribution evidence'),status,sourceView,
     button('Reload source snapshot',async()=>{await loadSource();target=null;form.hidden=true;chosen.replaceChildren();}),
-    create,button('Back to Discovery',()=>{if(source?.kind==='discovery')document.dispatchEvent(new CustomEvent('return-discovery-promotion'));}),button('Cancel handoff',()=>{source=null;preview=null;target=null;awaitingClaim=false;host.hidden=true;}),
+    create,button('Back to Discovery',()=>{if(['discovery','public_capture'].includes(source?.kind))document.dispatchEvent(new CustomEvent('return-discovery-promotion'));}),button('Cancel handoff',()=>{source=null;preview=null;target=null;awaitingClaim=false;host.hidden=true;}),
     filters,list,chosen,form,success);
   async function loadSource() {
-    if(source.kind==='discovery') {
-      preview=await discoveryRequest(`/observations/${encodeId(source.id)}/promotion-preview`);
+    if(['discovery','public_capture'].includes(source.kind)) {
+      preview=await discoveryRequest(`/${source.kind==='public_capture'?'public-captures':'observations'}/${encodeId(source.id)}/promotion-preview`);
       if(!preview.eligible)throw new UserError('Review the selected material as Relevant before promotion.');
-      preview.snapshot=preview.evidence.metadata_json;
+      preview.snapshot=source.kind==='public_capture'?{...preview.snapshot,selected_excerpt:source.excerpt}:preview.evidence.metadata_json;
       filters.elements.chain.value=preview.chain;filters.elements.subject_ref.value=preview.address;
     } else preview=await request(`/evidence/sources/${source.kind}/${encodeId(source.id)}`);
     sourceView.replaceChildren(snapshotProvenance(preview.snapshot),details('Snapshot to capture',preview.snapshot),
@@ -77,11 +79,11 @@ export function initEvidenceHandoff(parent,{createClaim,openClaim}) {
   }
   async function chooseClaim(id) {
     success.replaceChildren();
-    const keepChoices=awaitingClaim&&source?.kind==='discovery';
+    const keepChoices=awaitingClaim&&['discovery','public_capture'].includes(source?.kind);
     target=await request(`/claims/${encodeId(id)}`);awaitingClaim=false;
     chosen.replaceChildren(element('h3','Selected claim'),element('p',`${target.chain} · ${target.subject_ref} · ${caption(target.relationship)} · ${target.entity.canonical_name}`,'full-address'),
       element('p',`Claim ID: ${target.id} · Version ${target.version}`,'small'));
-    if(!keepChoices)form.reset();promotionConsent=null;capture.hidden=source.kind==='discovery';promotionPreview.hidden=source.kind!=='discovery';form.hidden=false;form.scrollIntoView({block:'center'});
+    if(!keepChoices)form.reset();promotionConsent=null;capture.hidden=['discovery','public_capture'].includes(source.kind);promotionPreview.hidden=!['discovery','public_capture'].includes(source.kind);form.hidden=false;form.scrollIntoView({block:'center'});
   }
   const promotionPreview=button('Preview promotion',async()=>{
     // run() disables controls while the request is pending; FormData omits
@@ -96,18 +98,16 @@ export function initEvidenceHandoff(parent,{createClaim,openClaim}) {
     sourceView.append(element('p',`Ready to promote selected observation ${source.id} to claim ${target.id}, version ${target.version}. Stance: ${promotionConsent.stance}; directness: ${promotionConsent.directness}.`,'bounded-note'));
     capture.hidden=false;
   });promotionPreview.hidden=true;form.append(promotionPreview);
-  form.addEventListener('input',()=>{if(source?.kind==='discovery'){promotionConsent=null;capture.hidden=true;}});
+  form.addEventListener('input',()=>{if(['discovery','public_capture'].includes(source?.kind)){promotionConsent=null;capture.hidden=true;}});
   filters.addEventListener('submit',event=>{event.preventDefault();perform(()=>loadClaims());});
   form.addEventListener('submit',event=>{
     event.preventDefault();const data=Object.fromEntries(new FormData(form));
     perform(async()=>{
       if(!target||!preview||!data.confirmed||!data.stance||!data.directness||!data.rationale.trim())throw new UserError('Choose a claim, stance and directness, enter a rationale, and confirm review.');
-      if(source.kind==='discovery') {
+      if(['discovery','public_capture'].includes(source.kind)) {
         if(!promotionConsent||promotionConsent.claim_id!==target.id||['stance','directness','rationale','confirmed'].some(k=>promotionConsent[k]!==data[k]))throw new UserError('Preview the selected promotion before confirming.');
-        const saved=await discoveryRequest(`/observations/${encodeId(source.id)}/promote`,{body:{
-          result_id:preview.result_id,claim_id:target.id,expected_claim_version:target.version,
-          expected_source_fingerprint:promotionConsent.source_fingerprint,link:linkData(data)
-        }});
+        const body={claim_id:target.id,expected_claim_version:target.version,expected_source_fingerprint:promotionConsent.source_fingerprint,link:linkData(data),...(source.kind==='public_capture'?{confirmed:true,excerpt:source.excerpt}:{result_id:preview.result_id})};
+        const saved=await discoveryRequest(`/${source.kind==='public_capture'?'public-captures':'observations'}/${encodeId(source.id)}/promote`,{body});
         target=null;promotionConsent=null;form.hidden=true;
         success.replaceChildren(element('p','Promoted to immutable evidence. Relevance remains separate; claim assessment was not changed and requires review.'),
           button('Open attribution',async()=>{host.hidden=true;source=null;await openClaim(saved.claim.id);}));return;
@@ -121,12 +121,12 @@ export function initEvidenceHandoff(parent,{createClaim,openClaim}) {
   });
   return {
     async open(context) {
-      if(!['label','research','discovery'].includes(context.source_kind)||typeof context.source_id!=='string')return;
-      source={kind:context.source_kind,id:context.source_id};preview=null;target=null;awaitingClaim=false;
+      if(!['label','research','discovery','public_capture'].includes(context.source_kind)||typeof context.source_id!=='string')return;
+      source={kind:context.source_kind,id:context.source_id,excerpt:context.excerpt};preview=null;target=null;awaitingClaim=false;
       host.hidden=false;form.hidden=true;sourceView.replaceChildren();list.replaceChildren();chosen.replaceChildren();success.replaceChildren();filters.reset();status.textContent='';
       // Called inside Attribution's existing operation boundary, never nested run().
-      capture.textContent=source.kind==='discovery'?'Confirm promotion':'Confirm capture';
-      [...host.querySelectorAll('button')].find(b=>b.textContent==='Back to Discovery').hidden=source.kind!=='discovery';
+      capture.textContent=['discovery','public_capture'].includes(source.kind)?'Confirm promotion':'Confirm capture';
+      [...host.querySelectorAll('button')].find(b=>b.textContent==='Back to Discovery').hidden=!['discovery','public_capture'].includes(source.kind);
       promotionConsent=null;promotionPreview.hidden=true;await loadSource();await loadClaims();host.scrollIntoView({block:'start'});
     },
     async claimCreated(id){if(source&&awaitingClaim)await chooseClaim(id);}

@@ -1,3 +1,4 @@
+import {captureControl} from './public_source_capture.js';
 import {element,table,fields,dateText,UserError} from './ui.js';
 import {discoveryRequest as request} from './discovery_api.js';
 import {listCases} from './case_actions.js';
@@ -32,6 +33,7 @@ export function renderBroad(host,snapshot,{openResult,perform,reload}){
       for(const group of grouped.get(name)){const card=element('article',undefined,'discovery-pivot');card.dataset.broadResult=group.result_ids[0];section.append(card);
         card.append(element('h4',group.observations[0].title),sourceReference(group.canonical_url));
         for(const o of group.observations){const s=o.source_snapshot||{};card.append(element('p',`${o.provider} | ${o.cache_state} | Rank: ${o.rank??'Not returned'} | ${o.review_status} | ${dateText(o.retrieved_at)}`),element('p',s.exact_match===false?'Non-exact search candidate - not wallet evidence':s.exact_match===true?'Exact wallet token present in returned metadata':'Source-specific observation; inspect provenance'),element('blockquote',o.excerpt||o.summary),btn('Inspect / review source',()=>openResult(o.result_id,o.id)));
+          if(o.kind==='search_result')card.append(captureControl(o));
           const detail=element('details');detail.append(element('summary','Query, bounds and source quality'),element('pre',JSON.stringify(s,null,2)));card.append(detail);
           for(const c of snapshot.candidates.filter(c=>c.observation_id===o.id)){const view=element('section');view.dataset.candidateId=c.id;view.append(element('p',`${c.kind} candidate: ${c.value} | ${c.material.confidence_type} | ${c.status}`),element('p','Source-bound candidate; no identity claim or automatic follow-up search.'));
             const form=element('form',undefined,'editor');form.append(fields([{name:'status',label:'Candidate relevance',options:['unreviewed','relevant','irrelevant'],value:c.status},{name:'note',label:'Candidate review note',required:true,maxLength:2000}]));const save=element('button','Save candidate review');save.type='submit';form.append(save);

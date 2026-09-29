@@ -184,3 +184,7 @@ def broad_review(candidate_id:str,payload:BroadCandidateReview,runtime:Runtime)-
 def broad_pin(case_id:str,payload:BroadPin,runtime:Runtime)->dict:
     from .broad.service import BroadService
     with runtime.service() as svc:return BroadService(svc.db,svc).pin(case_id,payload.run_id)
+
+
+from .capture.api import install as install_public_capture_routes
+install_public_capture_routes(router,Runtime,Limit,Offset)

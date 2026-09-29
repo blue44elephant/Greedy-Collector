@@ -197,3 +197,13 @@ Automated tests use isolated SQLite and test-only HTTP fixtures. Consolidated sm
 For an optional live check, configure an entitled Brave account, open a public Wallet,
 choose Broad Discovery, inspect the exact quoted query and bounds, select only Brave,
 and explicitly Run discovery once. This consumes provider quota; it is not automated.
+
+
+## Explicit destination capture (OSINT-2B)
+
+Search execution still never retrieves result pages. A separate **Capture Public
+Source** action requires analyst confirmation and performs one bounded, SSRF-checked
+retrieval. The resulting immutable capture has its own review, selected-excerpt
+Attribution promotion and historical Case pin. Search observations remain unchanged.
+See [Public Source Capture](PUBLIC_SOURCE_CAPTURE.md) for security, storage rights,
+limits and the explicit migration. No Tor, authenticated retrieval or recursive pivots.

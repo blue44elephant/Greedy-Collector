@@ -13,7 +13,7 @@ const messages = {
   origin_rejected: 'Discovery requests must use this application’s local origin.',
 };
 export async function discoveryRequest(path, {body, key, signal} = {}) {
-  if (!/^\/(sources|transforms|plan|runs|results|observations|manual-source|broad)(\/|\?|$)/.test(path) || path.includes('..')) throw new UserError('Unsupported Discovery operation.');
+  if (!/^\/(sources|transforms|plan|runs|results|observations|manual-source|broad|public-captures)(\/|\?|$)/.test(path) || path.includes('..')) throw new UserError('Unsupported Discovery operation.');
   const headers = {};
   if (body !== undefined) headers['Content-Type'] = 'application/json';
   if (key) headers['Idempotency-Key'] = key;

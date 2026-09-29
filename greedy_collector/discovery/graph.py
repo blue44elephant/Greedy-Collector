@@ -22,7 +22,7 @@ class GraphRoot(BaseModel):
 
 class GraphResult(BaseModel):
     id: str
-    type: Literal['label_annotation','code_location','ens_name','source_page','public_annotation','web_source','alias_candidate','entity_candidate','domain_candidate']
+    type: Literal['label_annotation','code_location','ens_name','source_page','public_annotation','web_source','alias_candidate','entity_candidate','domain_candidate','public_capture']
     result_id: str
     observation_id: str
     observation_fingerprint: str
@@ -30,10 +30,12 @@ class GraphResult(BaseModel):
     subtitle: str
     source_id: str
     transform_id: str
-    predicate: Literal['locally_labeled_as','repository_contains','resolves_to','mentions_wallet','publicly_labeled_as','mentioned_at','search_candidate','names_alias','names_entity','references_domain']
+    predicate: Literal['locally_labeled_as','repository_contains','resolves_to','mentions_wallet','publicly_labeled_as','mentioned_at','search_candidate','names_alias','names_entity','references_domain','captured_as']
     summary: str
     excerpt: str | None
     url: str | None
+    capture_material: dict | None = None
+    capture_total: int = 0
     broad_material: dict | None = None
     candidate: dict | None = None
     public_annotation: dict | None = None
@@ -67,7 +69,7 @@ class GraphEdge(BaseModel):
     source: str
     target: str
     result_id: str
-    predicate: Literal['locally_labeled_as','repository_contains','resolves_to','mentions_wallet','publicly_labeled_as','mentioned_at','search_candidate','names_alias','names_entity','references_domain']
+    predicate: Literal['locally_labeled_as','repository_contains','resolves_to','mentions_wallet','publicly_labeled_as','mentioned_at','search_candidate','names_alias','names_entity','references_domain','captured_as']
 
 
 class GraphUnrenderedResult(BaseModel):
@@ -81,8 +83,8 @@ class GraphUnrenderedResult(BaseModel):
 class GraphRead(BaseModel):
     run_id: str
     root: GraphRoot
-    items: list[GraphResult] = Field(max_length=1100)
-    edges: list[GraphEdge] = Field(max_length=1100)
+    items: list[GraphResult] = Field(max_length=1600)
+    edges: list[GraphEdge] = Field(max_length=1600)
     total: int
     limit: int
     offset: int
@@ -128,6 +130,8 @@ def graph_summary(service, run_id, *, limit=100, offset=0, metadata_only=False):
             .where(Observation.result_id.in_(ids)).group_by(Observation.result_id)).all())
     ens_ids=[r.from_subject_id for r,o,_ in rows if (r.predicate,o.kind)==('resolves_to','name_service_record')]
     ens_subjects={s.id:s for s in db.scalars(select(Subject).where(Subject.id.in_(ens_ids)))} if ens_ids else {}
+    from sqlalchemy import inspect
+    capture_available='discovery_public_captures' in inspect(db.connection()).get_table_names()
     nodes=[];edges=[];unrendered=[]
     for result,observation,source in rows:
         local=(result.predicate,observation.kind)==('locally_labeled_as','local_label_snapshot')
@@ -180,6 +184,20 @@ def graph_summary(service, run_id, *, limit=100, offset=0, metadata_only=False):
                 child={**node,'id':'discovery:candidate:'+candidate.id,'type':candidate.kind+'_candidate','title':candidate.value,'subtitle':candidate.material['confidence_type'],
                     'candidate':row_data(candidate),'current_review_status':candidate.status,'current_review_required':False,'predicate':predicate,'broad_material':None}
                 nodes.append(clean(child));edges.append(dict(id='candidate:'+candidate.id,result_id=result.id,predicate=predicate,source=node['id'],target=child['id']))
+        if broad and capture_available:
+            from .capture.models import PublicSourceCapture
+            from .capture.service import CaptureService
+            captures=select(PublicSourceCapture).where(PublicSourceCapture.result_id==result.id)
+            node['capture_total']=db.scalar(select(func.count()).select_from(captures.subquery()))
+            # nodes contains a sanitized copy of node, so also publish the count there.
+            next(n for n in nodes if n['id']==node['id'])['capture_total']=node['capture_total']
+            for capture in db.scalars(captures.order_by(PublicSourceCapture.retrieved_at.desc(),PublicSourceCapture.id).limit(5)):
+                material=CaptureService(db).read(capture.id,text=False)
+                child={**node,'id':'discovery:capture:'+capture.id,'type':'public_capture','title':material['title'] or 'Public source capture',
+                    'subtitle':material['status']+' / '+material['change_state'],'predicate':'captured_as','capture_material':material,'broad_material':None,
+                    'excerpt':None,'summary':'Explicit public source retrieval, not an ownership assertion.',
+                    'current_review_status':material['review']['status'],'current_review_required':False}
+                nodes.append(clean(child));edges.append(dict(id='capture:'+capture.id,result_id=result.id,predicate='captured_as',source=node['id'],target=child['id']))
     return GraphRead.model_validate(dict(run_id=run_id,root=clean(root),items=nodes,edges=edges,total=total,
         limit=limit,offset=offset,next_offset=offset+limit if offset+limit<total else None,
         promotion_available=promotion_available,unrendered_results=unrendered))

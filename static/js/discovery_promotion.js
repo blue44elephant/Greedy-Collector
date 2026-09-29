@@ -1,3 +1,4 @@
+import {captureControl} from './public_source_capture.js';
 import {graphSenseDetail} from './discovery_graphsense.js';
 import {manualSourceDetail} from './discovery_manual_source.js';
 import {element,table,details,dateText,UserError} from './ui.js';
@@ -38,6 +39,7 @@ export function discoveryProvenance(snapshot) {
 
 // Reads only on selected observation detail. No per-result-list promotion fan-out.
 export async function promotionDetail(parent,observation) {
+  if(observation.kind==='search_result')parent.append(captureControl(observation));
   const host=element('section',undefined,'panel');host.id='discovery-promotion';parent.append(host);
   const status=element('p');host.append(element('h3','Attribution promotion'),status);
   try {

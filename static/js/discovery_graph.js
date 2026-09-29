@@ -1,3 +1,4 @@
+import {captureProvenance} from './public_source_capture.js';
 import {graphInteraction} from './graph_interaction.js';
 import {graphSenseDetail} from './discovery_graphsense.js';
 import {manualSourceDetail,sourceReference} from './discovery_manual_source.js';
@@ -5,7 +6,7 @@ import {element,table,dateText,run,UserError} from './ui.js';
 import {discoveryRequest as request} from './discovery_api.js';
 import {discoveryLayout,discoveryPath,zoomView,CARD} from './discovery_graph_layout.js';
 
-const kinds={web_source:'Public search source',alias_candidate:'Alias candidate',entity_candidate:'Entity candidate',domain_candidate:'Domain candidate',wallet:'Wallet',label_annotation:'Label annotation',code_location:'Code location',ens_name:'ENS primary name',source_page:'Source observation',public_annotation:'GraphSense public tag'};
+const kinds={public_capture:'Public source capture',web_source:'Public search source',alias_candidate:'Alias candidate',entity_candidate:'Entity candidate',domain_candidate:'Domain candidate',wallet:'Wallet',label_annotation:'Label annotation',code_location:'Code location',ens_name:'ENS primary name',source_page:'Source observation',public_annotation:'GraphSense public tag'};
 const short=(value,n=36)=>String(value??'Not available').length>n?String(value).slice(0,n-1)+'…':String(value??'Not available');
 const review=node=>node.current_review_required?`Review required · previous ${node.current_review_status}`:node.current_review_status;
 function svgNode(tag,attrs={},text) {
@@ -54,6 +55,8 @@ export function initDiscoveryGraph(host,{openResult}) {
         inspector.append(table(['Field','Value'],[['Chain',node.chain],['Full wallet',node.address]]),button('Copy wallet address',async()=>{try{await navigator.clipboard.writeText(node.address);}catch{throw new UserError('Copy the full wallet address from the detail table.');}}),
           button('Open blockchain graph',()=>document.dispatchEvent(new CustomEvent('open-discovery-blockchain-graph',{detail:{chain:node.chain,address:node.address}}))),element('p','Opens the separate blockchain workspace with this wallet prefilled. Load graph there to read stored transfer relationships.','muted small'));return;
       }
+      if(node.capture_material){inspector.append(captureProvenance({capture:node.capture_material,review:node.capture_material.review}),button('View capture history',()=>openResult(node.result_id,node.capture_material.origin.observation_id)));return;}
+      if(node.capture_total)inspector.append(element('p',`${node.capture_total} captures retained; graph shows up to five latest. Open source capture history to inspect all.`));
       if(node.broad_material||node.candidate){inspector.append(element('p','Source metadata / candidate only. No ownership or common-control claim.'),element('pre',JSON.stringify(node.candidate||node.broad_material,null,2)),button('Review source and candidates',()=>openResult(node.result_id,node.observation_id)));return;}
       inspector.append(element('p',node.type==='public_annotation'?'Third-party public annotation. This does not establish current or legal ownership, wallet control or common ownership.':node.type==='source_page'?'The analyst recorded that this source referenced the wallet. This does not establish source/operator ownership or common ownership.':node.type==='ens_name'?'At observation time, this primary name was forward verified to the wallet. This technical naming relationship does not establish real-world identity or wallet control.':node.predicate==='repository_contains'?'The wallet identifier was observed in this public code location. Code mention does not establish repository owner control of the wallet.':'This wallet had the displayed stored Label annotation. This is secondary annotation metadata.'),
         table(['Field','Value'],[['Predicate',node.predicate],['Result',node.result_id],['Selected run observation',node.observation_id],['Source / transform',`${node.source_id} / ${node.transform_id}`],
