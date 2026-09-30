@@ -112,11 +112,11 @@ def test_registry_and_resolver_are_local_and_preserve_btc_eth(monkeypatch):
     assert expected <= get_chain_capabilities("tron")
     monkeypatch.setattr(httpx.AsyncClient, "request", AsyncMock(side_effect=AssertionError("provider traffic")))
     assert resolve_identifier(" \n" + FOCUS + "\t")["chain"] == "tron"
-    assert resolve_identifier(TX)["chain"] == "bitcoin"
+    assert resolve_identifier(TX)["kind"] == "ambiguous"
     assert resolve_identifier(TX, chain_hint="tron") == {
         "kind": "transaction", "chain": "tron", "normalized": TX, "lookup_type": "transaction"
     }
-    assert resolve_identifier("0x" + "1" * 40)["chain"] == "ethereum"
+    assert resolve_identifier("0x" + "1" * 40)["kind"] == "ambiguous"
     assert resolve_identifier("1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa")["chain"] == "bitcoin"
 
 
@@ -198,7 +198,7 @@ def test_native_trc10_and_trc20_normalization_and_direction():
     token_out = item._normalize_trc20(trc20_row(sender=FOCUS, recipient=OTHER), FOCUS)
     assert (incoming.value_native, incoming.token_symbol, incoming.direction) == ("1.25", "TRX", "incoming")
     assert outgoing.direction == "outgoing"
-    assert (asset.value_native, asset.token_symbol, asset.raw_payload["_public"]["asset_type"]) == ("42", "1002000", "trc10")
+    assert (asset.value_native, asset.token_symbol, asset.raw_payload["_public"]["asset_type"]) == ("", "1002000", "trc10")
     assert (token_in.value_native, token_in.direction) == ("1.234567", "incoming")
     assert token_out.direction == "outgoing"
     assert token_in.raw_payload["_public"] == {

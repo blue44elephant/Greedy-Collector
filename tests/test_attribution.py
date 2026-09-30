@@ -17,7 +17,7 @@ from greedy_collector.attribution.enums import RELATIONSHIPS, ASSESSMENTS, STANC
 
 ETH = '0x' + 'aB' * 20
 BTC = '1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa'
-BECH = 'bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kygt080'
+BECH = 'bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4'
 
 
 @pytest.fixture
@@ -101,7 +101,8 @@ def test_subject_normalization_preserves_base58_and_normalizes_supported_bech32(
     target = entity(svc)['id']
     row = claim(svc, target, chain='bitcoin', subject_ref=BTC)
     assert row['subject_ref'] == BTC
-    assert claim(svc, target, chain='bitcoin', subject_ref=BTC.lower())['id'] != row['id']
+    with pytest.raises(AttributionError):
+        claim(svc, target, chain='bitcoin', subject_ref=BTC.lower())
     b = claim(svc, target, chain='bitcoin', subject_ref=BECH)
     with pytest.raises(Conflict) as error: claim(svc, target, chain='bitcoin', subject_ref=BECH.upper())
     assert error.value.existing_id == b['id']

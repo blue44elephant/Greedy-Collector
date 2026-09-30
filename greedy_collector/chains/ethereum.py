@@ -3,6 +3,7 @@ from decimal import Decimal
 import re
 
 from .base import ChainDataError, RpcReadError
+from ..collection import atomic_amount
 from .etherscan_v2 import EtherscanV2Adapter
 
 WEI = Decimal("1000000000000000000")
@@ -66,7 +67,7 @@ class EthereumAdapter(EtherscanV2Adapter):
         # Check for JSON-RPC error response
         if "error" in data and data["error"]:
             error_msg = data["error"].get("message", "Unknown error")
-            raise ChainDataError(f"Alchemy returned error: {error_msg}")
+            raise ChainDataError("Alchemy returned error: provider_error")
         
         # Ensure result exists
         if "result" not in data:
@@ -103,9 +104,9 @@ class EthereumAdapter(EtherscanV2Adapter):
         try:
             balance_wei = int(result, 16)
         except (ValueError, TypeError) as exc:
-            raise ChainDataError(f"Invalid hex balance from Alchemy: {exc}") from exc
+            raise ChainDataError("Invalid hex balance from Alchemy: malformed_response") from None
         
-        balance_eth = str(Decimal(balance_wei) / WEI)
+        balance_eth = atomic_amount(balance_wei, 18)
         
         return {
             "chain": self.chain,

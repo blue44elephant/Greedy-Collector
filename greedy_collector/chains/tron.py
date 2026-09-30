@@ -12,6 +12,7 @@ import httpx
 from .base import ChainAdapter, ChainDataError
 from .base58 import BASE58_ALPHABET, BASE58_INDEX, base58_decode as _base58_decode, base58_encode as _base58_encode
 from ..schemas import NormalizedTransaction
+from ..collection import atomic_amount, utc_timestamp, decimals_or_none
 
 
 SUN = Decimal("1000000")
@@ -46,20 +47,14 @@ def tron_address_from_hex(value: str) -> str:
 
 
 def _decimal_amount(raw_value, decimals: int) -> str:
-    try:
-        raw = Decimal(str(raw_value))
-    except (InvalidOperation, ValueError, TypeError):
-        raise ChainDataError("tron_invalid_provider_response") from None
-    if raw != raw.to_integral_value() or decimals < 0 or decimals > 80:
-        raise ChainDataError("tron_invalid_provider_response")
-    return str(raw / (Decimal(10) ** decimals))
+    return atomic_amount(raw_value, decimals)
 
 
 def _timestamp(value) -> datetime | None:
     if value in (None, ""):
         return None
     try:
-        return datetime.fromtimestamp(int(value) / 1000, timezone.utc)
+        return utc_timestamp(value, milliseconds=True)
     except (TypeError, ValueError, OSError, OverflowError):
         raise ChainDataError("tron_invalid_provider_response") from None
 
@@ -159,7 +154,7 @@ class TronAdapter(ChainAdapter):
         return {
             "chain": self.chain,
             "address": address,
-            "balance_native": str(Decimal(balance) / SUN),
+            "balance_native": atomic_amount(balance, 6),
             "source_api": "trongrid",
         }
 
@@ -167,6 +162,7 @@ class TronAdapter(ChainAdapter):
         rows: list[dict] = []
         fingerprint = None
         seen_fingerprints = set()
+        self._last_history_summary = {"status": "COMPLETE_WITHIN_REQUESTED_BOUND", "reason": "short_or_empty_page"}
         for _ in range(MAX_PAGES):
             params = {
                 "only_confirmed": "true",
@@ -175,32 +171,54 @@ class TronAdapter(ChainAdapter):
             }
             if fingerprint:
                 params["fingerprint"] = fingerprint
-            data = await self._request_json("GET", path, params=params)
+            try:
+                data = await self._request_json("GET", path, params=params)
+            except ChainDataError as exc:
+                if not rows: raise
+                self._last_history_summary = {"status": "PARTIAL", "reason": exc.category}
+                break
             page = data.get("data")
-            if not isinstance(page, list) or any(not isinstance(row, dict) for row in page):
-                raise ChainDataError("tron_invalid_provider_response")
+            if not isinstance(page, list) or any(not isinstance(row, dict) for row in page) or len(page) > PAGE_SIZE:
+                if not rows: raise ChainDataError("tron_invalid_provider_response")
+                self._last_history_summary = {"status": "PARTIAL", "reason": "malformed_response"}
+                break
             rows.extend(page[:PAGE_SIZE])
             meta = data.get("meta") or {}
             next_fingerprint = meta.get("fingerprint") if isinstance(meta, dict) else None
-            if not page or len(page) < PAGE_SIZE or not isinstance(next_fingerprint, str):
+            if not page or len(page) < PAGE_SIZE: break
+            if not isinstance(next_fingerprint, str) or len(next_fingerprint) > 4096:
+                self._last_history_summary = {"status": "PROVIDER_LIMITED", "reason": "missing_or_invalid_cursor"}
                 break
             if not next_fingerprint or next_fingerprint in seen_fingerprints:
+                self._last_history_summary = {"status": "PARTIAL", "reason": "repeated_cursor"}
                 break
             seen_fingerprints.add(next_fingerprint)
             fingerprint = next_fingerprint
+        else:
+            self._last_history_summary = {"status": "TRUNCATED", "reason": "page_bound"}
         return rows[: PAGE_SIZE * MAX_PAGES]
 
     async def transactions(self, address: str) -> list[NormalizedTransaction]:
         address = self.validate_address(address)
-        ordinary_rows = await self._history(f"/v1/accounts/{address}/transactions", address)
-        token_rows = await self._history(f"/v1/accounts/{address}/transactions/trc20", address)
+        self.collection_streams = {}
         combined = []
-        for row in ordinary_rows:
-            tx = self._normalize_account_transaction(row, address)
-            if tx is not None:
-                combined.append(tx)
-        for row in token_rows:
-            combined.append(self._normalize_trc20(row, address))
+        failures = 0
+        for name, suffix, normalize in (("native", "transactions", self._normalize_account_transaction),
+                ("tokens", "transactions/trc20", self._normalize_trc20)):
+            try:
+                rows = await self._history(f"/v1/accounts/{address}/{suffix}", address)
+            except ChainDataError as exc:
+                failures += 1
+                self.collection_streams[name] = {"status": "UNAVAILABLE", "reason": exc.category}
+                continue
+            self.collection_streams[name] = getattr(self, "_last_history_summary", {"status": "PROVIDER_LIMITED", "reason": "provider_window"})
+            for row in rows:
+                try:
+                    tx = normalize(row, address)
+                    if tx is not None: combined.append(tx)
+                except (ChainDataError, ValueError, TypeError):
+                    self.collection_streams[name] = {**self.collection_streams[name], "status": "PARTIAL", "reason": "malformed_response"}
+        if failures == 2: raise ChainDataError("tron_provider_unavailable")
         seen = set()
         result = []
         for tx in combined:
@@ -271,7 +289,7 @@ class TronAdapter(ChainAdapter):
                 block_number=str(row.get("blockNumber") or row.get("block_number") or ""),
                 direction="unknown",
                 source_api="trongrid",
-                raw_payload={"_event_id": event_id, "_public": {
+                raw_payload={"provider": row, "_event_id": event_id, "_public": {
                     "asset_type": "unsupported", "unsupported_type": contract_type[:128],
                     "confirmed": True, "event_id": event_id,
                 }},
@@ -286,7 +304,7 @@ class TronAdapter(ChainAdapter):
             raise ChainDataError("tron_invalid_provider_response")
         if contract_type == "TransferContract":
             symbol = "TRX"
-            normalized = str(Decimal(amount) / SUN)
+            normalized = atomic_amount(amount, 6)
             asset_type = "native"
         else:
             asset_name = values.get("asset_name", "")
@@ -295,7 +313,7 @@ class TronAdapter(ChainAdapter):
             except (ValueError, UnicodeError):
                 symbol = str(asset_name)
             symbol = symbol[:32] or "TRC-10"
-            normalized = str(Decimal(amount))
+            normalized = ""
             asset_type = "trc10"
         event_values = {
             "tx_hash": tx_hash,
@@ -317,14 +335,16 @@ class TronAdapter(ChainAdapter):
             token_symbol=symbol,
             timestamp=timestamp,
             block_number=str(row.get("blockNumber") or row.get("block_number") or ""),
-            fee="0",
+            fee="",
             direction="outgoing" if focus_address and sender == focus_address else "incoming" if focus_address else "unknown",
             source_api="trongrid",
+            asset_contract=("trc10:" + symbol) if asset_type == "trc10" else None,
             raw_payload={
                 "_event_id": event_id,
                 "_public": {
                     "asset_type": asset_type,
                     "raw_value": str(amount),
+                    "token_decimals": 6 if asset_type == "native" else None,
                     "confirmed": True,
                     "event_id": event_id,
                 },
@@ -342,14 +362,10 @@ class TronAdapter(ChainAdapter):
         tx_hash = str(row.get("transaction_id") or "").lower()
         if not self.identify_transaction(tx_hash):
             raise ChainDataError("tron_invalid_provider_response")
-        try:
-            if isinstance(token.get("decimals", 0), bool):
-                raise TypeError()
-            decimals = int(token.get("decimals", 0))
-        except (ValueError, TypeError):
-            raise ChainDataError("tron_invalid_provider_response") from None
-        raw_value = str(row.get("value", ""))
-        normalized = _decimal_amount(raw_value, decimals)
+        decimals = decimals_or_none(token.get("decimals"))
+        from ..collection import atomic_integer
+        raw_value = str(atomic_integer(row.get("value")))
+        normalized = _decimal_amount(raw_value, decimals) if decimals is not None else ""
         symbol = str(token.get("symbol") or "TOKEN")[:32]
         event_values = {
             "tx_hash": tx_hash,
@@ -357,17 +373,17 @@ class TronAdapter(ChainAdapter):
             "to": recipient,
             "contract": contract,
             "raw_value": raw_value,
-            "decimals": decimals,
             "event_index": row.get("event_index", row.get("log_index")),
         }
-        event_id = self._event_id("trc20", event_values)
         from ..transaction_identity import normalize_event_index
         try:
             event_index = normalize_event_index(event_values["event_index"])
         except ValueError:
             raise ChainDataError("tron_invalid_provider_response") from None
+        event_values["event_index"] = event_index
+        event_id = self._event_id("trc20", event_values)
         public = {
-            "asset_type": "trc20",
+            "asset_type": "trc20" if row.get("type") in (None, "Transfer") else "unsupported",
             "token_contract": contract,
             "token_name": str(token.get("name") or "")[:255],
             "token_decimals": decimals,
@@ -384,7 +400,7 @@ class TronAdapter(ChainAdapter):
             token_symbol=symbol,
             timestamp=_timestamp(row.get("block_timestamp")),
             block_number=str(row.get("block") or row.get("block_number") or ""),
-            fee="0",
+            fee="",
             direction="outgoing" if focus_address and sender == focus_address else "incoming",
             source_api="trongrid_trc20",
             raw_payload={"_event_id": event_id, "_public": public, "provider": row},

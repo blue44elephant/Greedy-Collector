@@ -285,7 +285,8 @@ class TestAlchemyInvalidResponse:
                     await ethereum_adapter.lookup_address(valid_address)
                 
                 assert "Alchemy returned error" in str(exc_info.value)
-                assert "Invalid Request" in str(exc_info.value)
+                assert "provider_error" in str(exc_info.value)
+                assert "Invalid Request" not in str(exc_info.value)
 
     async def test_alchemy_invalid_hex_balance(self, ethereum_adapter, valid_address):
         """Alchemy returns invalid hexadecimal balance."""
@@ -400,7 +401,7 @@ class TestTransactionHistoryUnchanged:
             "message": "OK",
             "result": [
                 {
-                    "hash": "0xabc123",
+                    "hash": "0x" + "a" * 64,
                     "from": valid_address,
                     "to": "0x9999999999999999999999999999999999999999",
                     "value": "1000000000000000000",
@@ -437,7 +438,7 @@ class TestLookupTransactionUnchanged:
             "status": "1",
             "message": "OK",
             "result": {
-                "hash": "0xabc123def456",
+                "hash": "0x" + "a" * 64,
                 "from": "0x1111111111111111111111111111111111111111",
                 "to": "0x2222222222222222222222222222222222222222",
                 "value": "0x0de0b6b3a7640000",

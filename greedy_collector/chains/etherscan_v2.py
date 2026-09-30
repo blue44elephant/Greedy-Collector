@@ -7,6 +7,7 @@ import re
 from .base import ChainDataError
 from .evm import EvmAdapter
 from ..schemas import NormalizedTransaction
+from ..collection import atomic_amount, atomic_integer, decimals_or_none, utc_timestamp
 
 class EtherscanV2Adapter(EvmAdapter):
     etherscan_url = "https://api.etherscan.io/v2/api"
@@ -31,14 +32,14 @@ class EtherscanV2Adapter(EvmAdapter):
 
 
     async def _etherscan(self, params: dict) -> dict:
-        params = {
-            "chainid": str(self.evm_chain_id),
-            "apikey": self._require_key(),
-            **params,
-        }
+        params = {**params, "chainid": str(self.evm_chain_id), "apikey": self._require_key()}
         data = await self._get(self.etherscan_url, params=params)
+        if not isinstance(data, dict) or data.get("error") is not None:
+            raise ChainDataError("malformed_response")
         if str(data.get("status")) == "0" and data.get("message") != "No transactions found":
-            raise ChainDataError(f"Etherscan returned: {data.get('result')}")
+            message = str(data.get("result", "")).lower()
+            category = "rate_limited" if "rate limit" in message else "quota_exhausted" if "quota" in message else "authentication" if "api key" in message else "provider_error"
+            raise ChainDataError(category)
         return data
 
 
@@ -60,7 +61,7 @@ class EtherscanV2Adapter(EvmAdapter):
         return {
             "chain": self.chain,
             "address": address,
-            "balance_native": str(Decimal(str(data.get("result", "0"))) / self.native_divisor),
+            "balance_native": atomic_amount(data.get("result"), self.native_decimals),
             "source_api": "etherscan",
             "raw": data,
         }
@@ -85,48 +86,39 @@ class EtherscanV2Adapter(EvmAdapter):
             List of all transaction/token rows from all pages
             
         Raises:
-            ChainDataError: If a page request fails after page 1 succeeds,
-                           (partial data not returned)
+            ChainDataError: If the initial page is unavailable. Later failures
+                           retain collected data with explicit PARTIAL diagnostics.
         """
         all_rows = []
-        
+        seen_pages = set()
+        if not 1 <= max_pages <= 10 or not 1 <= page_size <= 1000:
+            raise ValueError("Invalid history bounds")
+        if not hasattr(self, "collection_streams"): self.collection_streams = {}
+        status, reason = "COMPLETE_WITHIN_REQUESTED_BOUND", "short_or_empty_page"
         for page_num in range(1, max_pages + 1):
             try:
-                data = await self._etherscan({
-                    "module": "account",
-                    "action": action,
-                    "address": address,
-                    "startblock": 0,
-                    "endblock": 99999999,
-                    "page": page_num,
-                    "offset": page_size,
-                    "sort": "desc",
-                })
+                data = await self._etherscan({"module": "account", "action": action,
+                    "address": address, "startblock": 0, "endblock": 99999999,
+                    "page": page_num, "offset": page_size, "sort": "desc"})
+                rows = data.get("result") if isinstance(data, dict) else None
+                if rows == "No transactions found": rows = []
+                if not isinstance(rows, list) or any(not isinstance(r, dict) for r in rows) or len(rows) > page_size:
+                    raise ChainDataError("malformed_response")
+                import json
+                signature = json.dumps(rows, sort_keys=True, separators=(",", ":"))
+                if rows and signature in seen_pages:
+                    status, reason = "PARTIAL", "repeated_page"
+                    break
+                seen_pages.add(signature)
+                all_rows.extend(rows)
+                if len(rows) < page_size: break
+                if page_num == max_pages: status, reason = "TRUNCATED", "page_bound"
             except ChainDataError as exc:
-                # If we already have data from page 1, a later page failure is fatal
-                if all_rows:
-                    raise ChainDataError(
-                        f"Etherscan {action} pagination failed at page {page_num}: {exc}"
-                    ) from exc
-                # Page 1 itself failed, raise as-is
-                raise
-            
-            # Extract result
-            rows = data.get("result", [])
-            
-            # Handle valid empty response
-            if not rows or (isinstance(rows, str) and rows == "No transactions found"):
-                # Normal termination: no more data
+                if not all_rows: raise
+                status, reason = "PARTIAL", getattr(exc, "category", "provider_error")
                 break
-            
-            # Filter to valid dict rows
-            valid_rows = [r for r in rows if isinstance(r, dict)]
-            all_rows.extend(valid_rows)
-            
-            # Stop if fewer than page_size returned (last page)
-            if len(valid_rows) < page_size:
-                break
-        
+        self.collection_streams[action] = {"status": status, "reason": reason,
+            "pages": page_num, "records": len(all_rows), "max_records": max_pages * page_size}
         return all_rows
 
 
@@ -145,28 +137,31 @@ class EtherscanV2Adapter(EvmAdapter):
             List of NormalizedTransaction objects sorted newest-first
             
         Raises:
-            ChainDataError: If page 1 succeeds but a later page fails
+            ChainDataError: If both history streams are unavailable
         """
         address = self.validate_address(address)
         
-        # Paginate both transaction types independently (up to 10,000 each)
-        normal_rows, token_rows = await asyncio.gather(
-            self._paginate_account_action("txlist", address, max_pages=10, page_size=1000),
-            self._paginate_account_action("tokentx", address, max_pages=10, page_size=1000),
-        )
-        
-        # Normalize rows
-        normal = [
-            self._normalize(row, address)
-            for row in normal_rows
-            if isinstance(row, dict) and row.get("hash")
-        ]
-        tokens = [
-            self._normalize_token(row, address)
-            for row in token_rows
-            if isinstance(row, dict) and row.get("hash")
-        ]
-        
+        self.collection_streams = {}
+        responses = await asyncio.gather(
+            self._paginate_account_action("txlist", address),
+            self._paginate_account_action("tokentx", address), return_exceptions=True)
+        if all(isinstance(r, Exception) for r in responses):
+            raise ChainDataError("provider_error")
+        normal, tokens = [], []
+        for action, response, normalize, target in zip(
+                ("txlist", "tokentx"), responses, (self._normalize, self._normalize_token), (normal, tokens)):
+            if isinstance(response, Exception):
+                if not isinstance(response, ChainDataError): raise response
+                self.collection_streams[action] = {"status": "UNAVAILABLE", "reason": getattr(response, "category", "provider_error")}
+                continue
+            for row in response:
+                try:
+                    if not isinstance(row, dict) or not row.get("hash"): raise ChainDataError("malformed_response")
+                    target.append(normalize(row, address))
+                except (ChainDataError, ValueError, TypeError, OverflowError):
+                    self.collection_streams[action] = {**self.collection_streams.get(action, {}),
+                        "status": "PARTIAL", "reason": "malformed_response"}
+
         # Combine and globally sort by timestamp descending
         combined = normal + tokens
         
@@ -194,66 +189,71 @@ class EtherscanV2Adapter(EvmAdapter):
         data = await self._etherscan(
             {"module": "proxy", "action": "eth_getTransactionByHash", "txhash": tx_hash}
         )
-        row = data.get("result")
+        row = data.get("result") if isinstance(data, dict) else None
         if not isinstance(row, dict):
             raise ChainDataError("Transaction was not found")
+        if str(row.get("hash", "")).lower() != tx_hash.strip().lower():
+            raise ChainDataError("malformed_response")
+        def quantity(key, optional=False):
+            value = row.get(key)
+            if value is None and optional: return ""
+            if not isinstance(value, str) or not re.fullmatch(r"0x[0-9a-fA-F]{1,64}", value):
+                raise ChainDataError("malformed_response")
+            return str(int(value, 16))
         normalized = {
             "hash": row.get("hash", ""),
             "from": row.get("from", ""),
             "to": row.get("to", ""),
-            "value": str(int(row.get("value", "0x0"), 16)),
-            "blockNumber": str(int(row.get("blockNumber", "0x0"), 16))
-            if row.get("blockNumber")
-            else "",
-            "gas": str(int(row.get("gas", "0x0"), 16)),
-            "gasPrice": str(int(row.get("gasPrice", "0x0"), 16)),
+            "value": quantity("value"),
+            "blockNumber": quantity("blockNumber", optional=True),
+            "gas": quantity("gas", optional=True),
+            "gasPrice": quantity("gasPrice", optional=True),
         }
-        return self._normalize(normalized, "")
+        result = self._normalize(normalized, "")
+        result.raw_payload = {**result.raw_payload, "provider": row}
+        # The proxy transaction response does not establish execution success or paid fee.
+        result.fee = ""
+        return result
 
 
     def _normalize(self, row: dict, focus_address: str) -> NormalizedTransaction:
-        sender = row.get("from", "")
-        recipient = row.get("to", "") or ""
-        gas_used = Decimal(str(row.get("gasUsed", row.get("gas", "0")) or "0"))
-        gas_price = Decimal(str(row.get("gasPrice", "0") or "0"))
+        sender = (row.get("from", "") or "").lower()
+        recipient = (row.get("to", "") or "").lower()
+        gas_used = atomic_integer(row.get("gasUsed", "0") or "0")
+        gas_price = atomic_integer(row.get("gasPrice", "0") or "0")
         timestamp = row.get("timeStamp")
         return NormalizedTransaction(
-            tx_hash=row.get("hash", ""),
+            tx_hash=self.normalize_transaction_id(row.get("hash", "")),
             chain=self.chain,
             from_address=sender,
             to_address=recipient,
-            value_native=str(Decimal(str(row.get("value", "0"))) / self.native_divisor),
+            value_native=atomic_amount(row.get("value"), self.native_decimals),
             token_symbol=self.native_symbol,
-            timestamp=datetime.fromtimestamp(int(timestamp), timezone.utc)
-            if timestamp
-            else None,
+            timestamp=utc_timestamp(timestamp),
             block_number=str(row.get("blockNumber", "")),
-            fee=str((gas_used * gas_price) / self.native_divisor),
+            fee=atomic_amount(gas_used * gas_price, self.native_decimals) if "gasUsed" in row else "",
             direction="outgoing"
             if focus_address and sender.lower() == focus_address.lower()
-            else "incoming",
+            else "incoming" if focus_address else "unknown",
             source_api="etherscan",
-            raw_payload=row,
+            raw_payload={**row, "_public": {"asset_type": "native", "raw_value": str(atomic_integer(row.get("value"))), "token_decimals": self.native_decimals}},
         )
 
 
     def _normalize_token(self, row: dict, focus_address: str) -> NormalizedTransaction:
         from ..transaction_identity import normalize_event_index
         try:
-            decimals = int(row.get("tokenDecimal", 0) or 0)
+            decimals = decimals_or_none(row.get("tokenDecimal"))
             event_index = normalize_event_index(row.get("logIndex", row.get("log_index")))
         except (TypeError, ValueError, OverflowError):
             raise ChainDataError("Etherscan returned malformed token event metadata") from None
-        if decimals < 0 or decimals > 255:
-            raise ChainDataError("Etherscan returned malformed token event metadata")
         contract = row.get("contractAddress", row.get("tokenContractAddress"))
         if contract is not None:
             if not isinstance(contract, str) or not re.fullmatch(r"0x[0-9a-fA-F]{40}", contract):
                 raise ChainDataError("Etherscan returned malformed token event metadata")
             contract = contract.lower()
-        raw_value = str(row.get("value", "0"))
-        divisor = Decimal(10) ** decimals
-        sender = row.get("from", "")
+        raw_value = str(atomic_integer(row.get("value")))
+        sender = (row.get("from", "") or "").lower()
         timestamp = row.get("timeStamp")
         public = {
             "asset_type": "erc20", "token_contract": contract,
@@ -261,20 +261,18 @@ class EtherscanV2Adapter(EvmAdapter):
             "token_decimals": decimals, "raw_value": raw_value,
         }
         return NormalizedTransaction(
-            tx_hash=row.get("hash", ""),
+            tx_hash=self.normalize_transaction_id(row.get("hash", "")),
             chain=self.chain,
             from_address=sender,
-            to_address=row.get("to", "") or "",
-            value_native=str(Decimal(raw_value) / divisor),
+            to_address=(row.get("to", "") or "").lower(),
+            value_native=atomic_amount(raw_value, decimals) if decimals is not None else "",
             token_symbol=str(row.get("tokenSymbol", "TOKEN"))[:32],
-            timestamp=datetime.fromtimestamp(int(timestamp), timezone.utc)
-            if timestamp
-            else None,
+            timestamp=utc_timestamp(timestamp),
             block_number=str(row.get("blockNumber", "")),
-            fee="0",
+            fee="",
             direction="outgoing"
             if focus_address and sender.lower() == focus_address.lower()
-            else "incoming",
+            else "incoming" if focus_address else "unknown",
             source_api="etherscan_token",
             raw_payload={**row, "_public": public},
             event_index=event_index,

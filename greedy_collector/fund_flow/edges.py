@@ -3,9 +3,11 @@ from collections import defaultdict
 import time
 from .domain import amount, decimal_text, iso, digest, UTXO_CAVEAT
 from ..chains.registry import ChainFamily
+from ..collection import execution_status, atomic_amount
 
 
 def successful(row,d,pub,raw):
+    if execution_status(row) == "failed": return False
     if d.evm_compatible:
         if str(raw.get('isError',''))=='1' or str(raw.get('txreceipt_status',''))=='0':return False
         if row.source_api=='etherscan_token':return bool(row.block_number) and bool(row.asset_contract)
@@ -71,7 +73,7 @@ def utxo_event(row,d):
                 if output.get('scriptpubkey_type')=='op_return':continue
                 raise ValueError()
             targets.append({'address':adapter.normalize_address(output['scriptpubkey_address']),
-                            'index':index,'raw_output_amount':str(value),'output_amount':decimal_text(amount(value)/(10**d.native_decimals))})
+                            'index':index,'raw_output_amount':str(value),'output_amount':atomic_amount(value, d.native_decimals)})
     except (KeyError,TypeError,ValueError,AttributeError):return None,'incomplete_utxo_data'
     # Retain each output index; never multiply input x output amounts.
     if not targets:return None,'no_address_outputs'

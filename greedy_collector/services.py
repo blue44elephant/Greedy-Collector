@@ -3,10 +3,11 @@ from datetime import datetime, timezone
 from io import StringIO
 
 from fastapi.encoders import jsonable_encoder
-from sqlalchemy import func, or_, select
+from sqlalchemy import func, or_, select, exists
 from sqlalchemy.orm import Session
 
 from .chains import get_chain_adapter, get_chain, Capability
+from .collection import prepare_event, collection_summary, transfer_eligible, utxo_participants
 from .database import initialize_database
 from .graph import GraphStore
 from .kyc import KycScreeningEngine
@@ -49,12 +50,18 @@ class GreedyCollectorService:
         adapter = get_chain_adapter(request.chain)
         profile = profile_override if profile_override is not None else await adapter.lookup_address(request.address)
         transactions = transactions_override if transactions_override is not None else await adapter.transactions(request.address)
+        retrieved_at = datetime.now(timezone.utc).isoformat()
+        transactions = [prepare_event(tx, requested_chain=request.chain, retrieved_at=retrieved_at) for tx in transactions]
         labels = self._labels_for_transactions(db, transactions)
 
         from .transaction_identity import persist_normalized_event
+        stored_new = reused = 0
         for tx in transactions:
-            persist_normalized_event(db, tx)
+            _, created = persist_normalized_event(db, tx)
+            stored_new += int(created)
+            reused += int(not created)
         db.flush()
+        collection = collection_summary(adapter, transactions, stored_new=stored_new, reused=reused)
 
         exposure_paths = self._exposure_paths(db, request.chain, request.address, 3)
         risk = self.risk_engine.evaluate(
@@ -84,6 +91,7 @@ class GreedyCollectorService:
         address.metadata_json = {
             "source_api": profile.get("source_api"),
             "transaction_count": profile.get("transaction_count", len(transactions)),
+            "collection": collection,
         }
 
         db.add(
@@ -103,6 +111,7 @@ class GreedyCollectorService:
             "counterparties": self._counterparties(request.address, transactions),
             "labels": labels,
             "risk": risk,
+            "collection": collection,
             "provenance": {
                 "source_api": profile.get("source_api"),
                 "retrieved_at": datetime.now(timezone.utc).isoformat(),
@@ -114,9 +123,9 @@ class GreedyCollectorService:
         adapter = get_chain_adapter(chain)
         lookup_events = getattr(adapter, "lookup_transaction_events", None)
         if lookup_events is not None:
-            events = await lookup_events(tx_hash)
+            events = [prepare_event(tx, requested_chain=chain) for tx in await lookup_events(tx_hash)]
             return {"chain": chain, "tx_hash": events[0].tx_hash, "events": [self._tx_dict(tx) for tx in events]}
-        tx = await adapter.lookup_transaction(tx_hash)
+        tx = prepare_event(await adapter.lookup_transaction(tx_hash), requested_chain=chain)
         return self._tx_dict(tx)
 
     def address_record(self, db: Session, chain: str, address: str) -> dict | None:
@@ -132,10 +141,7 @@ class GreedyCollectorService:
             select(Transaction)
             .where(
                 Transaction.chain == chain,
-                or_(
-                    self._address_membership(chain,Transaction.from_address,{get_chain(chain).adapter().address_key(address)}),
-                    self._address_membership(chain,Transaction.to_address,{get_chain(chain).adapter().address_key(address)}),
-                ),
+                self._transaction_membership(chain, {get_chain(chain).adapter().address_key(address)}),
             )
             .order_by(Transaction.timestamp.desc())
         ).all()
@@ -163,7 +169,7 @@ class GreedyCollectorService:
     ) -> dict:
         get_chain(chain).require(Capability.GRAPH)
         adapter = get_chain(chain).adapter()
-        external_graph = self.graph_store.query_graph(chain, address, hops)
+        external_graph = self.graph_store.query_graph(chain, address, hops) if get_chain(chain).family.value != "utxo" else None
         if external_graph:
             return external_graph
         frontier = {adapter.address_key(address)}
@@ -176,10 +182,7 @@ class GreedyCollectorService:
             rows = db.scalars(
                 select(Transaction).where(
                     Transaction.chain == chain,
-                    or_(
-                        self._address_membership(chain,Transaction.from_address,frontier),
-                        self._address_membership(chain,Transaction.to_address,frontier),
-                    ),
+                    self._transaction_membership(chain, frontier),
                 )
             ).all()
             if not rows:
@@ -187,8 +190,10 @@ class GreedyCollectorService:
             available_hops += 1
             next_frontier = set()
             for row in rows:
+                if not transfer_eligible(row): continue
                 transactions_by_hash[row.id] = row
-                for candidate in [row.from_address, row.to_address]:
+                participants = sum(utxo_participants(row), []) if get_chain(chain).family.value == "utxo" else [row.from_address, row.to_address]
+                for candidate in participants:
                     normalized = adapter.address_key(candidate) if candidate else ""
                     if normalized and normalized not in visited and normalized not in frontier:
                         next_frontier.add(normalized)
@@ -427,6 +432,17 @@ class GreedyCollectorService:
                     for chain,addresses in by_chain.items()]
         return [row_dict(row) for row in db.scalars(select(Label).where(or_(*conditions))).all()]
 
+    @classmethod
+    def _transaction_membership(cls, chain, addresses):
+        conditions = [cls._address_membership(chain, Transaction.from_address, addresses),
+            cls._address_membership(chain, Transaction.to_address, addresses)]
+        if get_chain(chain).family.value == "utxo":
+            for path, address_path in (("$.vin", "$.prevout.scriptpubkey_address"), ("$.vout", "$.scriptpubkey_address")):
+                entries = func.json_each(Transaction.raw_payload, path).table_valued("value").alias()
+                conditions.append(exists(select(1).select_from(entries).where(
+                    cls._address_membership(chain, func.json_extract(entries.c.value, address_path), addresses))))
+        return or_(*conditions)
+
     @staticmethod
     def _address_membership(chain,column,addresses):
         adapter=get_chain(chain).adapter()
@@ -448,10 +464,7 @@ class GreedyCollectorService:
             rows = db.scalars(
                 select(Transaction).where(
                     Transaction.chain == chain,
-                    or_(
-                        self._address_membership(chain,Transaction.from_address,addresses),
-                        self._address_membership(chain,Transaction.to_address,addresses),
-                    ),
+                    self._transaction_membership(chain, addresses),
                 )
             ).all()
             next_frontier = {}
@@ -491,6 +504,12 @@ class GreedyCollectorService:
     ) -> list[dict]:
         counts = {}
         for tx in transactions:
+            if not transfer_eligible(tx): continue
+            if get_chain(tx.chain).family.value == "utxo" and "vin" in tx.raw_payload:
+                for cp in set(sum(utxo_participants(tx), [])):
+                    if cp != get_chain(tx.chain).adapter().address_key(address):
+                        counts[cp] = counts.get(cp, 0) + 1
+                continue
             cp = tx.to_address if tx.direction == "outgoing" else tx.from_address
             if cp and get_chain(tx.chain).adapter().address_key(cp) != get_chain(tx.chain).adapter().address_key(address):
                 counts[cp] = counts.get(cp, 0) + 1
@@ -508,6 +527,8 @@ class GreedyCollectorService:
         public = tx.raw_payload.get("_public") if isinstance(tx.raw_payload, dict) else None
         if isinstance(public, dict):
             data.update(public)
+        data["collection_provenance"] = tx.raw_payload.get("_collection")
+        if tx.value_native == "": data["value_native"] = None
         if tx.timestamp:
             data["timestamp"] = tx.timestamp.isoformat()
         return data

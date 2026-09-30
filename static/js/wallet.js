@@ -53,6 +53,14 @@ function renderLookup(data, stored = false, labels = [], labelsUnavailable = fal
   byId("provider-count").hidden = !hasProviderCount || providerCount === null || providerCount === undefined;
   text("provider-count", hasProviderCount ? "Provider-reported " + (chainMetadata(profile.chain)?.display_name ?? profile.chain) + " address transaction count: " + (providerCount ?? "Not available") + ". This may differ from bounded records returned." : "");
 
+  byId("collection-summary")?.remove();
+  const collection = data.collection || profile.metadata_json?.collection;
+  if (collection) {
+    const summary = element("p", `Collection: ${collection.status}. Records returned: ${collection.records_returned}. New: ${collection.stored_new}; reused: ${collection.existing_reused}. Failed records: ${collection.failed_records}. Provider history is bounded.`, "muted small");
+    summary.id = "collection-summary";
+    byId("provider-count").after(summary);
+  }
+
   const rows = document.createDocumentFragment();
   for (const tx of transactions) {
     const row = element("tr");
@@ -65,10 +73,11 @@ function renderLookup(data, stored = false, labels = [], labelsUnavailable = fal
       row.children[index].replaceChildren(shortValue([tx.tx_hash, tx.direction, tx.from_address, tx.to_address][index]));
     });
     row.children[4].className = "numeric";
-    if (["trc20", "erc20", "spl_token", "token2022"].includes(tx.asset_type)) {
+    if (["trc10", "trc20", "erc20", "spl_token", "token2022"].includes(tx.asset_type)) {
       const details = [tx.token_name, tx.token_contract || tx.token_mint || tx.asset_contract, tx.token_decimals != null ? `${tx.token_decimals} decimals` : null, tx.raw_value != null ? `raw ${tx.raw_value}` : null, tx.confirmed === true ? "Confirmed" : null].filter(Boolean).join(" · ");
       row.children[5].replaceChildren(element("span", tx.token_symbol || "TOKEN"), element("span", details, "muted small"));
     }
+    if (tx.execution_status === "failed") row.children[1].append(element("span", "Failed execution; no successful value movement", "muted small"));
     rows.append(row);
   }
   byId("transaction-rows").replaceChildren(rows);

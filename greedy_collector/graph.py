@@ -5,6 +5,7 @@ import httpx
 from .config import get_settings
 from .chains import get_chain_adapter
 from .schemas import NormalizedTransaction
+from .collection import transfer_eligible, utxo_participants, execution_status
 
 logger = logging.getLogger("GreedyCollector.Graph")
 
@@ -45,7 +46,7 @@ class GraphStore:
         from .transaction_identity import build_event_key
         rows = []
         for tx in transactions:
-            if not tx.from_address or not tx.to_address:
+            if not transfer_eligible(tx) or not tx.from_address or not tx.to_address:
                 continue
             rows.append(
                 {
@@ -65,6 +66,8 @@ class GraphStore:
                     "timestamp": tx.timestamp.isoformat() if tx.timestamp else None,
                     "block_number": tx.block_number,
                     "source_api": tx.source_api,
+                    "contract_version": 1,
+                    "execution_status": execution_status(tx),
                     "event_key": tx.event_key or build_event_key(tx),
                     "event_index": tx.event_index,
                     "asset_contract": tx.asset_contract,
@@ -97,6 +100,7 @@ class GraphStore:
         path = (
             "MATCH p=(focus:Wallet {chain: $chain, address_normalized: $address})"
             f"-[:TRANSACTION*1..{hops}]-(other) "
+            "WHERE all(r IN relationships(p) WHERE r.contract_version = 1 AND r.chain = $chain AND r.execution_status <> 'failed') "
         )
         statements = [
             {
@@ -117,7 +121,9 @@ class GraphStore:
                     "RETURN DISTINCT r.edge_id AS id, "
                     "r.from_address AS source, r.to_address AS target, "
                     "r.tx_hash AS tx_hash, r.value_native AS value_native, "
-                    "r.token_symbol AS token_symbol, r.timestamp AS timestamp"
+                    "r.token_symbol AS token_symbol, r.timestamp AS timestamp, "
+                    "r.chain AS chain, r.event_key AS event_key, r.event_index AS event_index, "
+                    "r.asset_contract AS asset_contract, r.source_api AS source_api"
                 ),
                 "parameters": {"chain": chain, "address": get_chain_adapter(chain).address_key(address)},
             },
@@ -181,15 +187,27 @@ class GraphStore:
         def node_id(chain,address):return address if len(chain_ids)<=1 else chain+':'+address
         nodes = {}
         edges = []
+        connectivity = {}
         from .transaction_identity import build_event_key
         for tx in transactions:
+            if not transfer_eligible(tx): continue
             raw_payload = tx.raw_payload if isinstance(tx.raw_payload, dict) else {}
             public = raw_payload.get("_public", {}) if isinstance(raw_payload.get("_public", {}), dict) else {}
             provenance_keys = ("asset_type", "token_mint", "token_decimals", "raw_value",
                 "source_token_account", "destination_token_account", "source_owner_known",
-                "destination_owner_known", "amount_basis", "execution_status")
+                "destination_owner_known", "amount_basis", "execution_status", "asset_id", "finality")
             event_provenance = {key: public[key] for key in provenance_keys if key in public}
-            for address in [tx.from_address, tx.to_address]:
+            addresses = [tx.from_address, tx.to_address]
+            from .chains import get_chain
+            is_utxo = get_chain(tx.chain).family.value == "utxo"
+            if is_utxo and raw_payload.get("vin") is not None and raw_payload.get("vout") is not None:
+                inputs, outputs = utxo_participants(tx)
+                addresses = inputs + outputs
+                connectivity[(tx.chain, tx.tx_hash)] = {"chain": tx.chain, "tx_hash": tx.tx_hash,
+                    "inputs": inputs, "outputs": outputs, "source_api": tx.source_api,
+                    "semantics": "utxo_connectivity", "allocation": "not_inferred",
+                    "collection_provenance": raw_payload.get("_collection")}
+            for address in addresses:
                 if not address:
                     continue
                 key=(tx.chain,get_chain_adapter(tx.chain).address_key(address))
@@ -201,7 +219,7 @@ class GraphStore:
                     "chain": tx.chain,
                     "is_focus": get_chain_adapter(tx.chain).address_key(address) == get_chain_adapter(tx.chain).address_key(focus_address),
                 }
-            if tx.from_address and tx.to_address:
+            if tx.from_address and tx.to_address and not (is_utxo and raw_payload.get("vin") is not None):
                 edges.append(
                     {
                         "id": (
@@ -212,6 +230,9 @@ class GraphStore:
                         "source": node_id(tx.chain,tx.from_address),
                         "target": node_id(tx.chain,tx.to_address),
                         "tx_hash": tx.tx_hash,
+                        "chain": tx.chain,
+                        "source_api": tx.source_api,
+                        "collection_provenance": raw_payload.get("_collection"),
                         "value_native": tx.value_native,
                         "token_symbol": tx.token_symbol,
                         "event_key": tx.event_key or build_event_key(tx),
@@ -223,6 +244,7 @@ class GraphStore:
                 )
         return {
             "nodes": list(nodes.values()),
+            "utxo_transactions": list(connectivity.values()),
             "edges": edges,
             "requested_hops": max_hops,
             "available_hops": available_hops,

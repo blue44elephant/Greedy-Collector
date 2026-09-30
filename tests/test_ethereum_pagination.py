@@ -280,10 +280,10 @@ class TestEthereumPaginationGlobalOrdering:
 
 
 class TestEthereumPaginationLaterPageFailure:
-    """Test: Page 1 succeeds, later page fails - raises error, not partial data."""
+    """Test: Page 1 succeeds, later page fails - returns explicitly partial data."""
 
-    async def test_later_page_failure_raises_error(self, ethereum_adapter, valid_address):
-        """Page 1 succeeds but page 2 fails, ChainDataError raised."""
+    async def test_later_page_failure_preserves_partial_history(self, ethereum_adapter, valid_address):
+        """Page 1 survives page 2 failure with explicit partial status."""
         with patch.object(ethereum_adapter, "_etherscan", new_callable=AsyncMock) as mock_eth:
             async def side_effect(params):
                 action = params.get('action', '')
@@ -300,14 +300,11 @@ class TestEthereumPaginationLaterPageFailure:
             
             mock_eth.side_effect = side_effect
             
-            with pytest.raises(ChainDataError) as exc_info:
-                await ethereum_adapter.transactions(valid_address)
-            
-            error_msg = str(exc_info.value)
-            # Verify error indicates pagination failure and page number
-            assert "pagination failed" in error_msg
-            assert "page 2" in error_msg
-            assert "txlist" in error_msg
+            result = await ethereum_adapter.transactions(valid_address)
+            assert len(result) == 1000
+            assert ethereum_adapter.collection_streams["txlist"]["status"] == "PARTIAL"
+            assert ethereum_adapter.collection_streams["tokentx"]["status"] == "COMPLETE_WITHIN_REQUESTED_BOUND"
+
 
 
 class TestEthereumPaginationSafetyCap:

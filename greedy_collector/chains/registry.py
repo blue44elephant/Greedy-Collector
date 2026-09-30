@@ -87,6 +87,11 @@ class ChainDefinition:
                   family=self.family.value,evm_compatible=self.evm_compatible,native_decimals=self.native_decimals,
                   capabilities=[c.value for c in Capability if c in self.capabilities],
                   address_case=self.adapter.address_case)
+        data['collection_scope'] = {
+            'history': 'unsupported' if self.family == ChainFamily.PRIVACY else 'bounded_provider_records',
+            'internal_value_transfers': 'unsupported' if self.evm_compatible else 'not_applicable',
+            'complete_lifetime_history': False,
+        }
         if self.evm_chain_id is not None:data['evm_chain_id']=self.evm_chain_id
         if self.explorer_url is not None:data['explorer_url']=self.explorer_url
         return data

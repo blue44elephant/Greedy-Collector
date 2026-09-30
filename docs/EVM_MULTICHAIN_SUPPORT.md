@@ -35,11 +35,9 @@ Bitcoin and TRON provider configuration is unchanged.
 
 The resolver is local and performs no provider request. Bitcoin addresses use the
 existing Bitcoin adapter validator; all five EVM networks use the shared existing EVM
-syntax validator. Resolver defaults preserve useful compatibility: bare 64-hex hashes
-resolve to Bitcoin, `0x` plus 40 hex resolves to Ethereum, and `0x` plus 64 hex resolves
-to Ethereum. These EVM forms are syntactically identical on every EVM network, so choose
-the optional Wallet **Network hint** to route an address or transaction hash to Base,
-Arbitrum, BNB Smart Chain, or Polygon. A TRON transaction hash also requires a TRON hint.
+syntax validator. Shared EVM address/hash syntax and bare BTC/LTC/TRON transaction IDs
+now return explicit ambiguity. Choose the Wallet **Network hint** before provider retrieval.
+No chain is selected merely because it was historically the default.
 Other text is reported as an unknown supported identifier; no provider is queried.
 
 `GET /api/greedy-collector/chains` supplies the current chain selector options and safe

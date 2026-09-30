@@ -11,16 +11,22 @@ from ..schemas import NormalizedTransaction
 
 
 class ChainDataError(RuntimeError):
-    pass
+    def __init__(self, message):
+        self.category = next((name for name in ("authentication", "rate_limited", "quota_exhausted", "timeout", "network_error", "malformed_response", "unsupported_capability") if name in message), "provider_error")
+        aliases = {"configuration_unavailable": "authentication", "transport_failed": "network_error",
+            "invalid_provider_response": "malformed_response", "unsupported_transaction": "unsupported_capability"}
+        for key, category in aliases.items():
+            if key in message: self.category = category
+        super().__init__(message)
 
 
 class RpcReadError(ChainDataError):
     """Bounded read failure: no provider message, URL or revert payload retained."""
     def __init__(self, category, selector=None, retry_after_seconds=None):
-        self.category = category
         self.selector = selector
         self.retry_after_seconds = retry_after_seconds
         super().__init__(category)
+        self.category = category
 
 
 class ChainAdapter(ABC):
@@ -91,8 +97,16 @@ class ChainAdapter(ABC):
                 response = await client.get(url, headers=headers, **kwargs)
                 response.raise_for_status()
                 return response.json()
-        except (httpx.HTTPError, ValueError) as exc:
-            raise ChainDataError(f"{self.chain} source request failed: {exc}") from exc
+        except httpx.HTTPStatusError as exc:
+            code = exc.response.status_code
+            category = "rate_limited" if code == 429 else "authentication" if code in (401, 403) else "provider_error"
+            raise ChainDataError(category) from None
+        except httpx.TimeoutException:
+            raise ChainDataError("timeout") from None
+        except httpx.HTTPError:
+            raise ChainDataError("network_error") from None
+        except ValueError:
+            raise ChainDataError("malformed_response") from None
 
     async def _post(self, url: str, **kwargs):
         """Send JSON-RPC requests without exposing credential-bearing URLs in errors."""

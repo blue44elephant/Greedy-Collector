@@ -10,6 +10,7 @@ from urllib.parse import urlsplit
 from .base import ChainAdapter, ChainDataError, RpcReadError
 from .base58 import BASE58_ALPHABET, BASE58_INDEX, base58_decode, base58_encode
 from ..schemas import NormalizedTransaction
+from ..collection import atomic_amount, utc_timestamp, decimals_or_none
 
 LAMPORTS_PER_SOL = 1_000_000_000
 DEFAULT_RPC_URL = "https://api.mainnet.solana.com"
@@ -18,7 +19,7 @@ MAX_HISTORY_LIMIT = 100
 PAGE_LIMIT = 100
 SYSTEM_PROGRAM = "11111111111111111111111111111111"
 TOKEN_PROGRAM = "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
-TOKEN_2022_PROGRAM = "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBZE4ut6F"
+TOKEN_2022_PROGRAM = "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb"
 
 
 def validate_pubkey(value: str) -> str:
@@ -40,8 +41,7 @@ def _amount(raw: object, decimals: int) -> str:
         raise ChainDataError("solana_invalid_provider_response")
     if type(decimals) is not int or not 0 <= decimals <= 38:
         raise ChainDataError("solana_invalid_provider_response")
-    amount = Decimal(str(raw)) / (Decimal(10) ** decimals)
-    return format(amount, "f")
+    return atomic_amount(raw, decimals)
 
 
 def _timestamp(value: object) -> datetime | None:
@@ -50,7 +50,7 @@ def _timestamp(value: object) -> datetime | None:
     if isinstance(value, bool) or not isinstance(value, int):
         raise ChainDataError("solana_invalid_provider_response")
     try:
-        return datetime.fromtimestamp(value, timezone.utc)
+        return utc_timestamp(value)
     except (ValueError, OSError, OverflowError):
         raise ChainDataError("solana_invalid_provider_response") from None
 
@@ -132,7 +132,7 @@ class SolanaAdapter(ChainAdapter):
         return {
             "chain": self.chain,
             "address": address,
-            "balance_native": format(Decimal(lamports) / Decimal(LAMPORTS_PER_SOL), "f"),
+            "balance_native": atomic_amount(lamports, 9),
             "source_api": "solana-json-rpc",
             "rpc_endpoint": "configured" if self.settings.solana_rpc_url else "public_mainnet_fallback",
         }
@@ -158,14 +158,31 @@ class SolanaAdapter(ChainAdapter):
         return rows[:limit]
 
     async def transactions(self, address: str, *, limit: int = DEFAULT_HISTORY_LIMIT, before: str | None = None) -> list[NormalizedTransaction]:
-        rows = await self._signatures(address, limit=min(limit, MAX_HISTORY_LIMIT), before=before)
+        if before is not None: before = self.normalize_transaction_id(before)
+        rows = await self._signatures(address, limit=limit, before=before)
+        self.collection_streams = {"signatures": {"status": "TRUNCATED" if len(rows) >= limit else "PROVIDER_LIMITED",
+            "reason": "signature_bound" if len(rows) >= limit else "provider_retention", "max_records": limit}}
         output = []
+        seen = set()
         for row in rows:
-            tx = await self._get_transaction(row["signature"])
+            if row["signature"] in seen: continue
+            seen.add(row["signature"])
+            try:
+                tx = await self._get_transaction(row["signature"])
+            except ChainDataError as exc:
+                self.collection_streams["signatures"].update(status="PARTIAL", reason=exc.category)
+                tx = None
             if tx is None:
+                if hasattr(self, "collection_streams"): self.collection_streams["signatures"].update(status="PARTIAL", reason="transaction_unavailable")
                 output.append(self._activity_record(row["signature"], row, None))
                 continue
-            output.extend(self.parse_transaction(tx, focus_address=address, signature=row["signature"]))
+            try:
+                output.extend(self.parse_transaction(tx, focus_address=address, signature=row["signature"]))
+            except (ChainDataError, ValueError, TypeError):
+                self.collection_streams["signatures"].update(status="PARTIAL", reason="malformed_response")
+                marker = self._activity_record(row["signature"], row, None)
+                marker.raw_payload["provider"] = tx
+                output.append(marker)
         return output
 
     async def monitoring_delta(self, address: str, previous_identity: str, *, limit: int = MAX_HISTORY_LIMIT) -> dict:
@@ -256,12 +273,12 @@ class SolanaAdapter(ChainAdapter):
     def _activity_record(self, signature, row, transaction):
         block_time = transaction.get("blockTime") if isinstance(transaction, dict) else row.get("blockTime")
         slot = transaction.get("slot") if isinstance(transaction, dict) else row.get("slot")
-        public = {"execution_status": "failed" if row.get("err") else "succeeded" if transaction and not transaction.get("_unsupported_version") else "unavailable"}
+        public = {"execution_status": "failed" if row.get("err") is not None else "succeeded" if transaction and not transaction.get("_unsupported_version") else "unavailable"}
         if isinstance(transaction, dict) and transaction.get("_unsupported_version"):
             public["transaction_version_status"] = "unsupported"
         return NormalizedTransaction(tx_hash=signature, chain=self.chain, timestamp=_timestamp(block_time),
             block_number=str(slot or ""), direction="unknown", source_api="solana-json-rpc",
-            raw_payload={"_public": public})
+            value_native="", fee="", raw_payload={"_public": {**public, "asset_type": "unsupported"}, "provider": transaction, "signature_record": row})
 
     def parse_transaction(self, transaction: dict, *, focus_address: str = "", signature: str | None = None) -> list[NormalizedTransaction]:
         if not isinstance(transaction, dict):
@@ -285,7 +302,11 @@ class SolanaAdapter(ChainAdapter):
             signature = validate_signature(signature)
         except ValueError:
             raise ChainDataError("solana_invalid_provider_response") from None
-        meta = transaction.get("meta") or {}
+        meta = transaction.get("meta")
+        if meta is None:
+            activity = self._activity_record(signature, {}, None)
+            activity.raw_payload["provider"] = transaction
+            return [activity]
         if not isinstance(meta, dict):
             raise ChainDataError("solana_invalid_provider_response")
         if meta.get("err") is not None:
@@ -352,9 +373,9 @@ class SolanaAdapter(ChainAdapter):
                 return None
             if type(decimals) is not int:
                 decimals = token_decimals.get(mint)
-            if type(decimals) is not int or not isinstance(raw, (int, str)):
+            if not isinstance(raw, (int, str)):
                 return None
-            amount = _amount(raw, decimals)
+            amount = _amount(raw, decimals) if type(decimals) is int else ""
             sender = owner_map["pre"].get((source_token, mint)) or owner_map["post"].get((source_token, mint))
             recipient = owner_map["post"].get((destination_token, mint)) or owner_map["pre"].get((destination_token, mint))
             if not isinstance(sender, str) or not isinstance(recipient, str):
@@ -374,9 +395,9 @@ class SolanaAdapter(ChainAdapter):
         if direction == "unknown" and focus:
             if source_token == focus: direction = "outgoing"
             elif destination_token == focus: direction = "incoming"
-        payload = {"_stable_event_key": event_key, "_public": {**public, "execution_status": "succeeded", "event_key": event_key}}
+        payload = {"provider": transaction, "_stable_event_key": event_key, "_public": {**public, "execution_status": "succeeded", "event_key": event_key}}
         return NormalizedTransaction(tx_hash=signature, chain=self.chain, from_address=sender or "", to_address=recipient or "",
             value_native=amount, token_symbol=symbol, timestamp=_timestamp(block_time), block_number=str(slot or ""),
-            fee=format(Decimal(transaction.get("meta", {}).get("fee", 0)) / Decimal(LAMPORTS_PER_SOL), "f"),
+            fee=atomic_amount(transaction.get("meta", {}).get("fee", 0), 9),
             direction=direction, source_api="solana-json-rpc", raw_payload=payload,
             asset_contract=mint)

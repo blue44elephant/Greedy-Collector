@@ -39,15 +39,15 @@ def test_evm_network_descriptors_are_safe_and_capable(chain, config):
 
 @pytest.mark.parametrize("chain,expected", [(chain, chain) for chain in NETWORKS])
 def test_evm_address_and_hash_require_explicit_network_hint(chain, expected):
-    assert resolve_identifier(ADDRESS)["chain"] == "ethereum"
+    assert resolve_identifier(ADDRESS)["kind"] == "ambiguous"
     assert resolve_identifier(ADDRESS, chain_hint=chain)["chain"] == expected
-    assert resolve_identifier(TX_HASH)["chain"] == "ethereum"
+    assert resolve_identifier(TX_HASH)["kind"] == "ambiguous"
     tx = resolve_identifier(TX_HASH, chain_hint=chain)
     assert tx["kind"] == "transaction" and tx["chain"] == expected
 
 def test_resolution_is_local_and_preserves_bare_bitcoin_hash(monkeypatch):
     monkeypatch.setattr("httpx.AsyncHTTPTransport.handle_async_request", lambda *a, **k: pytest.fail("resolution must not call a provider"))
-    assert resolve_identifier("A" * 64) == {"kind":"transaction", "chain":"bitcoin", "normalized":"a"*64, "lookup_type":"transaction"}
+    assert resolve_identifier("A" * 64)["kind"] == "ambiguous"
     assert resolve_identifier("unrecognized arbitrary text")["kind"] == "unknown"
 
 @pytest.mark.parametrize("chain,config", NETWORKS.items())
@@ -83,7 +83,7 @@ def test_chain_api_exposes_descriptors_and_default_resolution_only():
     with TestClient(main.app) as client:
         rows = client.get("/api/greedy-collector/chains").json()["chains"]
         assert {row["id"] for row in rows} >= set(NETWORKS) | {"bitcoin", "tron"}
-        assert client.post("/api/greedy-collector/resolve", json={"input":ADDRESS}).json()["chain"] == "ethereum"
+        assert client.post("/api/greedy-collector/resolve", json={"input":ADDRESS}).json()["kind"] == "ambiguous"
         assert client.post("/api/greedy-collector/resolve", json={"input":ADDRESS,"chain_hint":"base"}).json()["chain"] == "base"
         assert client.get("/api/greedy-collector/status").json()["backends"]["monitoring"]["chain_intervals"]["polygon"] == 10
 

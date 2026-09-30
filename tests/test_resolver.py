@@ -26,14 +26,14 @@ def client(monkeypatch):
 
 @pytest.mark.parametrize("value,chain,kind", [
     ("1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa", "bitcoin", "address"),
-    ("bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kygt080", "bitcoin", "address"),
+    ("bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4", "bitcoin", "address"),
     ("0x" + "A1" * 20, "ethereum", "address"),
     ("a" * 64, "bitcoin", "transaction"),
     ("0x" + "B" * 64, "ethereum", "transaction"),
     ("bc1" + "a" * 61, "bitcoin", "transaction"),
 ])
 def test_supported_identifier(client, value, chain, kind):
-    response = client.post("/api/greedy-collector/resolve", json={"input": value})
+    response = client.post("/api/greedy-collector/resolve", json={"input": value, "chain_hint": chain})
     assert response.status_code == 200
     assert response.json() == {"kind":kind, "chain":chain, "normalized":value.lower() if kind == "transaction" else value, "lookup_type":kind}
 
@@ -57,7 +57,7 @@ def test_resolver_reuses_adapter_validation(client, monkeypatch):
         return original(self, value)
     monkeypatch.setattr(EthereumAdapter, "validate_address", validate)
     value = "0x" + "1" * 40
-    assert client.post("/api/greedy-collector/resolve", json={"input":" \n\t" + value + "\r\n"}).json()["normalized"] == value
+    assert client.post("/api/greedy-collector/resolve", json={"input":" \n\t" + value + "\r\n", "chain_hint":"ethereum"}).json()["normalized"] == value
     assert seen == [value]
 
 

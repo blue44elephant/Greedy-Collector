@@ -21,7 +21,7 @@ function svgNode(tag, attrs = {}, label) {
 export function initGraph() {
   const host = byId("graph-workspace");
   const controls = panel("Graph", "This graph represents relationships currently stored by Greedy Collector. Hop depth does not imply complete blockchain coverage.");
-  controls.append(element("p", "Counterparties are not recursively fetched. Litecoin edges appear only when provider data returns one distinct input and one distinct output address; complex UTXO records remain available without inferred edges. Arrows do not imply ownership or wrongdoing.", "muted small"));
+  controls.append(element("p", "Counterparties are not recursively fetched. Bitcoin and Litecoin transaction connectivity is listed with its inputs and outputs; exact input-to-output amounts are not inferred. Arrows do not imply ownership or wrongdoing.", "muted small"));
   const output = panel("Stored relationships");
   const form = makeForm([...chainAddress("graph"), {name:"hops", label:"Hops", options:["1", "2", "3"]}], "Load graph", async data => {
     output.replaceChildren(element("h2", "Stored relationships"));
@@ -42,6 +42,14 @@ export function renderGraph(host, graph, chain, labels = null) {
   host.replaceChildren(element("h2", "Stored relationships"));
   host.append(element("p", `Requested hops: ${graph.requested_hops} · Available: ${graph.available_hops} · ${graph.nodes.length} returned entities · ${graph.edges.length} transaction records`, "muted small"));
   if (!graph.nodes.length && !graph.edges.length) { host.append(element("p", "No stored relationships are available for this address.", "empty")); return; }
+  if (graph.utxo_transactions?.length) {
+    const structure = element("details");
+    structure.append(element("summary", `UTXO transaction connectivity (${graph.utxo_transactions.length})`),
+      element("p", "Inputs and outputs belong to the same transaction. No exact input-to-output allocation or change ownership is inferred."));
+    structure.append(table(["Transaction", "Inputs", "Outputs", "Provider"], graph.utxo_transactions.map(tx =>
+      [shortValue(tx.tx_hash), tx.inputs.join(" / "), tx.outputs.join(" / "), tx.source_api])));
+    host.append(structure);
+  }
   const layout = layoutGraph(graph);
   const tools = element("div", undefined, "toolbar");
   const svg = svgNode("svg", {role:"group", "aria-label":"Stored transaction relationships", class:"graph-canvas", tabindex:"0"});

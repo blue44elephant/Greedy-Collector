@@ -25,7 +25,7 @@ from greedy_collector.attribution.domain import ClaimInput
 
 ETH='0x'+'aB'*20
 BTC='1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa'
-BECH='BC1QW508D6QEJXTDG4Y5R3ZARVARY0C5XW7KYGT080'
+BECH='BC1QW508D6QEJXTDG4Y5R3ZARVARY0C5XW7KV8F3T4'
 
 class TestAdapter(EvmAdapter):
     __test__=False
@@ -80,7 +80,7 @@ def test_duplicate_and_unknown_are_safe():
 @pytest.mark.parametrize('chain,address,expected',[('bitcoin',BTC,BTC),('bitcoin',BECH,BECH.lower()),('ethereum',ETH,ETH.lower())])
 def test_identity_normalization(chain,address,expected):
     assert cr.wallet_identity(chain,address)==(chain,expected)
-    assert resolve_identifier(address)['normalized']==address
+    assert resolve_identifier(address, chain_hint=chain)['normalized']==address
 
 @pytest.mark.parametrize('value,chain,kind',[(BTC,'bitcoin','address'),(ETH,'ethereum','address'),('A'*64,'bitcoin','transaction'),('0x'+'A'*64,'ethereum','transaction')])
 def test_explicit_hint(value,chain,kind):
@@ -91,7 +91,7 @@ def test_hint_unknown_mismatch_and_ambiguity(third):
     with pytest.raises(ChainError):resolve_identifier(ETH,'not_registered')
     assert resolve_identifier(ETH,'bitcoin')['kind']=='unknown'
     assert resolve_identifier('arbitrary text')['kind']=='unknown'
-    assert resolve_identifier(ETH)['chain']=='ethereum'
+    assert resolve_identifier(ETH)['kind']=='ambiguous'
     assert resolve_identifier(ETH,'test_chain')['chain']=='test_chain'
     assert LookupRequest.model_json_schema()['properties']['chain']['enum']==['bitcoin','ethereum','base','arbitrum','bsc','polygon','tron','solana','litecoin','monero','test_chain']
     assert resolve_identifier(ETH,'ethereum')['chain']=='ethereum'

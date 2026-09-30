@@ -15,7 +15,7 @@ from greedy_collector.discovery.registry import REGISTRY,Registry,SourceDescript
 
 ETH='0x'+'aB'*20
 BTC='1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa'
-BECH='bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kygt080'
+BECH='bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4'
 
 @pytest.fixture
 def svc(tmp_path,monkeypatch):
@@ -60,7 +60,9 @@ def test_subject_creation_and_reuse(svc,chain,address):
 
 def test_ethereum_case_equivalence_and_bitcoin_case_distinction(svc):
     assert subject(svc)['id']==svc.get_or_create_subject('blockchain_address','ethereum',ETH.lower())['id']
-    assert svc.get_or_create_subject('blockchain_address','bitcoin',BTC)['id']!=svc.get_or_create_subject('blockchain_address','bitcoin',BTC.replace('A','a',1))['id']
+    assert svc.get_or_create_subject('blockchain_address','bitcoin',BTC)['canonical_value']==BTC
+    with pytest.raises(DiscoveryError):
+        svc.get_or_create_subject('blockchain_address','bitcoin',BTC.replace('A','a',1))
 
 @pytest.mark.parametrize('chain,address',[('ethereum','0xwrong'),('bitcoin','invalid'),('any',ETH),('ethereum',ETH[:10]+'\u200b'+ETH[10:]),('ethereum',ETH+' secret')])
 def test_bad_subjects_are_local(svc,chain,address):

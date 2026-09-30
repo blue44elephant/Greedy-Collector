@@ -13,6 +13,7 @@ import httpx
 from .base import ChainAdapter, ChainDataError
 from .base58 import base58_decode
 from ..schemas import NormalizedTransaction
+from ..collection import atomic_amount, utc_timestamp, decimals_or_none
 
 
 LITOSHI = Decimal("100000000")
@@ -59,14 +60,14 @@ def _bech32_polymod(values: list[int]) -> int:
     return checksum
 
 
-def _decode_litecoin_segwit(value: str) -> str:
+def _decode_litecoin_segwit(value: str, hrp_name="ltc") -> str:
     if not value or len(value) > 90 or any(ord(char) < 33 or ord(char) > 126 for char in value):
         raise ValueError("Invalid Litecoin SegWit address")
     if value.lower() != value and value.upper() != value:
         raise ValueError("Invalid Litecoin SegWit address")
     normalized = value.lower()
     separator = normalized.rfind("1")
-    if separator < 1 or separator + 7 > len(normalized) or normalized[:separator] != "ltc":
+    if separator < 1 or separator + 7 > len(normalized) or normalized[:separator] != hrp_name:
         raise ValueError("Invalid Litecoin SegWit address")
     try:
         data = [BECH32_INDEX[char] for char in normalized[separator + 1:]]
@@ -115,7 +116,7 @@ def validate_litecoin_address(value: str) -> str:
 def _atomic_amount(value: object) -> str:
     if isinstance(value, bool) or not isinstance(value, int) or value < 0:
         raise ChainDataError("litecoin_invalid_provider_response")
-    return format(Decimal(value) / LITOSHI, "f")
+    return atomic_amount(value, 8)
 
 
 def _stat_value(stats: object, key: str) -> int:
@@ -239,7 +240,7 @@ class LitecoinAdapter(ChainAdapter):
         return {
             "chain": self.chain,
             "address": address,
-            "balance_native": format(Decimal(funded - spent) / LITOSHI, "f"),
+            "balance_native": atomic_amount(funded - spent, 8),
             "transaction_count": transaction_count,
             "source_api": "litecoinspace",
         }
@@ -252,6 +253,7 @@ class LitecoinAdapter(ChainAdapter):
         mempool_seen = set()
         cursor = None
         seen_cursors = set()
+        self.collection_streams = {"history": {"status": "COMPLETE_WITHIN_REQUESTED_BOUND", "reason": "short_or_empty_page"}}
         for page in range(MAX_HISTORY_PAGES):
             params = {"after_txid": cursor} if cursor else None
             rows = await self._request_json(path, params=params)
@@ -283,8 +285,10 @@ class LitecoinAdapter(ChainAdapter):
                     raise ChainDataError("litecoin_pagination_stalled")
                 seen_cursors.add(next_cursor.lower())
                 cursor = next_cursor
-            if len(page_confirmed) < PAGE_SIZE or len(confirmed_rows) >= MAX_CONFIRMED_RECORDS:
+            if len(confirmed_rows) >= MAX_CONFIRMED_RECORDS:
+                self.collection_streams["history"] = {"status": "TRUNCATED", "reason": "page_bound"}
                 break
+            if len(page_confirmed) < PAGE_SIZE: break
         # Mempool records come first so monitoring can retain a confirmed boundary.
         return mempool_rows + confirmed_rows
 
@@ -366,7 +370,7 @@ class LitecoinAdapter(ChainAdapter):
         if block_time is not None and (isinstance(block_time, bool) or not isinstance(block_time, int)):
             raise ChainDataError("litecoin_invalid_provider_response")
         try:
-            timestamp = datetime.fromtimestamp(block_time, timezone.utc) if block_time is not None else None
+            timestamp = utc_timestamp(block_time)
         except (ValueError, OSError, OverflowError):
             raise ChainDataError("litecoin_invalid_provider_response") from None
         height = status.get("block_height") if confirmed else None
@@ -395,5 +399,10 @@ class LitecoinAdapter(ChainAdapter):
             fee=fee,
             direction=direction,
             source_api=source_api,
-            raw_payload={**row, "_public": {"confirmed": confirmed, "participant_pair_available": single_pair}},
+            raw_payload={**row, "_wallet_view": self.address_key(focus_address), "_public": {
+                "confirmed": confirmed, "participant_pair_available": single_pair,
+                "raw_value": str(amount), "token_decimals": 8, "asset_type": "native",
+                "wallet_input_raw": str(sent), "wallet_output_raw": str(received),
+                "amount_basis": "wallet_inputs" if sent else "wallet_outputs" if focus_address else "transaction_outputs",
+                "utxo_allocation": "not_inferred"}},
         )

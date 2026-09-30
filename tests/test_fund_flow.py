@@ -141,7 +141,7 @@ def test_utxo_connectivity_without_value_allocation(db,chain):
     assert step['amount'] is None and step['raw_amount'] is None
     assert step['output_amount']=='0.0019' and step['input_count']==2
     assert result['utxo_transactions'][0]['sources']==sorted([a,b])
-    assert result['utxo_transactions'][0]['stored_event_keys']==[tx.event_key or ('tx' if chain=='litecoin' else db.scalar(select(Transaction.event_key)))]
+    assert result['utxo_transactions'][0]['stored_event_keys']==[db.scalar(select(Transaction.event_key))]
     assert result['paths'][0]['observed_path_capacity'] is None
     assert 'Exact input-to-output' in result['paths'][0]['explanation']
     assert all(m['observed_amount'] is None for m in result['analytics']['fan_in_out'])

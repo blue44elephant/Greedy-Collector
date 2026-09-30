@@ -65,7 +65,7 @@ def test_monitoring_detects_mempool_before_previous_tx(db_session: Session):
         address="1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa",
         label="Test Mempool",
         enabled=True,
-        last_seen_tx="c100_hash",  # Previous confirmed transaction
+        last_seen_tx="aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",  # Previous confirmed transaction
         last_seen_block="700000",
     )
     db_session.add(wallet)
@@ -98,32 +98,32 @@ def test_monitoring_detects_mempool_before_previous_tx(db_session: Session):
                 return [
                     # Confirmed transactions
                     {
-                        "txid": "c100_hash",
-                        "vin": [{"prevout": {"scriptpubkey_address": address}}],
+                        "txid": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                        "vin": [{"prevout": {"scriptpubkey_address": address, "value": 300000000}}],
                         "vout": [{"scriptpubkey_address": "1address1", "value": 200000000}],
                         "status": {"confirmed": True, "block_time": 1725940800},  # Sept 9 10:00 UTC
                     },
                     {
-                        "txid": "c99_hash",
-                        "vin": [{"prevout": {"scriptpubkey_address": address}}],
+                        "txid": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+                        "vin": [{"prevout": {"scriptpubkey_address": address, "value": 300000000}}],
                         "vout": [{"scriptpubkey_address": "1address2", "value": 150000000}],
                         "status": {"confirmed": True, "block_time": 1725937200},  # Sept 9 09:00 UTC
                     },
                     # Mempool transactions
                     {
-                        "txid": "m1_hash",
-                        "vin": [{"prevout": {"scriptpubkey_address": address}}],
+                        "txid": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+                        "vin": [{"prevout": {"scriptpubkey_address": address, "value": 300000000}}],
                         "vout": [{"scriptpubkey_address": "1BvBMSEYstWetqTFn5Au4m4GFg7xJaNVN2", "value": 50000000}],
                         "status": {"confirmed": False},  # No block_time
                     },
                     {
-                        "txid": "m2_hash",
-                        "vin": [{"prevout": {"scriptpubkey_address": address}}],
+                        "txid": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+                        "vin": [{"prevout": {"scriptpubkey_address": address, "value": 300000000}}],
                         "vout": [{"scriptpubkey_address": "1dice8EMCQAqQxoshqwLCRjY8JCEyToMoF", "value": 100000000}],
                         "status": {"confirmed": False},
                     },
                 ]
-            return {}
+            return {"chain_stats": {"funded_txo_sum": 0, "spent_txo_sum": 0, "tx_count": 0}, "mempool_stats": {"funded_txo_sum": 0, "spent_txo_sum": 0, "tx_count": 0}}
         
         mock_get_method.side_effect = async_mock_get
         
@@ -156,22 +156,22 @@ def test_monitoring_detects_mempool_before_previous_tx(db_session: Session):
         
         # Should have alerts for M1 and M2 mempool transactions
         alert_txs = {alert.tx_hash for alert in alerts}
-        assert "m1_hash" in alert_txs, f"Mempool transaction M1 should be detected as new. Got alerts for: {alert_txs}"
-        assert "m2_hash" in alert_txs, f"Mempool transaction M2 should be detected as new. Got alerts for: {alert_txs}"
+        assert "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc" in alert_txs, f"Mempool transaction M1 should be detected as new. Got alerts for: {alert_txs}"
+        assert "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd" in alert_txs, f"Mempool transaction M2 should be detected as new. Got alerts for: {alert_txs}"
         
         # C100 should NOT generate an alert (it's the previous_tx break point)
-        assert "c100_hash" not in alert_txs, f"C100 should not alert (it's the break point)"
+        assert "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" not in alert_txs, f"C100 should not alert (it's the break point)"
         
         # Verify last_seen_tx updated to newest (M1, first in list after fix)
         # After fix, M1 should be transactions[0]
-        assert wallet.last_seen_tx == "m1_hash", f"last_seen_tx should be updated to newest (mempool tx), got {wallet.last_seen_tx}"
+        assert wallet.last_seen_tx == "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc", f"last_seen_tx should be updated to newest (mempool tx), got {wallet.last_seen_tx}"
 
 
 def test_monitoring_mempool_only_no_new_confirmed(db_session: Session):
     """
     Mempool-only scenario: previous mempool tx + multiple new mempool txs.
     
-    - last_seen_tx = "m1_hash" (mempool boundary)
+    - last_seen_tx = "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc" (mempool boundary)
     - Returns: [M1, M2, M3] (all mempool)
     - Expected: Only new mempool txs after boundary detected (m2, m3)
     """
@@ -180,7 +180,7 @@ def test_monitoring_mempool_only_no_new_confirmed(db_session: Session):
         address="1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa",
         label="Test Mempool Only",
         enabled=True,
-        last_seen_tx="m1_hash",  # Boundary is in mempool
+        last_seen_tx="cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",  # Boundary is in mempool
         last_seen_block="",  # Mempool has no block
     )
     db_session.add(wallet)
@@ -190,7 +190,7 @@ def test_monitoring_mempool_only_no_new_confirmed(db_session: Session):
     # Only unconfirmed transactions - reversed to have newest first
     mock_txs = [
         {
-            "tx_hash": f"m{i}_hash",
+            "tx_hash": format(i + 11, "x") * 64,
             "chain": "bitcoin",
             "from_address": "1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa",
             "to_address": f"1address{i}",
@@ -250,9 +250,9 @@ def test_monitoring_mempool_only_no_new_confirmed(db_session: Session):
         
         # Only new mempool txs after boundary (m2, m3)
         alert_txs = {alert.tx_hash for alert in alerts}
-        assert "m1_hash" not in alert_txs  # m1 is the boundary
-        assert "m2_hash" in alert_txs
-        assert "m3_hash" in alert_txs
+        assert "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc" not in alert_txs  # m1 is the boundary
+        assert "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd" in alert_txs
+        assert "e" * 64 in alert_txs
         assert len(alerts) == 2
 
 

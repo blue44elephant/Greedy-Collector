@@ -4,6 +4,7 @@ import re
 
 from .base import ChainAdapter, ChainDataError
 from ..schemas import NormalizedTransaction
+from ..collection import atomic_amount, atomic_integer
 
 
 SATOSHIS = Decimal("100000000")
@@ -32,6 +33,20 @@ class BitcoinAdapter(ChainAdapter):
         ("blockstream", "https://blockstream.info/api"),
         ("mempool_space", "https://mempool.space/api"),
     ]
+
+    def validate_address(self, address):
+        from .litecoin import _decode_litecoin_segwit, _sha256d
+        from .base58 import base58_decode
+        candidate = address.strip()
+        try:
+            if candidate.lower().startswith("bc1"):
+                return _decode_litecoin_segwit(candidate, "bc")
+            decoded = base58_decode(candidate)
+            if len(decoded) != 25 or decoded[0] not in (0, 5) or decoded[-4:] != _sha256d(decoded[:-4])[:4]:
+                raise ValueError()
+        except ValueError:
+            raise ValueError("Invalid Bitcoin mainnet address") from None
+        return candidate
 
     async def _fetch(self, path: str):
         """Try all providers in sequence."""
@@ -65,104 +80,53 @@ class BitcoinAdapter(ChainAdapter):
         
         Returns all rows (mempool + confirmed), sorted newest-first.
         """
-        all_rows = []
-        all_confirmed = []
-        last_cursor = None
-        previous_cursor = None
-        page_num = 0
-        confirmed_count = 0
-        
-        while True:
-            try:
-                if page_num == 0:
-                    # Initial request includes mempool + confirmed
-                    rows = await self._fetch_from_provider(
-                        base_url, f"/address/{address}/txs"
-                    )
-                else:
-                    # Confirmed pagination - must have a cursor
-                    if not last_cursor:
-                        break
-                    rows = await self._fetch_from_provider(
-                        base_url, f"/address/{address}/txs/chain/{last_cursor}"
-                    )
-            except ChainDataError as exc:
-                raise ChainDataError(
-                    f"Bitcoin {provider_name} pagination failed at page {page_num}: {exc}"
-                ) from exc
-            
-            if not rows:
-                # Empty response = end of history
+        confirmed, mempool = {}, {}
+        cursor, cursors = None, set()
+        self.collection_streams = {"history": {"status": "COMPLETE_WITHIN_REQUESTED_BOUND", "reason": "short_or_empty_page"}}
+        for page in range(20):
+            path = f"/address/{address}/txs" + (f"/chain/{cursor}" if cursor else "")
+            rows = await self._fetch_from_provider(base_url, path)
+            if not isinstance(rows, list) or len(rows) > (75 if page == 0 else 25):
+                raise ChainDataError("bitcoin_invalid_provider_response")
+            confirmed_page = []
+            for row in rows:
+                if not isinstance(row, dict) or not self.identify_transaction(str(row.get("txid", ""))) or not isinstance(row.get("status"), dict):
+                    raise ChainDataError("bitcoin_invalid_provider_response")
+                txid, status = row["txid"].lower(), row["status"]
+                is_confirmed = status.get("confirmed") is True or (status.get("confirmed") is None and status.get("block_height") is not None)
+                if is_confirmed:
+                    confirmed_page.append(row)
+                    if len(confirmed) < MAX_CONFIRMED_RECORDS: confirmed[txid] = row
+                    mempool.pop(txid, None)
+                elif page == 0 and txid not in confirmed and len(mempool) < 50:
+                    mempool[txid] = row
+            if confirmed_page:
+                following = confirmed_page[-1]["txid"].lower()
+                if following in cursors: raise ChainDataError("Bitcoin cursor stagnation detected")
+                cursors.add(following)
+                cursor = following
+            if len(confirmed_page) < CONFIRMED_PER_PAGE: break
+            if len(confirmed) >= MAX_CONFIRMED_RECORDS:
+                self.collection_streams["history"] = {"status": "TRUNCATED", "reason": "record_bound"}
                 break
-            
-            page_num += 1
-            
-            if page_num == 1:
-                # Initial page: separate mempool from confirmed
-                for row in rows:
-                    status = row.get("status", {})
-                    # Use status.confirmed field if available, else check block_height
-                    is_confirmed = status.get("confirmed", False) or status.get("block_height") is not None
-                    if is_confirmed:
-                        all_confirmed.append(row)
-                        confirmed_count += 1
-                    else:
-                        all_rows.append(row)  # mempool
-                
-                # For pagination, we need the last confirmed txid
-                if all_confirmed:
-                    last_cursor = all_confirmed[-1]["txid"]
-                else:
-                    # No confirmed transactions, can't paginate
-                    break
-            else:
-                # Later pages: all are confirmed
-                for row in rows:
-                    all_confirmed.append(row)
-                    confirmed_count += 1
-                
-                # Update cursor for next iteration
-                if rows:
-                    previous_cursor = last_cursor
-                    last_cursor = rows[-1]["txid"]
-                    
-                    # Protect against cursor stagnation
-                    if previous_cursor == last_cursor:
-                        raise ChainDataError(
-                            f"Bitcoin {provider_name} cursor stagnation detected: "
-                            f"page {page_num} ended with same cursor as previous page, no progress"
-                        )
-            
-            # Check stop conditions
-            if len(rows) < CONFIRMED_PER_PAGE:
-                # Short page indicates end of history
-                break
-            
-            if confirmed_count >= MAX_CONFIRMED_RECORDS:
-                # Reached safety cap
-                break
-        
-        # Combine: mempool + confirmed (both already newest-first from provider)
-        result = all_rows + all_confirmed
-        return result
+        else:
+            self.collection_streams["history"] = {"status": "TRUNCATED", "reason": "page_bound"}
+        return list(mempool.values()) + list(confirmed.values())
 
     async def lookup_address(self, address: str) -> dict:
         address = self.validate_address(address)
         payload, source = await self._fetch(f"/address/{address}")
-        chain = payload.get("chain_stats", {})
-        mempool = payload.get("mempool_stats", {})
-        funded = int(chain.get("funded_txo_sum", 0)) + int(
-            mempool.get("funded_txo_sum", 0)
-        )
-        spent = int(chain.get("spent_txo_sum", 0)) + int(
-            mempool.get("spent_txo_sum", 0)
-        )
+        from .litecoin import _stat_value
+        if not isinstance(payload, dict): raise ChainDataError("bitcoin_invalid_provider_response")
+        chain = payload.get("chain_stats")
+        mempool = payload.get("mempool_stats")
+        funded = _stat_value(chain, "funded_txo_sum") + _stat_value(mempool, "funded_txo_sum")
+        spent = _stat_value(chain, "spent_txo_sum") + _stat_value(mempool, "spent_txo_sum")
         return {
             "chain": self.chain,
             "address": address,
-            "balance_native": str(Decimal(funded - spent) / SATOSHIS),
-            "transaction_count": int(chain.get("tx_count", 0))
-            + int(mempool.get("tx_count", 0)),
+            "balance_native": atomic_amount(funded - spent, 8),
+            "transaction_count": _stat_value(chain, "tx_count") + _stat_value(mempool, "tx_count"),
             "source_api": source,
             "raw": payload,
         }
@@ -242,49 +206,18 @@ class BitcoinAdapter(ChainAdapter):
     def _normalize(
         self, row: dict, focus_address: str, source_api: str
     ) -> NormalizedTransaction:
-        inputs = row.get("vin", [])
-        outputs = row.get("vout", [])
-        from_addresses = [
-            item.get("prevout", {}).get("scriptpubkey_address", "")
-            for item in inputs
-            if item.get("prevout")
-        ]
-        to_addresses = [
-            item.get("scriptpubkey_address", "") for item in outputs
-        ]
-        sent_by_focus = focus_address in from_addresses if focus_address else False
-        received = sum(
-            int(item.get("value", 0))
-            for item in outputs
-            if not focus_address or item.get("scriptpubkey_address") == focus_address
-        )
-        sent = sum(
-            int(item.get("prevout", {}).get("value", 0))
-            for item in inputs
-            if item.get("prevout")
-            and (not focus_address or item["prevout"].get("scriptpubkey_address") == focus_address)
-        )
-        value = sent if sent_by_focus else received
-        input_value = sum(
-            int(item.get("prevout", {}).get("value", 0))
-            for item in inputs
-            if item.get("prevout")
-        )
-        output_value = sum(int(item.get("value", 0)) for item in outputs)
-        block_time = row.get("status", {}).get("block_time")
-        return NormalizedTransaction(
-            tx_hash=row.get("txid", ""),
-            chain=self.chain,
-            from_address=from_addresses[0] if from_addresses else "",
-            to_address=to_addresses[0] if to_addresses else "",
-            value_native=str(Decimal(value) / SATOSHIS),
-            token_symbol="BTC",
-            timestamp=datetime.fromtimestamp(block_time, timezone.utc)
-            if block_time
-            else None,
-            block_number=str(row.get("status", {}).get("block_height", "")),
-            fee=str(Decimal(max(input_value - output_value, 0)) / SATOSHIS),
-            direction="outgoing" if sent_by_focus else "incoming",
-            source_api=source_api,
-            raw_payload=row,
-        )
+        # Both Esplora chains share conservative wallet-relative structural facts.
+        from .litecoin import LitecoinAdapter
+        normalized_row = dict(row)
+        status = dict(row.get("status", {}))
+        status.setdefault("confirmed", status.get("block_height") is not None)
+        normalized_row["status"] = status
+        if "fee" not in row:
+            inputs = row.get("vin", [])
+            if inputs and all(isinstance(i, dict) and isinstance(i.get("prevout"), dict) for i in inputs):
+                total_in = sum(atomic_integer(i["prevout"].get("value")) for i in inputs)
+                total_out = sum(atomic_integer(i.get("value")) for i in row.get("vout", []))
+                normalized_row["fee"] = max(0, total_in - total_out)
+        result = LitecoinAdapter._normalize(self, normalized_row, focus_address, source_api)
+        result.token_symbol = "BTC"
+        return result

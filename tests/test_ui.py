@@ -121,7 +121,7 @@ def test_ui_lookup_response_contract(ui_client, monkeypatch, chain):
                "value": "100000000000000000000", "timeStamp": "1780000000", "blockNumber": "25000000"}
         transactions = [adapter._normalize(row, address), adapter._normalize_token({
             **row, "hash": "0x" + "b" * 64, "value": "1234567",
-            "tokenSymbol": "TEST", "tokenDecimal": "6",
+            "tokenSymbol": "TEST", "tokenDecimal": "6", "contractAddress": "0x" + "3" * 40,
         }, address)]
         provider = "etherscan"
     adapter.lookup_address = AsyncMock(return_value={

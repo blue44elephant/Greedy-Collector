@@ -74,7 +74,7 @@ def test_litecoin_address_forms_and_resolver_precedence():
     ambiguous = resolve_identifier(LTC_P2SH_AMBIGUOUS)
     assert ambiguous["kind"] == "ambiguous"
     assert {item["chain"] for item in ambiguous["possibilities"]} == {"bitcoin", "litecoin"}
-    assert resolve_identifier("a" * 64)["chain"] == "bitcoin"
+    assert resolve_identifier("a" * 64)["kind"] == "ambiguous"
     assert resolve_identifier("a" * 64, chain_hint="litecoin")["chain"] == "litecoin"
 
 

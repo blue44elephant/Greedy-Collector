@@ -111,23 +111,16 @@ Solana is a read-only account-family integration. Set `SOLANA_RPC_URL` to a priv
 
 ### Wallet
 
-Unified search automatically resolves supported blockchain identifiers:
-Bitcoin addresses (forms accepted by the existing adapter), Ethereum-compatible 40-hex `0x`
-addresses on Ethereum, Base, Arbitrum One, BNB Smart Chain and Polygon, and TRON Base58Check
-addresses, and Solana 32-byte base58 addresses. Solana 64-byte base58 transaction signatures also resolve locally after existing chain formats. Bare 64-hex transaction IDs resolve to Bitcoin. `0x` + 64-hex hashes default to
-Ethereum. Because EVM networks share address and hash syntax, choose the optional Network
-hint for Base, Arbitrum, BNB Smart Chain or Polygon. TRON hashes need an explicit TRON
-hint. Solana account and signature checks make no provider call during resolution. Paste a supported identifier and press **Search** or Enter.
-The local `POST /api/greedy-collector/resolve` endpoint classifies syntax without provider
-requests. The chain selector is optional; Ethereum is the default for shared EVM syntax.
-Unknown values produce a supported-types message and no lookup request. Litecoin transparent
-addresses and transaction IDs are supported. Bare 64-hex transaction IDs keep their existing
-Bitcoin precedence; use an explicit Litecoin network hint for Litecoin transaction IDs.
-Bitcoin and Litecoin prefix-5 script addresses overlap, and uppercase `LTC1` text can overlap
-a supported Base58 syntax, so select a network hint when the resolver reports ambiguity. Monero
-mainnet addresses resolve to an observation-only view and do not dispatch provider lookup.
-ENS remains Ethereum-only, and GraphSense remains Bitcoin/Ethereum-only. Support can be extended
-through chain descriptors and adapters; other networks and naming systems are not implemented.
+Unified search automatically resolves supported blockchain identifiers locally.
+Bitcoin/Litecoin transparent addresses, TRON addresses, Solana accounts/signatures,
+EVM addresses/hashes and Monero observation addresses are supported. Shared EVM syntax,
+bare 64-hex BTC/LTC/TRON transaction IDs, and overlapping address forms require a
+**Network hint**. No provider is queried to guess a network. Unknown identifiers make
+no provider request. Monero remains observation-only. ENS remains Ethereum-only.
+
+See [Blockchain collection and normalization](docs/BLOCKCHAIN_COLLECTION_NORMALIZATION.md)
+for the capability matrix, exact amounts, bounded history, partial-stream diagnostics,
+conservative UTXO connectivity and unsupported capabilities.
 
 Addresses dispatch to the existing `/lookup/address` API; transaction identifiers use
 `/lookup/tx`. Solana transaction results retain each parsed transfer event from a signature. Transaction results show only returned normalized fields and allow explicit
@@ -212,14 +205,10 @@ or database is required.
 
 - No supported chain guarantees lifetime-complete transaction history.
 - Repeated lookup inserts previously unseen transaction identities, updates the address,
-  and adds a risk result. Existing transaction rows are not updated, so stored confirmation
-  state/direction can differ from fresh lookup data. Direction reflects the lookup that
-  first inserted the row. The interface labels stored views; address queries may be
-  case-sensitive, so use the original address spelling when inspecting stored state.
-- Bitcoin normalization retains representative input/output addresses. Stored queries and
-  graph edges are simplified, not a complete Bitcoin input/output model.
-- SQLite graph traversal groups rows by transaction hash and may collapse multiple transfers
-  sharing that hash. Deeper graphs require additional explicit wallet lookups.
+  and adds a risk result. Re-ingestion refreshes observations in place using stable
+  event identity; direction remains relative to the requesting wallet.
+- Bitcoin/Litecoin retain structural input/output connectivity without invented allocation.
+- SQLite graph preserves event identity. Deeper coverage requires explicit wallet lookups.
 - Provider transaction counts and returned-record counts can have different meanings.
 - Risk scores are deterministic indicators, not proof of wrongdoing or ownership.
 - External source availability and rate limits can cause failures. Errors never trigger

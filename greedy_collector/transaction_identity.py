@@ -63,7 +63,9 @@ def build_event_key(value: Any) -> str:
     if isinstance(stable_key, str) and _STABLE_EVENT_KEY.fullmatch(stable_key):
         return stable_key
 
-    if chain == "bitcoin":
+    if chain in ("bitcoin", "litecoin"):
+        if payload.get("_wallet_view") is not None:
+            return "activity:" + _digest([chain, payload["_wallet_view"]])
         # Bitcoin rows are wallet-relative normalized activities. This preserves
         # the former tuple dedupe semantics while allowing multiple outputs/views.
         return legacy_event_key(value, prefix="activity")
@@ -85,11 +87,10 @@ def build_event_key(value: Any) -> str:
     if contract is not None or source in {"etherscan_token", "trongrid_trc20"}:
         # Without a protocol position, distinguish available contract metadata,
         # but do not invent ordering for otherwise identical provider events.
-        material = [
-            _get(value, key) for key in (
-                "chain", "tx_hash", "from_address", "to_address", "value_native", "token_symbol"
-            )
-        ] + [contract]
+        public = payload.get("_public", {})
+        raw_amount = public.get("raw_value") if isinstance(public, dict) else None
+        material = [_get(value, key) for key in ("chain", "tx_hash", "from_address", "to_address")]
+        material += [raw_amount if raw_amount is not None else _get(value, "value_native"), contract]
         return "legacy:" + _digest(material)
     return "tx"
 
@@ -133,7 +134,26 @@ def persist_normalized_event(db, tx) -> tuple[Any, bool]:
         Transaction.event_key == event_key,
     ))
     if row is not None:
+        # Refresh observation/finality in place; preserve primary key and Case references.
+        old = row.raw_payload if isinstance(row.raw_payload, dict) else {}
+        current = fields.get("raw_payload", {})
+        if current:
+            fields["raw_payload"] = {**old, **current}
+        for key, value in fields.items():
+            if key not in ("event_key", "chain", "tx_hash") and (value not in (None, "") or key in ("timestamp", "block_number", "fee", "value_native")):
+                setattr(row, key, value)
         return row, False
+
+    if tx.chain in ("bitcoin", "litecoin") and "_wallet_view" in tx.raw_payload:
+        older = db.scalars(select(Transaction).where(Transaction.chain == tx.chain,
+            Transaction.tx_hash == tx.tx_hash, Transaction.value_native == tx.value_native,
+            Transaction.direction == tx.direction)).all()
+        older = [r for r in older if "_wallet_view" not in (r.raw_payload or {})]
+        if len(older) == 1:
+            row = older[0]
+            for key, value in fields.items(): setattr(row, key, value)
+            db.flush([row])
+            return row, False
 
     # If a legacy provider record is re-ingested with richer identity metadata,
     # upgrade its row in place, preserving its primary key and references.
@@ -160,4 +180,5 @@ def persist_normalized_event(db, tx) -> tuple[Any, bool]:
 
     row = Transaction(**fields)
     db.add(row)
+    db.flush([row])
     return row, True

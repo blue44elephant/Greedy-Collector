@@ -14,6 +14,7 @@ from .database import SessionLocal
 from .models import MonitoringRun, WalletAlert, WatchlistWallet
 from .schemas import LookupRequest
 from .services import GreedyCollectorService
+from .collection import transfer_eligible
 
 logger = logging.getLogger("GreedyCollector.Monitoring")
 settings = get_settings()
@@ -69,6 +70,15 @@ async def _monitor_chain(chain: str, wallet_id: str | None = None) -> dict:
                     )
                 transactions = result["transactions"]
                 
+                # Incomplete provider streams cannot safely advance an event boundary.
+                if result.get("collection", {}).get("partial"):
+                    run.status = "continuity_loss"
+                    run.error = "Partial provider history; monitoring boundary retained"
+                    run.completed_at = datetime.now(timezone.utc)
+                    db.commit()
+                    processed += 1
+                    continue
+
                 # FIRST-RUN DETECTION AND BASELINE ESTABLISHMENT
                 # On first observation (last_seen_tx is None), establish stable baseline silently
                 if previous_tx is None:
@@ -134,6 +144,7 @@ async def _monitor_chain(chain: str, wallet_id: str | None = None) -> dict:
 
                 triggers = []
                 for tx in new_rows:
+                    if not transfer_eligible(tx): continue
                     if tx.get("direction") not in ("incoming", "outgoing") or not tx.get("from_address") or not tx.get("to_address"):
                         continue
                     triggers.append(
