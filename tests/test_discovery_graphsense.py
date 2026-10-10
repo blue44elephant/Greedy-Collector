@@ -2,11 +2,13 @@
 import json
 from datetime import datetime,timedelta,timezone
 from types import SimpleNamespace
+from unittest.mock import patch
 import httpx
 import pytest
 from sqlalchemy import select,func
 from greedy_collector.discovery import github,graphsense as gs
-from greedy_collector.discovery.domain import canonical_subject
+from greedy_collector.discovery.domain import canonical_subject,Conflict
+from greedy_collector.discovery import runtime as runtime_module
 from greedy_collector.models import DiscoverySubject,DiscoveryRunSource,DiscoveryObservation,Base
 from tests.test_discovery_execution import h
 from tests.test_discovery_local_manual import live,run,BTC,BECH,counts
@@ -157,8 +159,64 @@ def test_aggregate_content_bound(remote):
     row,items=execute(remote)
     assert row['status']=='partial' and len(items)==4 and len(remote[3].calls)==6
 
+def test_cache_second_run_minute_rollover_conflict(remote,monkeypatch):
+    """Reproduce the second-run 409 without sleeps or shared fixture state."""
+    c,h,runtime,_=remote
+    instant=datetime.now(timezone.utc).replace(second=59,microsecond=999999)
+    class Clock(datetime):
+        @classmethod
+        def now(cls,tz=None):
+            return instant if tz else instant.replace(tzinfo=None)
+    monkeypatch.setattr(runtime_module,'datetime',Clock)
+    remote[3].files=[]
+    first,_=execute(remote)
+    assert first['status']=='completed'
+    assert all(task.done() for task in runtime._tasks.values())
+    data={'subject':{'chain':'ethereum','address':ETH},
+          'selections':[{'transform_id':gs.TRANSFORM_ID}],'refresh':False}
+    planned=ok(c.post(PREFIX+'/plan',json=data))
+    reasons=[]
+    original=runtime.create_and_execute_run
+    async def capture(*args,**kwargs):
+        try:return await original(*args,**kwargs)
+        except Conflict as exc:
+            reasons.append(str(exc))
+            raise
+    monkeypatch.setattr(runtime,'create_and_execute_run',capture)
+    instant+=timedelta(microseconds=1)
+    response=c.post(PREFIX+'/runs',json={**data,'expected_plan_fingerprint':planned['fingerprint']})
+    assert response.status_code==409
+    assert reasons==['Plan changed or expired; plan again']
+    with h.sessions() as db:
+        from greedy_collector.models import DiscoveryRun
+        assert db.scalar(select(func.count()).select_from(DiscoveryRun))==1
+    # The same intent succeeds with a fresh plan; the empty cache is still valid.
+    second,_=execute(remote)
+    assert second['sources'][0]['status']=='cache_hit'
+
+
+@pytest.fixture
+def stable_plan_clock(remote,monkeypatch):
+    """Cache/history assertions must not depend on a wall-clock minute boundary.
+
+    Freeze only planning; retrieval, cache TTLs and executor deadlines retain
+    their real clocks. The separate rollover test exercises plan expiration.
+    """
+    instant=datetime.now(timezone.utc)
+    class Clock(datetime):
+        @classmethod
+        def now(cls,tz=None):
+            return instant if tz else instant.replace(tzinfo=None)
+    runtime=remote[2]
+    original=runtime.plan
+    def plan(*args,**kwargs):
+        with patch.object(runtime_module,'datetime',Clock):
+            return original(*args,**kwargs)
+    monkeypatch.setattr(runtime,'plan',plan)
+
+
 @pytest.mark.parametrize('empty',[False,True])
-def test_cache_refresh_immutable_material_and_history(remote,empty):
+def test_cache_refresh_immutable_material_and_history(remote,empty,stable_plan_clock):
     c,h,_,state=remote
     if empty:state.files=[]
     first,a=execute(remote);second,b=execute(remote)

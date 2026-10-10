@@ -145,3 +145,39 @@ there is no clean final full-suite result. Both authorized full runs are exhaust
 Continuation should investigate only that intermittent Discovery conflict and establish
 a clean full-suite result within a newly authorized verification budget. Do not repeat
 frontend/browser checks unless subsequent changes require them. No commit was made.
+
+
+## BC-1 narrow verification continuation (2026-10-06)
+
+The original failing case passed in five separate isolated invocations. A focused
+execution/GitHub/GraphSense ordering combination passed 217 tests before the fix;
+no predecessor-dependent leak was reproduced. The harness uses a unique pytest
+`tmp_path` SQLite database, context-managed sessions, runtime shutdown and engine
+disposal. Dependency overrides and environment monkeypatches are restored.
+
+A deterministic second-run reproduction advances the planning clock by one
+microsecond across a minute boundary after `/discovery/plan` and before
+`/discovery/runs`. It captures the exact internal `Conflict` reason:
+`Plan changed or expired; plan again`. The first run is terminal, all executor tasks
+are done, no second run is persisted, and a fresh plan succeeds using the same empty
+cache. This proves a wall-clock-dependent failure path in the original test helper.
+The historical full-suite response had only a generic conflict message, so its exact
+internal branch cannot be established retrospectively from that response alone.
+
+The cache/immutable-history test now freezes only `runtime.plan`'s clock through a
+function-scoped monkeypatch. Retrieval/cache/deadline clocks remain real. Production
+runtime, conflict guards, provider code, cache behavior and immutable history are
+unchanged. The explicit expiration regression retains the intentional 409 behavior.
+No sleeps, retries or relaxed assertions were added. Discovery runtime predates BC-1
+and was not altered by it; the reproduced timing dependency is unrelated to collection
+normalization.
+
+Focused reproduction: 1 passed. Focused cache/history/expiration subset: 5 passed,
+69 deselected. Post-fix execution/GitHub/GraphSense combination: 218 passed.
+The one newly authorized full-suite invocation completed successfully:
+`1800 passed, 194 warnings in 812.62s (0:13:32)`; no failures or skips.
+This supersedes the earlier incomplete verification checkpoint.
+Completion verdict: `BLOCKCHAIN_COLLECTION_NORMALIZATION_100_PERCENT` (repository
+verification within BC-1's documented support boundaries, not unlimited coverage).
+Frontend 71/71 and BC-1 browser smoke remain previously verified and untouched.
+No user database operation, migration or commit was performed.
