@@ -26,7 +26,7 @@ def test_clean_ed9a_parity_no_seeds(tmp_path,monkeypatch):
                 if table=='discovery_results':expected['checks']=[(name,sql.replace(", 'publicly_labeled_as'",'')) for name,sql in expected['checks']]
                 assert signature(engine,table)==expected,table
         assert triggers(engine)==triggers(orm) and all(not rows for rows in snapshot(engine).values())
-        assert ScriptDirectory.from_config(cfg).get_heads()==['20261011_01_authoritative_sanctions_registry']
+        assert ScriptDirectory.from_config(cfg).get_heads()==['20261012_01_risk_labels_v3']
     finally:engine.dispose();orm.dispose()
 
 def test_populated_upgrade_preserves_every_record_trigger_and_prior_schema(tmp_path,monkeypatch):

@@ -108,6 +108,10 @@ class ManualLabelCreate(BaseModel):
         return self
 
 
+class LabelStateUpdate(BaseModel):
+    active: bool
+
+
 class KycQuery(BaseModel):
     name: str = Field(min_length=2, max_length=255)
     aliases: list[str] = Field(default_factory=list)

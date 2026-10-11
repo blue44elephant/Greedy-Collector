@@ -66,7 +66,11 @@ export function initLabels() {
       openGraph(resolved.chain,resolved.normalized);
     }),addToCaseButton("label",row.chain,row.id,{chain:row.chain,address:row.address}));
     controls.append(evidenceHandoffButton('label',row.id));
-    detail.append(metadata,controls,id,element("p","Labels influence subsequent risk evaluations according to type. Saved risk findings retain their original evidence until a fresh lookup.","muted small"));
+    controls.append(button(row.active===false?"Restore label":"Archive label",async()=>{
+      await labelRequest(`/labels/${encodeURIComponent(row.id)}/state`,{method:"PATCH",body:{active:row.active===false}});
+      await refresh();
+    }));
+    detail.append(element("p",row.active===false?`Archived ${dateText(row.archived_at)}`:"Active label","badge"),metadata,controls,id,element("p","Labels influence subsequent risk evaluations according to type. Saved risk findings retain their original evidence until a fresh lookup.","muted small"));
   }
   function renderList() {
     const {chain,type,search}=filterForm.elements;const query=search.value.trim().toLowerCase();

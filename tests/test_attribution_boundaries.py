@@ -49,5 +49,7 @@ def test_lookup_and_risk_remain_independent(ui_client,monkeypatch):
         assert db.scalar(select(func.count()).select_from(Address))==1
     after=client.post(PREFIX+'/lookup/address',json={'chain':'bitcoin','address':BTC})
     assert after.status_code==200
-    assert after.json()['risk']==before.json()['risk']
+    before_risk,after_risk=before.json()['risk'],after.json()['risk']
+    assert before_risk['calculated_at'] != after_risk['calculated_at']
+    assert {key:value for key,value in before_risk.items() if key!='calculated_at'}=={key:value for key,value in after_risk.items() if key!='calculated_at'}
     assert counts(engine)[1]==1

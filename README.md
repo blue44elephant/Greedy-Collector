@@ -251,43 +251,22 @@ Download reports as **Markdown, HTML, JSON, or PDF** using the existing report b
 
 ## Risk interpretation and calibration
 
-Wallet risk is a deterministic investigative indicator, not a probability, proof of wrongdoing, or identification of real-world ownership. General activity is not inherently suspicious. Transaction count, fan-in/out, repeated counterparties, round/large asset amounts, short returned history, and Exchange/Bridge interactions now remain visible as **zero-point context**.
+Greedy Collector uses deterministic-v3 for fresh wallet assessments. The GC overall score is an analytical prioritization/compliance-risk score, not a probability, proof of wrongdoing, ownership finding, or confidence percentage. A current direct chain match in the locally synchronized OFAC SDN registry sets the overall tier to Critical and the score floor to 95/100. The behavioral/exposure score remains separate. Historical listings, unresolved text matches, other-chain matches and registry outages never receive that override.
 
-Known-risk counterparty exposure weighs more than volume: Sanctioned/Scam/Mixer contacts retain 40/30/25 points. Overlapping classifications of one counterparty use the strongest classification; each risk type contributes at most once. Independent types can contribute up to 95. Two-/three-hop stored proximity contributes at most 10/5, and adds no points on top of direct risky contact. Labels are sourced assertions requiring review, not automatically verified attribution. There is currently no direct wallet-attribution rule. TRON retains source-backed label exposure but does not run the BTC/ETH behavioral rules; the Wallet view marks that component unavailable.
+GC Labels are source/analyst annotations, not authoritative OFAC records. Active Labels on the queried wallet can contribute Sanctioned 35, Scam 30, or Mixer 25 points; direct labeled-counterparty contact contributes 40/30/25. Two- and three-hop stored proximity contributes at most 10/5 and never propagates sanctions status. General volume, Exchange/Bridge interaction and large asset-unit amounts are zero-point context. Weak behavioral indicators are capped at 10. For a current direct OFAC match, the component total can differ from the overall score because the authoritative policy floor is separate.
 
-Weak chronological same-asset decreasing amounts, rapid sequences, and long observed gaps contribute 8/5/4, with a combined behavioral cap of 10. No current-clock dependency or second activity score is introduced. Overall cap remains 100; levels remain Low 0–30, Medium 31–70, High 71–100. A Low aggregate level does not negate a specific high-severity label finding.
+Fresh responses expose model version, overall score/tier, behavioral/exposure score, authoritative status, override reason, category totals, coverage and limitations. A missing or bounded history does not establish safety. Monero has no public address-level behavioral score, but its local sanctions/Label assessment can still show a direct current OFAC match. Saved RiskResults and Case wallet references retain immutable assessment snapshots; older model results are not recalculated. Apply Alembic revision 20261012_01_risk_labels_v3 before using a pre-existing SQLite database. Startup does not migrate it.
 
-The Wallet view shows applied category totals, raw points, caps, and per-finding adjustments. Applied points sum to the displayed score; evidence remains inspectable. Existing stored scores are preserved, and historical unversioned results are identified as lacking a category breakdown. Use a fresh lookup to apply the current model. No migration or background rescoring occurs.
-
-See [the full risk audit](docs/RISK_CALIBRATION.md) for every original rule, overlap analysis, policy rationale, limitations, and the synthetic before/after matrix. Reproduce that matrix without provider calls using `python -m tests.risk_calibration_report`. These controls demonstrate scoring mechanics, not real-world statistical accuracy.
+See docs/RISK_CALIBRATION.md for exact weights, caps, 17 test-only control scenarios and limitations. Fixtures never load in production.
 
 ## Labels
 
-The Labels workspace manages real local address annotations: **Exchange, Mixer, Bridge, Scam, Sanctioned, Unknown**. Create a manual label, filter by chain/type or label/source text, inspect provenance and confidence, investigate its wallet, open the stored graph, or add its existing label ID to a case. Wallet and Graph show stored names alongside addresses and link back to label details. Cases open the referenced label record.
+The Labels workspace stores sourced address annotations with chain scope, type, source, confidence and active/archive state. Archived Labels remain visible in the workspace but do not affect fresh risk calculations. Restoring one can affect a future lookup; neither action rewrites saved assessments. The any scope is intentionally unvalidated and applies to matching addresses across supported chains. Label confidence describes the source annotation and is not a risk-score multiplier.
 
-Manual creation defaults to source **Manual analyst label** and confidence **0.7**. Confidence remains the stored 0–1 value; it is not the risk score. Sources remain visible, with HTTP(S) URLs safely linked. Bitcoin, Ethereum, Base, Arbitrum, BNB Smart Chain, Polygon, TRON and Solana addresses are validated locally without provider calls. `any` preserves unvalidated address-scope semantics; it does not establish chain membership. Unsupported chains are rejected on new writes. Existing records are not migrated or rewritten.
-
-CSV import requires `address,label,type,source,confidence`; `chain` is optional and defaults to `any`. Use UTF-8 `.csv` files. The full file is validated before writes. The result counts processed rows, including updates, not only newly created labels. Export downloads the existing backend CSV with `chain,address,label,type,source,confidence,last_updated`; JavaScript does not reconstruct or reimport the file.
-
-The exact, case-sensitive storage key is `(chain,address,label,source)`. Manual duplicates return a conflict, including when only type/confidence differs. CSV import updates type/confidence and the timestamp for that key, retaining its ID. A different source creates a separate annotation. Duplicate CSV keys are processed in order, so the last row wins. There is no label edit/delete endpoint or automatic versioning in this increment.
-
-The calibrated risk policy is unchanged: Sanctioned/Scam/Mixer counterparty contact has raw contributions of **40/30/25**, subject to existing overlap/category caps. Exchange/Bridge/Unknown contribute **0**. A label on the queried wallet is not a newly introduced attribution rule. Wallet risk cards show the label evidence and applied contribution; current annotations may differ from historical saved findings. Labels do not automatically rescore stored results or issue external research requests.
-
-A label is an analyst/source annotation associated with an address, not proof of ownership or confirmed attribution. The separate Attribution workspace organizes explicit claims and immutable evidence; Labels offer an explicit Use as attribution evidence handoff; no automatic conversion occurs. No automatic attribution or sample labels are included here. Authoritative OFAC SDN synchronization is a separate, explicit Sanctions workflow; it does not create Labels.
-
+CSV import requires address,label,type,source,confidence; chain and active are optional. Omitting active preserves an existing row's archive state. Export includes active, archived_at and last_updated alongside provenance. Manual creation defaults to source Manual analyst label and confidence 0.7. A duplicate exact (chain,address,label,source) key conflicts on manual creation; CSV import updates its type/confidence and optional active state while retaining its ID. Labels are not Attribution claims or authoritative sanctions listings.
 ## Sanctions registry
 
-The **Sanctions** workspace explicitly synchronizes the official OFAC SDN XML
-list and screens wallet addresses against the latest complete local snapshot.
-A current direct match is displayed separately from behavioral risk. Historical,
-unresolved-chain, stale, and unsynchronized states remain distinct. Refreshing
-never collects blockchain transactions or creates monitoring watches. Run
-`alembic upgrade head` before using this new workspace. See
-[Sanctions registry](docs/SANCTIONS_REGISTRY.md) for source, integrity,
-matching, Case pin, and Discovery details. RISK-2 will separately audit a
-public-tracker wallet that yielded unexpectedly low GC risk; SANC-1 does not
-change risk scoring or encode that wallet in production data.
-
+The Sanctions workspace explicitly synchronizes the official OFAC SDN XML list and screens wallet addresses against the latest complete local snapshot. A current direct match is displayed separately from behavioral/exposure evidence and now elevates the fresh overall assessment to Critical. Historical, unresolved-chain, stale and unsynchronized states remain distinct. Refreshing never collects blockchain transactions or creates monitoring watches. Run alembic upgrade head before using this workspace. See docs/SANCTIONS_REGISTRY.md for source, integrity, matching, Case pin and Discovery details. The registry contains real locally synchronized source data; no tracker wallet or canned result is embedded in production.
 ## Research — public records & screening
 
 Research submits a **name**, optionally a **domain**, to the existing server-side screening engine. Only **Run research** makes provider requests; typing, changing workspaces, and opening match details do not rerun screening. Accepted API fields aliases, country, date of birth, and identifier are currently unused by adapters and are omitted from this form.

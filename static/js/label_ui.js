@@ -20,7 +20,7 @@ export async function readLabels() {
 }
 export function labelsFor(rows, chain, address) {
   const key = value => addressKey(chain,value);
-  return rows.filter(row => (row.chain === chain || row.chain === "any") && key(row.address) === key(address))
+  return rows.filter(row => row.active !== false && (row.chain === chain || row.chain === "any") && key(row.address) === key(address))
     .sort((a,b) => String(b.last_updated || "").localeCompare(String(a.last_updated || "")) || String(a.id).localeCompare(String(b.id)));
 }
 export function openLabel(id) {document.dispatchEvent(new CustomEvent("open-label",{detail:{id}}));}

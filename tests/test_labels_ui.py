@@ -70,8 +70,22 @@ def test_csv_upsert_key_count_and_export(ui_client):
     response=client.get(PREFIX+'/labels/export')
     assert response.status_code==200 and 'text/csv' in response.headers['content-type']
     exported=list(csv.DictReader(StringIO(response.text)))
-    assert len(exported)==2 and {'chain','address','label','type','source','confidence','last_updated'}==set(exported[0])
+    assert len(exported)==2 and {'chain','address','label','type','source','confidence','active','archived_at','last_updated'}==set(exported[0])
     assert next(r for r in exported if r['source']=='Test source')['confidence']=='0.85'
+
+
+def test_csv_import_preserves_archive_unless_state_is_explicit(ui_client):
+    client,_=ui_client
+    row=client.post(PREFIX+'/labels/manual',json=payload(source='Synthetic source')).json()
+    assert client.patch(PREFIX+f"/labels/{row['id']}/state",json={'active':False}).status_code==200
+    same_key=['bitcoin',BTC,'Test annotation','Scam','Synthetic source','0.9']
+    assert upload(client,[same_key]).status_code==200
+    archived=client.get(PREFIX+'/labels').json()['labels'][0]
+    assert archived['active'] is False and archived['archived_at']
+    exported=list(csv.DictReader(StringIO(client.get(PREFIX+'/labels/export').text)))
+    assert exported[0]['active']=='False' and exported[0]['archived_at']
+    assert upload(client,[same_key+['true']],header='chain,address,label,type,source,confidence,active').status_code==200
+    assert client.get(PREFIX+'/labels').json()['labels'][0]['active'] is True
 
 def test_malformed_csv_and_wrong_extension(ui_client):
     client,_=ui_client

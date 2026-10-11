@@ -77,6 +77,8 @@ class Label(Base):
     type: Mapped[str] = mapped_column(String(32), default="Unknown")
     source: Mapped[str] = mapped_column(String(255))
     confidence: Mapped[float] = mapped_column(Float, default=0.5)
+    active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True, server_default="1", deferred=True)
+    archived_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), deferred=True)
     last_updated: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     __table_args__ = (
         UniqueConstraint("chain", "address", "label", "source", name="uq_label_source"),
@@ -101,6 +103,7 @@ class RiskResult(Base):
     score: Mapped[int] = mapped_column(Integer)
     level: Mapped[str] = mapped_column(String(16))
     findings: Mapped[list] = mapped_column(JSON, default=list)
+    assessment: Mapped[dict | None] = mapped_column(JSON, deferred=True)
     calculated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
 

@@ -1,0 +1,66 @@
+// One consolidated RISK-2 smoke; all wallet and registry data are test-only.
+const fs=require('node:fs'),os=require('node:os'),path=require('node:path'),net=require('node:net'),assert=require('node:assert/strict');
+const {spawn}=require('node:child_process');
+const work=fs.mkdtempSync(path.join(os.tmpdir(),'gc-risk-v3-browser-'));
+const sleep=ms=>new Promise(resolve=>setTimeout(resolve,ms));
+async function port(){return new Promise(resolve=>{const socket=net.createServer();socket.listen(0,'127.0.0.1',()=>{const value=socket.address().port;socket.close(()=>resolve(value));});});}
+async function until(fn){for(let i=0;i<180;i++){try{const value=await fn();if(value)return value;}catch{}await sleep(100);}throw Error('Timed out waiting for browser fixture');}
+let server,browser,socket,stage='startup';const failures=[];
+(async()=>{
+  const httpPort=await port(),debugPort=await port();
+  const browserPath=process.env.CHROMIUM_PATH||['C:/Program Files/Google/Chrome/Application/chrome.exe','C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe'].find(fs.existsSync);
+  assert.ok(browserPath,'Set CHROMIUM_PATH to Chromium');
+  const log=fs.openSync(path.join(work,'server.log'),'a');
+  server=spawn(process.env.PYTHON||'python',['-B',path.join(__dirname,'browser_risk_v3_server.py'),String(httpPort)],{cwd:work,windowsHide:true,stdio:['ignore',log,log]});
+  await until(async()=>(await fetch(`http://127.0.0.1:${httpPort}/health`)).ok);
+  browser=spawn(browserPath,['--headless=new','--disable-gpu','--no-first-run','--no-default-browser-check','--disable-background-networking',`--remote-debugging-port=${debugPort}`,`--user-data-dir=${path.join(work,'profile')}`,'about:blank'],{windowsHide:true,stdio:'ignore'});
+  const target=await until(async()=>(await(await fetch(`http://127.0.0.1:${debugPort}/json`)).json()).find(item=>item.type==='page'));
+  socket=new WebSocket(target.webSocketDebuggerUrl);
+  await new Promise((resolve,reject)=>{socket.onopen=resolve;socket.onerror=reject;});
+  let serial=0;const pending=new Map();
+  const onmessage=event=>{const data=JSON.parse(event.data);if(data.id){const entry=pending.get(data.id);pending.delete(data.id);if(data.error)entry.reject(Error(data.error.message));else entry.resolve(data.result);}else if(data.method==='Runtime.exceptionThrown')failures.push(data.params.exceptionDetails.exception?.description||data.params.exceptionDetails.text);};
+  socket.onmessage=onmessage;
+  const call=(method,params={})=>new Promise((resolve,reject)=>{const id=++serial;pending.set(id,{resolve,reject});socket.send(JSON.stringify({id,method,params}));});
+  const evaluate=async expression=>{const output=await call('Runtime.evaluate',{expression,awaitPromise:true,returnByValue:true});if(output.exceptionDetails)throw Error(output.exceptionDetails.exception?.description||output.exceptionDetails.text);return output.result.value;};
+  stage='enable';await call('Runtime.enable');await call('Page.enable');
+  stage='navigate';
+  await call('Page.navigate',{url:`http://127.0.0.1:${httpPort}/`}).catch(error=>{
+    if(!/Inspected target navigated or closed/.test(error.message))throw error;
+  });
+  const appTarget=await until(async()=>(await(await fetch(`http://127.0.0.1:${debugPort}/json`)).json()).find(item=>item.type==='page'&&item.url.startsWith(`http://127.0.0.1:${httpPort}/`)));
+  socket.close();socket=new WebSocket(appTarget.webSocketDebuggerUrl);
+  await new Promise((resolve,reject)=>{socket.onopen=resolve;socket.onerror=reject;});
+  socket.onmessage=onmessage;await call('Runtime.enable');
+  stage='wait-for-app';await until(()=>evaluate('!!document.getElementById("sanctions-status") && !!document.querySelector("#chain-hint option[value=ethereum]")'));
+  await evaluate(`window.waitFor=async predicate=>{for(let i=0;i<160;i++){if(predicate())return;await new Promise(r=>setTimeout(r,50));}throw Error('Browser condition timed out')};window.lookup=async address=>{document.getElementById('wallet-address').value=address;document.getElementById('chain-hint').value='ethereum';document.getElementById('lookup-form').requestSubmit();await waitFor(()=>document.getElementById('lookup-form').dataset.busy==='false'&&!document.getElementById('results').hidden)};window.post=async(path,body)=>{const response=await fetch('/api/greedy-collector'+path,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});if(!response.ok)throw Error('POST '+path+' '+response.status);return response.json()}`);
+  const A='0x'+'a'.repeat(40),C='0x'+'c'.repeat(40),D='0x'+'d'.repeat(40);
+  stage='unsynced-lookup';await evaluate(`lookup(${JSON.stringify(A)})`);
+  assert.equal(await evaluate(`document.getElementById('risk-score').innerText`),'0 / 100');
+  assert.match(await evaluate(`document.getElementById('wallet-sanctions-slot').innerText`),/not synchronized/i);
+  assert.match(await evaluate(`document.getElementById('risk-breakdown').innerText`),/deterministic-v3/);
+  await evaluate(`(async()=>{const r=await fetch('/api/greedy-collector/sanctions/sync',{method:'POST'});if(!r.ok)throw Error('sync failed')})()`);
+  await evaluate(`lookup(${JSON.stringify(A)})`);
+  assert.equal(await evaluate(`document.getElementById('risk-score').innerText`),'95 / 100');
+  assert.equal(await evaluate(`document.getElementById('risk-level').innerText`),'CRITICAL');
+  assert.equal(await evaluate(`document.getElementById('risk-behavioral').innerText`),'0 / 100');
+  assert.match(await evaluate(`document.getElementById('wallet-sanctions-slot').innerText`),/CURRENT OFAC MATCH/);
+  assert.match(await evaluate(`document.getElementById('risk-breakdown').innerText`),/Overall score elevated by current direct authoritative sanctions match/);
+  assert.match(await evaluate(`document.getElementById('risk-breakdown').innerText`),/Why this score/);
+  const caseId=await evaluate(`(async()=>{const row=await post('/cases',{title:'Synthetic risk case'});await post('/cases/'+row.id+'/entities',{entity_type:'wallet',entity_ref:${JSON.stringify(A)},metadata:{chain:'ethereum',address:${JSON.stringify(A)}}});return row.id})()`);
+  const caseData=await evaluate(`(async()=>{const r=await fetch('/api/greedy-collector/cases/${caseId}');return r.json()})()`);
+  assert.equal(caseData.entities[0].metadata_json.risk_assessment.overall_score,95);
+  const report=await evaluate(`(async()=>{const r=await fetch('/api/greedy-collector/reports/${caseId}?format=markdown');return r.text()})()`);
+  assert.match(report,/deterministic-v3/);assert.match(report,/CURRENTLY_LISTED/);
+  await evaluate(`(async()=>{const r=await fetch('/api/greedy-collector/sanctions/sync',{method:'POST'});if(!r.ok)throw Error('second sync failed')})()`);
+  await evaluate(`lookup(${JSON.stringify(A)})`);
+  assert.equal(await evaluate(`document.getElementById('risk-score').innerText`),'0 / 100');
+  assert.match(await evaluate(`document.getElementById('wallet-sanctions-slot').innerText`),/HISTORICAL OFAC MATCH/);
+  await evaluate(`lookup(${JSON.stringify(C)})`);
+  assert.equal(await evaluate(`document.getElementById('risk-score').innerText`),'10 / 100');
+  assert.doesNotMatch(await evaluate(`document.getElementById('risk-breakdown').innerText`),/Overall score elevated/);
+  await evaluate(`lookup(${JSON.stringify(D)})`);
+  assert.match(await evaluate(`document.getElementById('risk-breakdown').innerText`),/PARTIAL/);
+  assert.deepEqual(failures,[]);
+  console.log('RISK-2 browser smoke passed: unsynced baseline, current direct Critical, separate behavior, immutable Case/report snapshot, historical state, indirect exposure, partial coverage.');
+  await call('Browser.close').catch(()=>{});
+})().catch(error=>{console.error('Stage:',stage,error);console.error('Test diagnostics:',work);process.exitCode=1;}).finally(()=>{socket?.close();browser?.kill();server?.kill();});

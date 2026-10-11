@@ -39,7 +39,7 @@ def test_upgrade_preserves_transactions_clusters_and_old_migrations(migration):
         assert c.execute(text('SELECT * FROM transactions')).all()==rows
         assert c.execute(text('SELECT * FROM technical_cluster_versions')).all()==clusters
         assert c.execute(text('PRAGMA foreign_key_check')).all()==[]
-        assert c.execute(text('SELECT version_num FROM alembic_version')).scalar()=='20261011_01_authoritative_sanctions_registry'
+        assert c.execute(text('SELECT version_num FROM alembic_version')).scalar()=='20261012_01_risk_labels_v3'
         after=dict(c.execute(text("SELECT name,sql FROM sqlite_master WHERE type='trigger'")).all())
         assert all(after[k]==v for k,v in triggers.items())
         indexes={row[0] for row in c.execute(text("SELECT name FROM sqlite_master WHERE type='index' AND tbl_name='transactions'"))}

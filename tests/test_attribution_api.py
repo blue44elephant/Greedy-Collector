@@ -452,7 +452,9 @@ def test_openapi_explicit_models_enums_and_exact_surface(api):
         '/capabilities', '/path', '/neighborhood', '/runs/{run_id}', '/cases/{case_id}/pin',
     }
     assert API+'/chains' in legacy_paths
-    assert len(paths) == 25 and len(legacy_paths - {API+'/chains'}) == 62
+    assert len(paths) == 25 and len(legacy_paths - {API+'/chains'}) == 64
+    assert API+'/risk/observation/{chain}/{address}' in legacy_paths
+    assert API+'/labels/{label_id}/state' in legacy_paths
     assert sum(len(methods) for methods in paths.values()) == 31
     for path, methods in paths.items():
         assert 'delete' not in methods
@@ -492,7 +494,8 @@ def test_http_attribution_never_changes_wallet_risk(api, monkeypatch):
     with Session(engine) as db:
         assert db.query(RiskResult).count() == 1 and db.query(Label).count() == 0 and db.query(Address).count() == 1
     after = ok(client.post(API+'/lookup/address', json={'chain': 'bitcoin', 'address': BTC}))
-    assert after['risk'] == before['risk']
+    assert after['risk']['calculated_at'] != before['risk']['calculated_at']
+    assert {key:value for key,value in after['risk'].items() if key!='calculated_at'} == {key:value for key,value in before['risk'].items() if key!='calculated_at'}
 
 
 def test_current_routes_and_attribution_workspace_without_seed_records(api):

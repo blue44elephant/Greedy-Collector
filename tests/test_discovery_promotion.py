@@ -62,8 +62,12 @@ def material(env,kind='github',content='Test-only stored code context',review='r
         if kind=='label':
             label=db.scalar(select(Label).limit(1))
             if label is None:
-                label=Label(chain='ethereum',address=ETH.lower(),label='Test annotation',type='Exchange',source='Test-only Label source',confidence=.7)
-                db.add(label);db.commit()
+                # Historical Alembic revision tests seed the original Label
+                # columns before RISK-2's archive-state revision exists.
+                label=Label(id=__import__('uuid').uuid4().hex,chain='ethereum',address=ETH.lower(),label='Test annotation',type='Exchange',source='Test-only Label source',confidence=.7,last_updated=datetime.now(timezone.utc))
+                db.execute(text('INSERT INTO labels (id,address,chain,label,type,source,confidence,last_updated) VALUES (:id,:address,:chain,:label,:type,:source,:confidence,:last_updated)'),
+                    {key:getattr(label,key) for key in ('id','address','chain','label','type','source','confidence','last_updated')})
+                db.commit()
             item={'kind':'candidate_evidence','predicate':'locally_labeled_as','from':{'kind':'blockchain_address','namespace':'ethereum','value':ETH},
                 'to':{'kind':'annotation','namespace':'gc-label','value':label.id},'fact_key':{'label_id':label.id},
                 'observation':{'kind':'local_label_snapshot','source_record_key':label.id,'origin_label_id':label.id,

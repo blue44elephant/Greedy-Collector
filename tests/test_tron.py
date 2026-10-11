@@ -267,7 +267,7 @@ def test_labels_discovery_and_risk_boundary():
     engine = ExplainableRiskEngine()
     generic = engine.evaluate(FOCUS, txs, [{"address": OTHER, "type": "Scam", "confidence": .8, "source": "test"}], include_behavioral=False)
     assert {row["rule_id"] for row in generic["findings"]} == {"direct_scam"}
-    assert generic["findings"][0]["evidence"]["counterparty"] == OTHER.lower()
+    assert generic["findings"][0]["evidence"]["counterparty"] == OTHER
 
 
 def test_tron_lookup_persists_public_token_metadata_and_source_label(monkeypatch):

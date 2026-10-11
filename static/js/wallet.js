@@ -1,4 +1,5 @@
 import {walletSanctions} from './sanctions.js';
+import {riskPresentation} from './risk_presentation.js';
 import {broadAction} from './discovery_broad.js';
 import {walletClustering} from './clustering.js';
 import {chains, chainMetadata, hasCapability} from './chains.js';
@@ -32,6 +33,7 @@ function renderLookup(data, stored = false, labels = [], labelsUnavailable = fal
   byId("wallet-labels").append(element("p", labelsUnavailable ? "Current labels could not be loaded. Returned lookup annotations are shown where available." : "Current stored annotations. Risk evidence reflects labels at evaluation time; labels do not prove ownership.", "muted small"));
   const transactions = data.transactions;
   const risk = data.risk || {findings: []};
+  const view = riskPresentation(risk);
   text("data-mode", stored ? "Stored local state" : "Fresh provider lookup");
   byId("stored-note").hidden = !stored;
   text("transactions-mode", stored ? "Stored transaction rows" : "Fresh lookup records");
@@ -42,8 +44,9 @@ function renderLookup(data, stored = false, labels = [], labelsUnavailable = fal
   text("result-chain", chainMetadata(profile.chain)?.display_name ?? profile.chain);
   text("result-address", profile.address);
   text("balance", `${profile.balance_native} ${chainMetadata(profile.chain)?.native_symbol ?? ""}`);
-  text("risk-score", risk.score == null ? "Not available" : `${risk.score} / 100`);
-  text("risk-level", risk.level);
+  text("risk-score", view.overall == null ? "Unassessed" : `${view.overall} / 100`);
+  text("risk-level", view.tier);
+  text("risk-behavioral", view.behavioralExposure == null ? "Unavailable" : `${view.behavioralExposure} / 100`);
   text("record-count", transactions.length);
   text("first-seen", dateText(profile.first_seen));
   text("last-activity", dateText(profile.last_activity));
@@ -88,6 +91,13 @@ function renderLookup(data, stored = false, labels = [], labelsUnavailable = fal
 
   const breakdown = byId("risk-breakdown");
   breakdown.replaceChildren();
+  breakdown.append(element("p", `Model: ${view.model}. GC risk score is an analytical prioritization/compliance-risk score, not a probability or confidence percentage.`, "bounded-note"));
+  if (view.versioned) {
+    for (const reason of view.overrides) breakdown.append(element("p", reason, "bounded-note"));
+    for (const status of view.statuses) breakdown.append(element("p", status, "muted small"));
+    breakdown.append(element("p", `Collection coverage: ${view.coverage}.`, "muted small"));
+    for (const warning of view.limitations) breakdown.append(element("p", warning, "bounded-note"));
+  }
   if (risk.category_contributions) {
     const summary = element("dl", undefined, "metadata");
     for (const [key, label] of [["direct_evidence", "Direct evidence"], ["exposure", "Exposure"], ["behavioral", "Behavioral"], ["context", "Context"]]) {
@@ -96,7 +106,11 @@ function renderLookup(data, stored = false, labels = [], labelsUnavailable = fal
       const value = key === "behavioral" && risk.behavioral_supported === false ? "Not available for this chain" : `${category.applied} points (raw ${category.raw}; cap ${category.cap})`;
       const row = element("div"); row.append(element("dt", label), element("dd", value)); summary.append(row);
     }
-    breakdown.append(element("h3", "Score breakdown"), summary, element("p", "Activity context adds no risk points. Applied contributions sum to the score; overlapping evidence and category caps can reduce raw points.", "muted small"));
+    breakdown.append(element("h3", "Score breakdown"), summary, element("p", view.overrides.length ? "Applied components sum to the behavioral/exposure score. A direct authoritative match separately sets the overall score floor." : "Applied components sum to the score. Overlapping evidence and category caps can reduce raw points.", "muted small"));
+    const explanation = element("details"); explanation.append(element("summary", "Why this score"));
+    const components = element("ul");
+    for (const item of risk.components || []) components.append(element("li", `${item.rule_id}: ${item.applied} applied (${item.raw} raw; ${item.category} cap ${item.cap})`));
+    explanation.append(components); breakdown.append(explanation);
   } else if (stored && data.risk) {
     breakdown.append(element("p", "This saved result has no versioned category breakdown. Its original score is preserved. A fresh lookup uses the current scoring policy.", "muted small"));
   }
@@ -125,7 +139,7 @@ function renderLookup(data, stored = false, labels = [], labelsUnavailable = fal
   }
   byId("risk-findings").replaceChildren(findingNodes);
   byId("risk-empty").hidden = findings.length !== 0;
-  text("risk-empty", stored && !data.risk ? "No stored risk result is available for this address." : "No risk findings were produced for the returned activity.");
+  text("risk-empty", stored && !data.risk ? "No stored risk result is available for this address." : view.overrides.length ? "No blockchain or GC Label findings were produced. The authoritative status separately determines the overall tier." : "No risk findings were produced for the returned activity.");
   text("risk-disclaimer", risk.disclaimer || "Risk findings are rule-based indicators and are not proof of wrongdoing.");
 
   const counterparties = Array.isArray(data.counterparties) ? data.counterparties : [];
@@ -149,7 +163,7 @@ function renderLookup(data, stored = false, labels = [], labelsUnavailable = fal
 }
 
 
-function renderObservationOnly(chain, address, labels = [], labelsUnavailable = false, sanctions = null) {
+function renderObservationOnly(chain, address, labels = [], labelsUnavailable = false, sanctions = null, risk = null) {
   const host = byId("observation-result");
   const heading = element("h2", "Public-source observation"); heading.tabIndex = -1;
   const metadata = chainMetadata(chain);
@@ -160,6 +174,14 @@ function renderObservationOnly(chain, address, labels = [], labelsUnavailable = 
   const available = (metadata?.capabilities || []).map(value => ({address_validation:"Address validation",labels:"Local Labels",cases:"Cases",attribution:"Attribution",discovery:"Discovery"}[value])).filter(Boolean);
   host.append(element("p", "Available actions: " + (available.join(", ") || "None") + ".", "muted small"));
   host.append(walletSanctions(sanctions,chain,address));
+  if (risk) {
+    const view = riskPresentation(risk);
+    host.append(element("h3", "Local risk assessment"),
+      element("p", `Overall: ${view.tier}${view.overall == null ? "" : ` (${view.overall}/100)`}. Behavioral score: unavailable; public address history cannot be collected for this chain.`, "bounded-note"),
+      element("p", `Model: ${view.model}. This is a local sanctions/Label assessment, not a behavioral score or probability.`, "muted small"));
+    for (const reason of view.overrides) host.append(element("p", reason, "bounded-note"));
+    for (const warning of view.limitations) host.append(element("p", warning, "muted small"));
+  }
   host.append(element("h3", "Wallet labels"), labelCards(labelsFor(labels, chain, address), "No stored labels for this address."));
   host.append(element("p", labelsUnavailable ? "Current labels could not be loaded." : "Labels are analyst/source annotations, not proof of ownership.", "muted small"));
   const actions = element("div", undefined, "toolbar");
@@ -207,8 +229,8 @@ async function lookup(stored, chain_hint = undefined) {
     if (!hasCapability(chain, "balance") || !hasCapability(chain, "transaction_history")) {
       let labelsUnavailable = false;
       const labels = await readLabels().catch(() => {labelsUnavailable = true; return [];});
-      const sanctions = await api(`/sanctions/screen/${encodeURIComponent(chain)}/${encodeURIComponent(address)}`).catch(() => ({listing_state:"SCREENING_UNRESOLVED",match_type:"UNAVAILABLE"}));
-      renderObservationOnly(chain, address, labels, labelsUnavailable, sanctions);
+      const local = await api(`/risk/observation/${encodeURIComponent(chain)}/${encodeURIComponent(address)}`);
+      renderObservationOnly(chain, address, labels, labelsUnavailable, local.sanctions_screening, local.risk);
       return;
     }
     const path = `/address/${chain}/${encodeURIComponent(address)}`;

@@ -1,5 +1,49 @@
 # Deterministic risk calibration audit
 
+## RISK-2: current deterministic-v3 policy
+
+The GC overall score is an **analytical prioritization/compliance-risk score** on a 0–100 policy scale. It is not a probability of criminal activity, ownership, attribution truth, or a confidence percentage. The separate `behavioral_exposure_score` is the sum of applied GC Label, observed direct/indirect exposure, and bounded behavioral components. `authoritative_status` records local OFAC screening independently. A current exact `DIRECT_CHAIN_MATCH` in the current OFAC snapshot sets `overall_tier=CRITICAL` and an overall score floor of **95**. The required explanation is: “Overall score elevated by current direct authoritative sanctions match.” This floor is a policy priority, not a statistical estimate. The 95 floor ensures an exact current direct listing cannot be missed even when observed activity scores zero; underlying components remain visible.
+
+`score`/`level` remain compatible aliases for `overall_score`/the legacy-cased tier. Without the override, Low is 0–30, Moderate (legacy `Medium`) is 31–70, High is 71–100. Critical is reserved for the current direct authoritative rule. The overall score is `max(behavioral_exposure_score, 95)` for that rule, not an additive sanctions weight. A GC `Sanctioned` Label stays a sourced analyst annotation and never creates a current OFAC status. If both are present, the Label is visible with source, scope, confidence and archive state; it cannot add to the 95 floor.
+
+| Component | Rule / cap | Meaning |
+|---|---|---|
+| Queried-wallet GC Label | Sanctioned 35; Scam 30; Mixer 25; direct-evidence cap 40 | Local/source assertion, even if public history is empty; not authoritative OFAC |
+| Direct labeled counterparty | Sanctioned 40; Scam 30; Mixer 25; exposure cap 95 | Observed eligible transaction contact, not ownership or guilt |
+| Indirect path | 2 hops 10; 3 hops 5; only strongest path; 0 if direct risky-counterparty exposure applies | Bounded stored transaction proximity; no sanctions inheritance or verified flow |
+| Behavioral | Decreasing same-symbol EVM outgoing amounts 8; rapid returned sequence 5; long observed gap 4; cap 10 | Weak deterministic indicators; no ownership or actual peel-chain inference |
+| Context | 0 | Volume, fan-in/out, whole/large asset-unit amounts, repeated contact, Exchange/Bridge Labels; visible but unscored |
+
+The sum of applied findings is the behavioral/exposure score, capped at 100. One rule contributes once; distinct observations remain in evidence. The strongest risk classification for a shared counterparty wins; independent counterparties can contribute different rule types up to the exposure cap. Duplicate normalized events and failed executions are excluded from transaction-derived signals. Wallet Labels match their explicit chain or `any`, and archived Labels no longer affect fresh assessments. Label confidence is displayed as source confidence and is **not** multiplied into points. Public tags, Discovery observations, Attribution claims, clusters, and fund-flow nodes never become authoritative sanctions matches. No sanctions status propagates along any graph path.
+
+Historical and unresolved OFAC text matches, other-chain text matches, an unsynchronized/stale registry, and a simple no-match never receive the direct-current override. The response keeps the exact listing/match state and a limitation explaining uncertainty. A no-match in one synchronized snapshot does not prove safety or absence from other lists. Collection status and returned-record count are recorded; partial/truncated/provider-limited history generates an explicit warning. Zero eligible returned transfers does not prove inactivity. Monero has no public-chain behavioral assessment: its local-only assessment can still show a direct current OFAC match as Critical, while the behavioral score remains unavailable. No provider collection is attempted for that path.
+
+`deterministic-v3` assessments persist as complete JSON snapshots with `calculated_at`, authoritative source snapshot ID/hash, category totals, individual components, coverage and limitations. Fresh lookups use the new model; old v2/legacy `RiskResult` rows are never recalculated. Adding a wallet to a Case copies its latest stored assessment into the Case entity metadata; report exports read that immutable snapshot. A later OFAC sync or risk recalculation does not rewrite the Case copy. The material below documents the earlier calibration and remains historical context.
+
+### Synthetic control corpus (test fixtures only)
+
+| Scenario | Behavior / exposure | Authoritative status | Overall expected |
+|---|---|---|---|
+| Ordinary new | 0 | no match | 0 Low |
+| Ordinary busy | 0 | no match | 0 Low |
+| Exchange-like activity | 5 | no match | 5 Low |
+| Empty-history direct match | 0 | current direct OFAC | 95 Critical |
+| High-exposure direct match | 95 | current direct OFAC | 95 Critical |
+| Historical listing | 0 | historical direct | 0 Low, historical warning |
+| Unresolved text | 0 | current text, chain unresolved | 0 Low, contextual warning |
+| Other-chain text | 0 | current text, other chain | 0 Low, contextual warning |
+| Manual `Sanctioned` on wallet | 35 | no match | 35 Moderate |
+| Direct Mixer Label | 25 | no match | 25 Low; high-severity finding remains visible |
+| Direct Scam Label | 30 | no match | 30 Low; high-severity finding remains visible |
+| Direct `Sanctioned` counterparty Label | 40 | no match | 40 Moderate; no OFAC claim |
+| Two-hop Label proximity | 10 | no match | 10 Low |
+| Three-hop Label proximity | 5 | no match | 5 Low |
+| Bridge context | 0 | no match | 0 Low |
+| Archived wallet Label | 0 | no match | 0 Low on fresh assessment |
+| Current direct OFAC + manual Label | 35 | current direct OFAC | 95 Critical; no additive double count |
+
+These values are reproducible policy controls, not empirical calibration against a population or real investigation. See `tests/test_risk_v3.py` for the executable corpus.
+
 Baseline: 179 tests passed before changes. Audit performed before recalibration, using the original engine and fixed-clock synthetic tests only. No live wallet/provider queries were made. These controls are not statistically representative of blockchain activity.
 
 ## Original rule inventory

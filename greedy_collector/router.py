@@ -25,6 +25,7 @@ from .schemas import (
     LookupRequest,
     ResolveRequest,
     ManualLabelCreate,
+    LabelStateUpdate,
     TransactionLookupRequest,
     WatchlistCreate,
     WatchlistUpdate,
@@ -139,6 +140,26 @@ def risk(chain: ChainName, address: str, db: Session = Depends(get_db)):
     if not result:
         raise HTTPException(status_code=404, detail="No risk result is available")
     return result
+
+
+@router.get("/risk/observation/{chain}/{address}")
+def observation_risk(chain: ChainName, address: str, db: Session = Depends(get_db)):
+    """Local-only risk assessment when public address history is unavailable."""
+    if chain != "monero":
+        raise HTTPException(status_code=422, detail="Observation-only risk is available for Monero addresses")
+    from datetime import datetime, timezone
+    from .chains import get_chain_adapter
+    from .sanctions.service import screen
+
+    canonical = get_chain_adapter(chain).normalize_address(address)
+    sanctions = screen(db, chain, canonical)
+    labels = service._labels_for_transactions(db, [], chain, canonical)
+    assessment = service.risk_engine.evaluate(
+        canonical, [], labels, include_behavioral=False, chain=chain,
+        sanctions=sanctions, coverage={"status": "UNAVAILABLE", "records_returned": 0},
+    )
+    assessment["calculated_at"] = datetime.now(timezone.utc).isoformat()
+    return {"risk": assessment, "sanctions_screening": sanctions}
 
 
 @router.post("/watchlist")
@@ -287,11 +308,26 @@ def add_case_entity(
 ):
     if not db.get(Case, case_id):
         raise HTTPException(status_code=404, detail="Case not found")
+    metadata = dict(payload.metadata)
+    if payload.entity_type == "wallet":
+        # Only the server may create a reportable risk snapshot.
+        metadata.pop("risk_assessment", None)
+        metadata["address"] = payload.entity_ref
+    if payload.entity_type == "wallet" and metadata.get("chain"):
+        # Pin the latest saved assessment as an immutable case snapshot. A later
+        # registry sync or recalculation must not rewrite the case's old evidence.
+        try:
+            assessment = service.address_risk(db, metadata["chain"], payload.entity_ref)
+        except (ValueError, KeyError):
+            assessment = None
+        if assessment:
+            from fastapi.encoders import jsonable_encoder
+            metadata["risk_assessment"] = jsonable_encoder(assessment)
     row = CaseEntity(
         case_id=case_id,
         entity_type=payload.entity_type,
         entity_ref=payload.entity_ref,
-        metadata_json=payload.metadata,
+        metadata_json=metadata,
     )
     db.add(row)
     db.commit()
@@ -358,6 +394,21 @@ def list_labels(db: Session = Depends(get_db)):
     return {"labels": [row_dict(row) for row in rows]}
 
 
+@router.patch("/labels/{label_id}/state")
+def set_label_state(label_id: str, payload: LabelStateUpdate, db: Session = Depends(get_db)):
+    from datetime import datetime, timezone
+
+    row = db.get(Label, label_id)
+    if row is None:
+        raise HTTPException(status_code=404, detail="Label not found")
+    row.active = payload.active
+    row.archived_at = None if payload.active else datetime.now(timezone.utc)
+    row.last_updated = datetime.now(timezone.utc)
+    db.commit()
+    db.refresh(row)
+    return row_dict(row)
+
+
 @router.get("/labels/export")
 def export_labels(db: Session = Depends(get_db)):
     from sqlalchemy import select
@@ -370,6 +421,8 @@ def export_labels(db: Session = Depends(get_db)):
         "type",
         "source",
         "confidence",
+        "active",
+        "archived_at",
         "last_updated",
     ]
     writer = csv.DictWriter(output, fieldnames=fieldnames)

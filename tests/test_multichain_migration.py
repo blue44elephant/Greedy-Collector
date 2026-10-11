@@ -1,6 +1,8 @@
 """MC-1 migrations exercise temporary SQLite only."""
 import hashlib
+from datetime import datetime, timezone
 from pathlib import Path
+from uuid import uuid4
 import pytest
 from alembic import command
 from alembic.script import ScriptDirectory
@@ -27,7 +29,8 @@ def test_mc1_upgrade_preserves_rows_triggers_and_unrelated_constraints(tmp_path,
                 db.add(WatchlistWallet(chain=chain,address=address))
                 db.execute(text("INSERT INTO transactions (id,tx_hash,chain,from_address,to_address,value_native,value_usd,token_symbol,timestamp,block_number,fee,direction,source_api,raw_payload) VALUES (:id,:hash,:chain,:address,'','1',NULL,'',NULL,'','0','unknown','test','{}')"),
                     {'id':'transaction-'+chain,'hash':'a'*64,'chain':chain,'address':address})
-                db.add(Label(chain=chain,address=address,label='Test migration',type='Unknown',source='test'))
+                db.execute(text("INSERT INTO labels (id,address,chain,label,type,source,confidence,last_updated) VALUES (:id,:address,:chain,'Test migration','Unknown','test',0.5,:last_updated)"),
+                    {'id':str(uuid4()),'address':address,'chain':chain,'last_updated':datetime.now(timezone.utc)})
             db.commit()
             service=AttributionService(db);entity=service.create_entity({'canonical_name':'Migration BTC'})
             service.create_claim(dict(entity_id=entity['id'],chain='bitcoin',subject_ref='1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa',relationship='operated_by',scope_note='Test'))
@@ -52,7 +55,7 @@ def test_mc1_head_matches_models(tmp_path,monkeypatch):
         for table in Base.metadata.tables:
             if table.startswith(('attribution_','discovery_')):assert signature(engine,table)==signature(orm,table),table
         assert triggers(engine)==triggers(orm)
-        assert ScriptDirectory.from_config(cfg).get_heads()==['20261011_01_authoritative_sanctions_registry']
+        assert ScriptDirectory.from_config(cfg).get_heads()==['20261012_01_risk_labels_v3']
     finally:engine.dispose();orm.dispose()
 
 @pytest.mark.parametrize('chain',['test_chain','a','chain_123'])

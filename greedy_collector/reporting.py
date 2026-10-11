@@ -34,6 +34,34 @@ def chain_limitations(entities: list[dict]) -> list[str]:
     return limitations
 
 
+def risk_snapshot_lines(entities: list[dict]) -> list[str]:
+    """Describe the assessment captured when a wallet was added to a Case."""
+    lines = []
+    for entity in entities:
+        if entity.get("entity_type") != "wallet":
+            continue
+        assessment = (entity.get("metadata_json") or {}).get("risk_assessment")
+        if not isinstance(assessment, dict):
+            continue
+        lines.extend([
+            "", f"### Wallet risk snapshot: `{entity['entity_ref']}`", "",
+            f"- Model: {assessment.get('model_version') or assessment.get('scoring_model') or 'legacy'}",
+            f"- Overall: {assessment.get('overall_tier') or assessment.get('level')} ({assessment.get('overall_score', assessment.get('score'))}/100)",
+            f"- Behavioral/exposure: {assessment.get('behavioral_exposure_score', 'unavailable')}",
+            f"- Calculated at: {assessment.get('calculated_at') or 'unavailable'}",
+        ])
+        for status in assessment.get("authoritative_status") or []:
+            lines.append(f"- Authoritative {status.get('source')}: {status.get('listing_state')} / {status.get('match_type')}; snapshot {status.get('snapshot_id') or 'unavailable'}; SHA-256 {status.get('snapshot_sha256') or 'unavailable'}")
+        for override in assessment.get("overrides") or []:
+            lines.append(f"- Override: {override.get('reason')}")
+        for category, values in (assessment.get("category_contributions") or {}).items():
+            lines.append(f"- {category}: {values.get('applied')} applied / {values.get('cap')} cap")
+        coverage = assessment.get("data_coverage") or {}
+        lines.append(f"- Coverage: {coverage.get('status') or 'unknown'}; records returned {coverage.get('records_returned', 'unknown')}")
+        lines.extend(f"- Limitation: {item}" for item in assessment.get("limitations") or [])
+    return lines
+
+
 def case_markdown(case: dict, entities: list[dict], alerts: list[dict], notes: list[dict], attribution: dict | None = None) -> str:
     lines = [
         f"# {case['title']}",
@@ -48,6 +76,9 @@ def case_markdown(case: dict, entities: list[dict], alerts: list[dict], notes: l
     lines.extend(
         f"- {item['entity_type']}: `{item['entity_ref']}`" for item in entities
     )
+    snapshots = risk_snapshot_lines(entities)
+    if snapshots:
+        lines.extend(["", "## Saved risk assessments", *snapshots])
     limitations = chain_limitations(entities)
     if limitations:
         lines.extend(["", "## Chain capability limitations", ""])
@@ -129,6 +160,10 @@ def case_pdf(case: dict, entities: list[dict], alerts: list[dict], notes: list[d
         )
         for item in entities
     )
+    snapshots = risk_snapshot_lines(entities)
+    if snapshots:
+        story.append(Paragraph("Saved risk assessments", styles["Heading2"]))
+        story.extend(Paragraph(escape(line), styles["BodyText"]) if line else Spacer(1, 6) for line in snapshots)
     limitations = chain_limitations(entities)
     if limitations:
         story.append(Paragraph("Chain capability limitations", styles["Heading2"]))

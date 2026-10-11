@@ -62,7 +62,7 @@ class GreedyCollectorService:
         transactions = transactions_override if transactions_override is not None else await adapter.transactions(request.address)
         retrieved_at = datetime.now(timezone.utc).isoformat()
         transactions = [prepare_event(tx, requested_chain=request.chain, retrieved_at=retrieved_at) for tx in transactions]
-        labels = self._labels_for_transactions(db, transactions)
+        labels = self._labels_for_transactions(db, transactions, request.chain, request.address)
 
         from .transaction_identity import persist_normalized_event
         stored_new = reused = 0
@@ -77,8 +77,11 @@ class GreedyCollectorService:
         risk = self.risk_engine.evaluate(
             request.address, transactions, labels, exposure_paths,
             include_behavioral=adapter.behavioral_risk,
+            chain=request.chain, sanctions=sanctions, coverage=collection,
         )
         risk["behavioral_supported"] = adapter.behavioral_risk
+        calculated_at = datetime.now(timezone.utc)
+        risk["calculated_at"] = calculated_at.isoformat()
         # Encode nested evidence once for both the JSON column and API response.
         risk["findings"] = jsonable_encoder(risk["findings"])
 
@@ -111,6 +114,8 @@ class GreedyCollectorService:
                 score=risk["score"],
                 level=risk["level"],
                 findings=risk["findings"],
+                assessment=jsonable_encoder(risk),
+                calculated_at=calculated_at,
             )
         )
         db.commit()
@@ -168,11 +173,13 @@ class GreedyCollectorService:
         if row is None:
             return None
         result = row_dict(row)
+        if row.assessment:
+            return {**result, **row.assessment}
         # Historical scores stay unchanged. Only versioned saved findings can explain
         # the new category totals; never infer a new model for legacy/empty findings.
-        if row.findings and all(item.get("scoring_model") == SCORING_MODEL for item in row.findings):
-            result["scoring_model"] = SCORING_MODEL
-            result["category_contributions"] = contribution_summary(row.findings)
+        if row.findings and all(item.get("scoring_model") == "deterministic-v2" for item in row.findings):
+            result["scoring_model"] = "deterministic-v2"
+            result["category_contributions"] = contribution_summary(row.findings, model="deterministic-v2")
         return result
 
     def address_graph(
@@ -340,7 +347,12 @@ class GreedyCollectorService:
                 raise ValueError("CSV row has an incorrect number of columns")
             payload = {key: item[key] for key in required}
             payload["chain"] = item.get("chain") or "any"
-            validated.append(ManualLabelCreate.model_validate(payload).model_dump())
+            parsed = ManualLabelCreate.model_validate(payload).model_dump()
+            state = (item.get("active") or "").strip().lower()
+            if state and state not in {"true", "false", "1", "0"}:
+                raise ValueError("CSV active state must be true/false or 1/0")
+            parsed["active"] = None if not state else state in {"true", "1"}
+            validated.append(parsed)
         count = 0
         for item in validated:
             chain = item["chain"]
@@ -360,6 +372,9 @@ class GreedyCollectorService:
             )
             row.type = item["type"]
             row.confidence = float(item["confidence"])
+            if item["active"] is not None:
+                row.active = item["active"]
+                row.archived_at = None if row.active else datetime.now(timezone.utc)
             row.last_updated = datetime.now(timezone.utc)
             db.add(row)
             count += 1
@@ -432,16 +447,18 @@ class GreedyCollectorService:
         return case_markdown(*args), "text/markdown"
 
     def _labels_for_transactions(
-        self, db: Session, transactions: list[NormalizedTransaction]
+        self, db: Session, transactions: list[NormalizedTransaction], chain: str | None = None, address: str | None = None
     ) -> list[dict]:
         identities = {(tx.chain,get_chain(tx.chain).adapter().address_key(value))
                       for tx in transactions for value in (tx.from_address,tx.to_address) if value}
+        if chain and address:
+            identities.add((chain, get_chain(chain).adapter().address_key(address)))
         if not identities:return []
         by_chain={}
         for chain,address in identities:by_chain.setdefault(chain,set()).add(address)
         conditions=[self._address_membership(chain,Label.address,addresses) & Label.chain.in_((chain,'any'))
                     for chain,addresses in by_chain.items()]
-        return [row_dict(row) for row in db.scalars(select(Label).where(or_(*conditions))).all()]
+        return [row_dict(row) for row in db.scalars(select(Label).where(or_(*conditions), Label.active.is_(True))).all()]
 
     @classmethod
     def _transaction_membership(cls, chain, addresses):
@@ -480,6 +497,8 @@ class GreedyCollectorService:
             ).all()
             next_frontier = {}
             for row in rows:
+                if not transfer_eligible(row):
+                    continue
                 left = adapter.address_key(row.from_address) if row.from_address else ""
                 right = adapter.address_key(row.to_address) if row.to_address else ""
                 for current, candidate in [(left, right), (right, left)]:
@@ -490,7 +509,8 @@ class GreedyCollectorService:
                 labels = db.scalars(
                     select(Label).where(
                         self._address_membership(chain,Label.address,set(next_frontier)),
-                        Label.chain.in_((chain,'any'))
+                        Label.chain.in_((chain,'any')),
+                        Label.active.is_(True),
                     )
                 ).all()
                 for label in labels:
