@@ -53,6 +53,17 @@ export function initCases() {
     const row = await caseRequest(casePath(selectedId));
     if (!row || ![row.entities,row.notes,row.alerts].every(Array.isArray)) throw new UserError("The server returned unexpected case material. Refresh and try again.");
     render(row);
+    const pins=await api(`/sanctions/cases/${encodeURIComponent(row.id)}/pins`).catch(()=>({items:[]}));
+    if (pins.items?.length) {
+      const section=panel('Pinned OFAC screening','Historical evidence retains the captured source snapshot even after later refreshes.');
+      for (const pin of pins.items) {
+        const screening=pin.record.screening;
+        section.append(element('p',`${screening.listing_state} ? ${screening.match_type} ? ${screening.chain} ? ${screening.address}`),
+          element('p',`Captured: ${dateText(pin.captured_at)} ? Snapshot: ${screening.snapshot?.id || 'unavailable'} ? SHA-256: ${screening.snapshot?.sha256 || 'unavailable'}`,'muted small'),
+          details('Source associations and programs',screening.associations));
+      }
+      selected.append(section);
+    }
     list.querySelectorAll("button").forEach(node => node.setAttribute("aria-pressed", String(node.dataset.caseId === row.id)));
   }
   function render(row) {

@@ -258,7 +258,7 @@ def test_normalized_typed_storage_without_any_result_or_side_effect():
                 with pytest.raises(DiscoveryError, match='Only wallet'):
                     service.create_run(row['id'], [], idempotency_key=row['id'])
             assert counts() == before  # Includes runs, results, attribution, cases, labels and risk.
-            assert set(REGISTRY.transforms) == {'wallet.local_labels','wallet.manual_exact_web','wallet.public_code_mentions','wallet.ens_primary_name','wallet.manual_source_observation','wallet.graphsense_public_tags','wallet.broad_web','wallet.web_search.tavily'}
+            assert set(REGISTRY.transforms) == {'wallet.local_labels','wallet.manual_exact_web','wallet.public_code_mentions','wallet.ens_primary_name','wallet.manual_source_observation','wallet.graphsense_public_tags','wallet.broad_web','wallet.web_search.tavily','wallet.ofac_sdn_match'}
     finally:
         engine.dispose()
 

@@ -27,7 +27,7 @@ def test_clean_upgrade_parity_no_seeds(tmp_path,monkeypatch):
         for table in Base.metadata.tables:
             if table.startswith(('discovery_','attribution_')):assert signature(engine,table)==before_mc1(signature(orm,table)),table
         assert triggers(engine)==triggers(orm) and all(not rows for rows in snapshot(engine).values())
-        assert ScriptDirectory.from_config(cfg).get_heads()==['20260929_01_public_source_capture']
+        assert ScriptDirectory.from_config(cfg).get_heads()==['20261011_01_authoritative_sanctions_registry']
         with Session(engine) as db:require_schema(db)
     finally:engine.dispose();orm.dispose()
 
@@ -38,7 +38,7 @@ def test_populated_upgrade_and_guarded_downgrade(tmp_path,monkeypatch):
         with Session(engine) as db:store_ens(DiscoveryService(db,registry=ens_registry()))
         with Session(engine) as db:
             svc=ManualSourceService(db);p=svc.preview(data());svc.capture({'capture':data(),'expected_preview_fingerprint':p['preview_fingerprint']})
-        before=snapshot(engine);protected=triggers(engine);schemas={t:signature(engine,t) for t in Base.metadata.tables}
+        before=snapshot(engine);protected=triggers(engine);schemas={t:signature(engine,t) for t in Base.metadata.tables if not t.startswith('sanctions_')}
         command.upgrade(cfg,HEAD)
         assert snapshot(engine)==before and triggers(engine)==protected
         for table,old in schemas.items():

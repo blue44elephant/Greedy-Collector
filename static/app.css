@@ -285,3 +285,14 @@ input[type="checkbox"] { width:20px; height:20px; min-height:20px; }
 .pin-badge { fill:var(--muted, #607080); font-size:11px; font-weight:700; pointer-events:none; }
 .is-pinned > rect { stroke-dasharray:5 3; }
 .discovery-diagnostic { border-left:3px solid #8499a7; padding-left:.75rem; }
+/* Authoritative screening is visually separate from behavioral risk. */
+#wallet-sanctions .sanctions-state { font-weight: 750; font-size: 17px; padding: 12px 14px; border-radius: 7px; background:#f3f6f9; }
+#wallet-sanctions .sanctions-state[data-listing-state="CURRENTLY_LISTED"][data-match-type="DIRECT_CHAIN_MATCH"] { color:#7c1d19; background:#fff0ee; border:2px solid #c35248; }
+#wallet-sanctions .sanctions-state[data-listing-state="HISTORICALLY_LISTED"] { color:#6d4a12; background:#fff8e8; border:1px solid #c9a856; }
+#sanctions-workspace .sanctions-state { font-weight:700; }
+#sanctions-status .table-scroll { margin-top:14px; }
+#sanctions-search { display:grid; grid-template-columns: repeat(auto-fit,minmax(170px,1fr)); gap:12px; align-items:end; margin:18px 0; }
+#sanctions-search .form-field { min-width:0; }
+#sanctions-results .toolbar { flex-wrap:wrap; }
+#sanctions-pin-dialog { border:1px solid #bdc8d4; border-radius:10px; padding:24px; max-width:min(560px,95vw); }
+#sanctions-pin-dialog::backdrop { background:#182331a8; }

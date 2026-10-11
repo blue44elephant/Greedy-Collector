@@ -181,3 +181,5 @@ Completion verdict: `BLOCKCHAIN_COLLECTION_NORMALIZATION_100_PERCENT` (repositor
 verification within BC-1's documented support boundaries, not unlimited coverage).
 Frontend 71/71 and BC-1 browser smoke remain previously verified and untouched.
 No user database operation, migration or commit was performed.
+
+SANC-1 follows BC-1 with an authoritative, separate OFAC snapshot registry. RISK-2 remains a separate calibration audit; a wallet sourced from a public OFAC tracker previously produced unexpectedly low GC risk. No specific tracker wallet is production seed data.

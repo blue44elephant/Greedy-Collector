@@ -115,6 +115,7 @@ def production_executors(sessions):
     # Bound to the application's chosen database; construction neither queries
     # Labels nor performs Discovery. Tests can supply isolated sessions.
     from .local import LocalLabelsExecutor,exact_web_actions
+    from .ofac_local import OfacLocalExecutor
     from .github import GitHubCodeExecutor
     from .graphsense import GraphSenseExecutor
     from .ens import EnsPrimaryNameExecutor,configured
@@ -127,6 +128,7 @@ def production_executors(sessions):
     registry.register(Binding('wallet.graphsense_public_tags','github',1,1,GraphSenseExecutor(),QuotaPolicy(daily_units=100,monthly_units=3000)))
     registry.register_capture(CaptureBinding('wallet.manual_source_observation','manual_source',1,1,ManualSourceService))
     registry.register(Binding('wallet.ens_primary_name','ens_ethereum',1,1,EnsPrimaryNameExecutor(),QuotaPolicy(daily_units=100,monthly_units=3000),available=configured))
+    registry.register(Binding('wallet.ofac_sdn_match','ofac_sdn',1,1,OfacLocalExecutor(sessions),QuotaPolicy(daily_units=0,monthly_units=0)))
     registry.register(Binding('wallet.local_labels','gc_labels',1,1,LocalLabelsExecutor(sessions),QuotaPolicy(daily_units=0,monthly_units=0)))
     registry.register_manual(ManualBinding('wallet.manual_exact_web','google',1,1,exact_web_actions))
     registry.register(Binding('wallet.public_code_mentions','github',1,1,GitHubCodeExecutor(),QuotaPolicy(daily_units=100,monthly_units=3000)))

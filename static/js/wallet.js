@@ -1,3 +1,4 @@
+import {walletSanctions} from './sanctions.js';
 import {broadAction} from './discovery_broad.js';
 import {walletClustering} from './clustering.js';
 import {chains, chainMetadata, hasCapability} from './chains.js';
@@ -21,6 +22,7 @@ export function investigate(chain, address) {
 }
 function renderLookup(data, stored = false, labels = [], labelsUnavailable = false) {
   const profile = data.address;
+  byId("wallet-sanctions-slot").replaceChildren(walletSanctions(data.sanctions_screening,profile.chain,profile.address));
   byId("wallet-clustering").replaceChildren(walletClustering(profile.chain,profile.address));
   byId("observation-result").hidden = true;
   byId("wallet-case-action").replaceChildren(hasCapability(profile.chain, "cases") ? addToCaseButton("wallet", profile.chain, profile.address) : element("span", "Case references are unavailable for this chain."));
@@ -147,7 +149,7 @@ function renderLookup(data, stored = false, labels = [], labelsUnavailable = fal
 }
 
 
-function renderObservationOnly(chain, address, labels = [], labelsUnavailable = false) {
+function renderObservationOnly(chain, address, labels = [], labelsUnavailable = false, sanctions = null) {
   const host = byId("observation-result");
   const heading = element("h2", "Public-source observation"); heading.tabIndex = -1;
   const metadata = chainMetadata(chain);
@@ -157,6 +159,7 @@ function renderObservationOnly(chain, address, labels = [], labelsUnavailable = 
     element("p", "This limitation is not evidence of inactivity, and Greedy Collector has not checked a public balance or transaction history.", "muted small"));
   const available = (metadata?.capabilities || []).map(value => ({address_validation:"Address validation",labels:"Local Labels",cases:"Cases",attribution:"Attribution",discovery:"Discovery"}[value])).filter(Boolean);
   host.append(element("p", "Available actions: " + (available.join(", ") || "None") + ".", "muted small"));
+  host.append(walletSanctions(sanctions,chain,address));
   host.append(element("h3", "Wallet labels"), labelCards(labelsFor(labels, chain, address), "No stored labels for this address."));
   host.append(element("p", labelsUnavailable ? "Current labels could not be loaded." : "Labels are analyst/source annotations, not proof of ownership.", "muted small"));
   const actions = element("div", undefined, "toolbar");
@@ -204,7 +207,8 @@ async function lookup(stored, chain_hint = undefined) {
     if (!hasCapability(chain, "balance") || !hasCapability(chain, "transaction_history")) {
       let labelsUnavailable = false;
       const labels = await readLabels().catch(() => {labelsUnavailable = true; return [];});
-      renderObservationOnly(chain, address, labels, labelsUnavailable);
+      const sanctions = await api(`/sanctions/screen/${encodeURIComponent(chain)}/${encodeURIComponent(address)}`).catch(() => ({listing_state:"SCREENING_UNRESOLVED",match_type:"UNAVAILABLE"}));
+      renderObservationOnly(chain, address, labels, labelsUnavailable, sanctions);
       return;
     }
     const path = `/address/${chain}/${encodeURIComponent(address)}`;
@@ -213,7 +217,8 @@ async function lookup(stored, chain_hint = undefined) {
       const profile = await api(path);
       const txs = await api(`${path}/transactions`);
       const risk = await api(`${path}/risk`).catch(error => {if(error.status === 404) return null; throw error;});
-      data = {address: profile, transactions: txs.transactions, risk, counterparties: []};
+      const sanctions = await api(`/sanctions/screen/${encodeURIComponent(chain)}/${encodeURIComponent(address)}`).catch(() => ({listing_state:"SCREENING_UNRESOLVED",match_type:"UNAVAILABLE"}));
+      data = {address: profile, transactions: txs.transactions, risk, counterparties: [], sanctions_screening: sanctions};
     } else {
       data = await api("/lookup/address", {method: "POST", body: {chain, address}});
     }

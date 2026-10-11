@@ -452,7 +452,7 @@ def test_openapi_explicit_models_enums_and_exact_surface(api):
         '/capabilities', '/path', '/neighborhood', '/runs/{run_id}', '/cases/{case_id}/pin',
     }
     assert API+'/chains' in legacy_paths
-    assert len(paths) == 25 and len(legacy_paths - {API+'/chains'}) == 54
+    assert len(paths) == 25 and len(legacy_paths - {API+'/chains'}) == 62
     assert sum(len(methods) for methods in paths.values()) == 31
     for path, methods in paths.items():
         assert 'delete' not in methods
@@ -500,7 +500,7 @@ def test_current_routes_and_attribution_workspace_without_seed_records(api):
     for path in ('/', '/health', '/docs', '/openapi.json', '/static/js/app.js', '/static/app.css'):
         assert client.get(path).status_code == 200
     html = client.get('/').text
-    assert html.count('data-workspace=') == 11 and 'data-workspace="attribution"' in html
+    assert html.count('data-workspace=') == 12 and 'data-workspace="attribution"' in html
     assert counts(engine) == [0]*5
 
 
@@ -561,7 +561,7 @@ with patch.object(httpx.AsyncClient, 'request', side_effect=AssertionError('No p
         for path in ['/', '/health', '/docs', '/openapi.json']:
             assert client.get(path).status_code == 200
         assert client.get('/api/greedy-collector/attribution/entities').json()['total'] == 0
-        assert client.get('/').text.count('data-workspace=') == 11
+        assert client.get('/').text.count('data-workspace=') == 12
 assert not scheduler.running
 with engine.connect() as connection:
     assert connection.execute(text('SELECT version_num FROM alembic_version')).scalar_one() == before_revision

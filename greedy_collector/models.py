@@ -8,6 +8,7 @@ from sqlalchemy import (
     Float,
     ForeignKey,
     Integer,
+    Index,
     JSON,
     String,
     Text,
@@ -683,3 +684,78 @@ for _sql in PROMOTION_TRIGGER_SQL.values():
     event.listen(DiscoveryPromotion.__table__, 'after_create', DDL(_sql).execute_if(dialect='sqlite'))
 event.listen(DiscoveryPromotion, 'before_update', _immutable_discovery_row)
 event.listen(DiscoveryPromotion, 'before_delete', _immutable_discovery_row)
+
+
+# Authoritative sanctions snapshots are separate from analyst labels and risk.
+class SanctionsSnapshot(Base):
+    __tablename__ = "sanctions_snapshots"
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    source_id: Mapped[str] = mapped_column(String(40), nullable=False, index=True)
+    source_url: Mapped[str] = mapped_column(String(500), nullable=False)
+    retrieved_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    published_at: Mapped[str | None] = mapped_column(String(80))
+    sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    official_sha256: Mapped[str | None] = mapped_column(String(64))
+    integrity_status: Mapped[str] = mapped_column(String(24), nullable=False)
+    parser_version: Mapped[str] = mapped_column(String(32), nullable=False)
+    entity_count: Mapped[int] = mapped_column(Integer, nullable=False)
+    identifier_count: Mapped[int] = mapped_column(Integer, nullable=False)
+    change_counts: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default="complete")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utcnow)
+
+
+class SanctionsRegistryState(Base):
+    __tablename__ = "sanctions_registry_state"
+    source_id: Mapped[str] = mapped_column(String(40), primary_key=True)
+    current_snapshot_id: Mapped[str | None] = mapped_column(String(36), ForeignKey("sanctions_snapshots.id"))
+    sync_lease_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class SanctionsEntity(Base):
+    __tablename__ = "sanctions_entities"
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    snapshot_id: Mapped[str] = mapped_column(String(36), ForeignKey("sanctions_snapshots.id"), nullable=False, index=True)
+    source_entity_id: Mapped[str] = mapped_column(String(80), nullable=False, index=True)
+    name: Mapped[str] = mapped_column(String(500), nullable=False, index=True)
+    entity_type: Mapped[str | None] = mapped_column(String(80))
+    programs: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
+    aliases: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
+    remarks: Mapped[str | None] = mapped_column(Text)
+    __table_args__ = (UniqueConstraint("snapshot_id", "source_entity_id", name="uq_sanctions_entity_snapshot"),)
+
+
+class SanctionsIdentifier(Base):
+    __tablename__ = "sanctions_identifiers"
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    snapshot_id: Mapped[str] = mapped_column(String(36), ForeignKey("sanctions_snapshots.id"), nullable=False, index=True)
+    entity_id: Mapped[str] = mapped_column(String(36), ForeignKey("sanctions_entities.id"), nullable=False, index=True)
+    source_field: Mapped[str] = mapped_column(String(160), nullable=False)
+    source_asset: Mapped[str] = mapped_column(String(80), nullable=False, index=True)
+    raw_value: Mapped[str] = mapped_column(String(512), nullable=False)
+    text_key: Mapped[str] = mapped_column(String(512), nullable=False, index=True)
+    canonical_address: Mapped[str | None] = mapped_column(String(512))
+    chain: Mapped[str | None] = mapped_column(String(32))
+    mapping_status: Mapped[str] = mapped_column(String(32), nullable=False)
+    __table_args__ = (
+        Index("ix_sanctions_exact_chain", "snapshot_id", "chain", "canonical_address"),
+        UniqueConstraint("snapshot_id", "entity_id", "source_field", "raw_value", name="uq_sanctions_identifier_source"),
+    )
+
+
+class SanctionsSyncEvent(Base):
+    __tablename__ = "sanctions_sync_events"
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    source_id: Mapped[str] = mapped_column(String(40), nullable=False, index=True)
+    attempted_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utcnow)
+    status: Mapped[str] = mapped_column(String(20), nullable=False)
+    reason: Mapped[str | None] = mapped_column(String(40))
+    snapshot_id: Mapped[str | None] = mapped_column(String(36), ForeignKey("sanctions_snapshots.id"))
+
+
+class SanctionsCasePin(Base):
+    __tablename__ = "sanctions_case_pins"
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    case_id: Mapped[str] = mapped_column(String(36), ForeignKey("cases.id"), nullable=False, index=True)
+    captured_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utcnow)
+    record: Mapped[dict] = mapped_column(JSON, nullable=False)

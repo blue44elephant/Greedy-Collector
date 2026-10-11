@@ -12,7 +12,7 @@ def test_discovery_routes_and_assets(ui_client,path):
 
 def test_discovery_ninth_workspace(ui_client):
     html=ui_client[0].get('/').text
-    assert html.count('data-workspace=')==11
+    assert html.count('data-workspace=')==12
     assert 'data-workspace="discovery"' in html and 'id="discovery-workspace"' in html
     app=ui_client[0].get('/static/js/app.js').text
     assert 'initDiscovery' in app and 'discovery.setVisible(name === "discovery", restore)' in app

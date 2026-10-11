@@ -273,7 +273,20 @@ The exact, case-sensitive storage key is `(chain,address,label,source)`. Manual 
 
 The calibrated risk policy is unchanged: Sanctioned/Scam/Mixer counterparty contact has raw contributions of **40/30/25**, subject to existing overlap/category caps. Exchange/Bridge/Unknown contribute **0**. A label on the queried wallet is not a newly introduced attribution rule. Wallet risk cards show the label evidence and applied contribution; current annotations may differ from historical saved findings. Labels do not automatically rescore stored results or issue external research requests.
 
-A label is an analyst/source annotation associated with an address, not proof of ownership or confirmed attribution. The separate Attribution workspace organizes explicit claims and immutable evidence; Labels offer an explicit Use as attribution evidence handoff; no automatic conversion occurs. No automatic attribution, sanctions ingestion, or sample labels are included here.
+A label is an analyst/source annotation associated with an address, not proof of ownership or confirmed attribution. The separate Attribution workspace organizes explicit claims and immutable evidence; Labels offer an explicit Use as attribution evidence handoff; no automatic conversion occurs. No automatic attribution or sample labels are included here. Authoritative OFAC SDN synchronization is a separate, explicit Sanctions workflow; it does not create Labels.
+
+## Sanctions registry
+
+The **Sanctions** workspace explicitly synchronizes the official OFAC SDN XML
+list and screens wallet addresses against the latest complete local snapshot.
+A current direct match is displayed separately from behavioral risk. Historical,
+unresolved-chain, stale, and unsynchronized states remain distinct. Refreshing
+never collects blockchain transactions or creates monitoring watches. Run
+`alembic upgrade head` before using this new workspace. See
+[Sanctions registry](docs/SANCTIONS_REGISTRY.md) for source, integrity,
+matching, Case pin, and Discovery details. RISK-2 will separately audit a
+public-tracker wallet that yielded unexpectedly low GC risk; SANC-1 does not
+change risk scoring or encode that wallet in production data.
 
 ## Research — public records & screening
 

@@ -74,6 +74,7 @@ def status():
             "cases",
             "labels",
             "kyc_screening",
+            "sanctions_screening",
             "reports",
         ],
     }
@@ -459,3 +460,6 @@ router.include_router(clustering_router)
 
 from .fund_flow.router import router as fund_flow_router
 router.include_router(fund_flow_router)
+
+from .sanctions.router import router as sanctions_router
+router.include_router(sanctions_router)

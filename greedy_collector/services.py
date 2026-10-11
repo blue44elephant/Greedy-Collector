@@ -48,6 +48,16 @@ class GreedyCollectorService:
     async def lookup_address(self, db: Session, request: LookupRequest, *, profile_override=None, transactions_override=None) -> dict:
         get_chain(request.chain).require(Capability.BALANCE,Capability.TRANSACTION_HISTORY,Capability.RISK)
         adapter = get_chain_adapter(request.chain)
+        from .sanctions.service import screen as sanctions_screen
+        from sqlalchemy.exc import SQLAlchemyError
+        try:
+            sanctions = sanctions_screen(db,request.chain,request.address)
+        except SQLAlchemyError:
+            # An unmigrated/unavailable registry must never be rendered as clean.
+            db.rollback()
+            sanctions = {'chain':request.chain,'address':request.address,
+                         'listing_state':'SCREENING_UNRESOLVED','match_type':'UNAVAILABLE',
+                         'associations':[],'snapshot':None,'stale':False}
         profile = profile_override if profile_override is not None else await adapter.lookup_address(request.address)
         transactions = transactions_override if transactions_override is not None else await adapter.transactions(request.address)
         retrieved_at = datetime.now(timezone.utc).isoformat()
@@ -111,6 +121,7 @@ class GreedyCollectorService:
             "counterparties": self._counterparties(request.address, transactions),
             "labels": labels,
             "risk": risk,
+            "sanctions_screening": sanctions,
             "collection": collection,
             "provenance": {
                 "source_api": profile.get("source_api"),

@@ -28,6 +28,11 @@ export async function api(path, {method = "GET", body, binary = false} = {}) {
     if ([429, 502, 503, 504].includes(response.status)) message = "Blockchain provider request failed. Try again later.";
     if (response.status === 502 && /provider configuration is unavailable/i.test(detail)) message = detail;
     if (response.status === 502 && /(?:ETHERSCAN_API_KEY|ALCHEMY_API_KEY)/i.test(detail)) message = "Blockchain provider configuration is unavailable.";
+    if (path.startsWith("/sanctions/")) {
+      if (response.status === 409) message = "OFAC synchronization is already running.";
+      else if (response.status === 502) message = "OFAC synchronization failed. The previous snapshot remains available.";
+      else if (response.status === 503) message = "Sanctions registry storage is unavailable.";
+    }
     throw new ApiError(response.status, message);
   }
   if (binary) return response.blob();

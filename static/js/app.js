@@ -1,3 +1,4 @@
+import {initSanctions} from './sanctions.js';
 import {initFundFlow} from './fund_flow.js';
 import {initClustering} from './clustering.js';
 import {refreshLabelChains} from './label_ui.js';
@@ -26,6 +27,7 @@ function navigate(name, id, restore = false) {
   if (name === "alerts") loadAlerts(id);
   if (name === "cases") loadCases(id);
   if (name === "labels") loadLabels(id);
+  if (name === "sanctions") sanctions.load();
   if (name === "research") loadResearch();
   if (name === "attribution") loadAttribution(id);
   if (!restore && name === "wallet" && !byId("results").hidden) refreshAttribution(byId("wallet-workspace"));
@@ -44,6 +46,7 @@ const loadMonitoring = initMonitoring();
 const loadAlerts = initAlerts(navigate);
 const loadCases = initCases();
 const loadLabels = initLabels();
+const sanctions = initSanctions();
 const loadResearch = initResearch();
 const loadAttribution = initAttribution();
 const discovery = initDiscovery();
@@ -69,3 +72,5 @@ document.addEventListener('open-discovery-blockchain-graph',event=>{
   navigate('graph',undefined,true);
   document.dispatchEvent(new CustomEvent('wallet-selected',{detail:event.detail}));
 });
+
+document.addEventListener("investigate-wallet", event => {investigateWallet(event.detail.chain,event.detail.address);});
