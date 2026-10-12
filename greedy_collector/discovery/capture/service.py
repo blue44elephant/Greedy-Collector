@@ -6,7 +6,7 @@ from sqlalchemy import select, func, inspect
 from ...models import DiscoveryObservation, DiscoveryResult, DiscoverySubject, DiscoveryRunSource, Case, CaseEntity
 from ...migration_state import supports_revision
 from ...attribution.service import AttributionService, Evidence, ACTOR
-from ...attribution.domain import EvidenceContentInput, LinkInput, fingerprint
+from ...attribution.domain import EvidenceContentInput, LinkInput, fingerprint, apply_evidence_quality
 from ..domain import DiscoveryError, Conflict, NotFound, SchemaUnavailable, clean
 from ..service import atomic, row_data
 from ..broad import is_web_source
@@ -111,8 +111,14 @@ class CaptureService:
             source_name='Greedy Collector public source capture',source_url=capture['final_url'],source_locator='public-source-capture:'+identifier,
             origin='public_osint',observed_on=capture['retrieved_at'][:10],analyst_note=snapshot['review']['note'],metadata_json=snapshot)).model_dump()
         values.update(collection_method='discovery_snapshot',origin_discovery_observation_id=origin['observation_id'],origin_label_id=None,origin_match_id=None)
-        ev=Evidence(**values,captured_by=ACTOR,content_sha256=fingerprint(values));self.db.add(ev);self.db.flush()
-        svc._event(ev,'created','Reviewed public capture explicitly promoted with analyst-selected excerpt')
+        values=apply_evidence_quality(values,payload.source_reliability,payload.reliability_rationale)
+        digest=fingerprint(values)
+        ev=self.db.scalar(select(Evidence).where(Evidence.content_sha256==digest,
+            Evidence.source_locator=='public-source-capture:'+identifier,
+            Evidence.origin_discovery_observation_id==origin['observation_id']).order_by(Evidence.id).limit(1))
+        if ev is None:
+            ev=Evidence(**values,captured_by=ACTOR,content_sha256=digest);self.db.add(ev);self.db.flush()
+            svc._event(ev,'created','Reviewed public capture explicitly promoted with analyst-selected excerpt')
         linked=svc._link(claim,ev.id,link,payload.expected_claim_version)
         row=Promotion(id=str(uuid4()),capture_id=identifier,claim_id=claim.id,evidence_id=ev.id,link_id=linked['link']['id'],source_fingerprint=preview['source_fingerprint'],created_at=datetime.now(timezone.utc).isoformat())
         self.db.add(row);self.db.flush()

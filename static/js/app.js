@@ -5,7 +5,7 @@ import {refreshLabelChains} from './label_ui.js';
 import {loadChains} from './chains.js';
 import {refreshAttribution} from "./attribution_summary.js";
 import {byId} from "./ui.js";
-import {initWallet} from "./wallet.js";
+import {initWallet, investigate} from "./wallet.js";
 import {initGraph} from "./graph.js";
 import {initMonitoring} from "./monitoring.js";
 import {initAlerts} from "./alerts.js";
@@ -73,4 +73,4 @@ document.addEventListener('open-discovery-blockchain-graph',event=>{
   document.dispatchEvent(new CustomEvent('wallet-selected',{detail:event.detail}));
 });
 
-document.addEventListener("investigate-wallet", event => {investigateWallet(event.detail.chain,event.detail.address);});
+document.addEventListener("investigate-wallet", event => {investigate(event.detail.chain,event.detail.address);});

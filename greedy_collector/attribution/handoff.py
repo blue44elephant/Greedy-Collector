@@ -9,7 +9,7 @@ from pydantic import ValidationError
 from ..models import Label, KycMatch, KycScreeningRun
 from ..kyc.sources import SOURCE_CATALOG
 from ..kyc.presentation import sanitize_research, sensitive_name
-from .domain import AttributionError, Conflict, EvidenceContentInput, LinkInput, fingerprint, json_safe, normalize_subject
+from .domain import AttributionError, Conflict, EvidenceContentInput, LinkInput, fingerprint, json_safe, normalize_subject, apply_evidence_quality
 from .service import AttributionService, Evidence, Link, ACTOR, atomic, row_data
 
 
@@ -92,7 +92,8 @@ class EvidenceHandoffService(AttributionService):
                 'snapshot':values['metadata_json']}
 
     @atomic
-    def capture_source(self,claim_id,kind,identifier,link_payload,*,expected_version,expected_source_fingerprint):
+    def capture_source(self,claim_id,kind,identifier,link_payload,*,expected_version,expected_source_fingerprint,
+                       source_reliability='unassessed',reliability_rationale=''):
         claim=self._claim(claim_id)
         if type(expected_version) is not int or expected_version!=claim.version:
             raise Conflict('Attribution version changed; reload before writing')
@@ -100,6 +101,8 @@ class EvidenceHandoffService(AttributionService):
         values=self._source(kind,identifier);digest=fingerprint(values)
         if digest!=expected_source_fingerprint:
             raise Conflict('Source record changed; preview it again before capture')
+        values=apply_evidence_quality(values,source_reliability,reliability_rationale)
+        digest=fingerprint(values)
         if kind=='label':
             record=values['metadata_json']['record']
             if record['chain'] not in ('any',claim.chain):
@@ -110,7 +113,10 @@ class EvidenceHandoffService(AttributionService):
         existing=self.db.scalar(select(Link).join(Evidence,Link.evidence_id==Evidence.id).where(
             Link.claim_id==claim.id,Evidence.content_sha256==digest))
         if existing:raise Conflict('This source snapshot is already linked; inspect or restore its link',existing.id)
-        evidence=Evidence(**values,captured_by=ACTOR,content_sha256=digest)
-        self.db.add(evidence);self.db.flush()
-        self._event(evidence,'created','Immutable local source snapshot explicitly captured')
+        evidence=self.db.scalar(select(Evidence).where(Evidence.content_sha256==digest,
+            Evidence.collection_method==values['collection_method']).order_by(Evidence.id).limit(1))
+        if evidence is None:
+            evidence=Evidence(**values,captured_by=ACTOR,content_sha256=digest)
+            self.db.add(evidence);self.db.flush()
+            self._event(evidence,'created','Immutable local source snapshot explicitly captured')
         return self._link(claim,evidence.id,link_payload,expected_version)

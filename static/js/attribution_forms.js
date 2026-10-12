@@ -30,6 +30,17 @@ export const linkFields = row => [
 ];
 export const linkData = data => ({stance:data.stance, directness:data.directness, rationale:data.rationale});
 
+export const qualityFields = () => [
+  {name:'source_reliability',label:'Source reliability (analyst assessment)',options:options(['unassessed','reliable','uncertain','unreliable'])},
+  {name:'reliability_rationale',label:'Reliability rationale (required when assessed)',type:'textarea',maxLength:8000},
+];
+export function qualityData(data) {
+  const source_reliability=data.source_reliability || 'unassessed';
+  const reliability_rationale=data.reliability_rationale || '';
+  if(source_reliability!=='unassessed'&&!reliability_rationale.trim())throw new UserError('Explain the source reliability assessment.');
+  return {source_reliability,reliability_rationale};
+}
+
 export function captureFields() {
   return [
     {name:'evidence_type',label:'Evidence type',options:options(evidenceTypes)},

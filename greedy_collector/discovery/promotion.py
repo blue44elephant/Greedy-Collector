@@ -5,7 +5,7 @@ from ..models import (DiscoveryPromotion as Promotion, DiscoveryObservation as O
     DiscoverySubject as Subject, PROMOTION_TRIGGER_SQL)
 from ..migration_state import supports_revision
 from ..attribution.service import AttributionService, Evidence, Link, atomic, row_data, ACTOR
-from ..attribution.domain import Conflict, AttributionError, EvidenceContentInput, LinkInput, fingerprint
+from ..attribution.domain import Conflict, AttributionError, EvidenceContentInput, LinkInput, fingerprint, apply_evidence_quality
 from .service import DiscoveryService
 from .domain import clean
 from .registry import REGISTRY
@@ -62,7 +62,9 @@ class PromotionService(AttributionService):
         public=public_material(result,observation,source,subject,endpoint)
         from .broad.providers import promotable
         broad=promotable(result,observation,source,subject)
-        eligible_source = bool((local or github or ens or manual or public or broad) and policy and transform and policy.storage_allowed
+        from .ofac_local import verified_material as ofac_material
+        ofac=ofac_material(self.db,result,observation,source,subject)
+        eligible_source = bool((local or github or ens or manual or public or broad or ofac) and policy and transform and policy.storage_allowed
             and policy.retention_policy_id == source.retention_policy_id
             and (policy.version,transform.version) == (source.source_version,source.transform_version)
             and source.descriptor_snapshot.get('source',{}).get('storage_allowed')
@@ -94,9 +96,9 @@ class PromotionService(AttributionService):
         else:snapshot=clean(snapshot)
         evidence_fields = dict(
             evidence_type='discovery_snapshot',
-            title='GC Discovery - Local Label' if local else 'GC Discovery - ENS primary name' if ens else 'GC Discovery - Manual source observation' if manual else 'GC Discovery - GraphSense public tag' if public else 'GC Discovery - Broad public source' if broad else 'GC Discovery - GitHub code mention',
+            title='GC Discovery - OFAC SDN association' if ofac else 'GC Discovery - Local Label' if local else 'GC Discovery - ENS primary name' if ens else 'GC Discovery - Manual source observation' if manual else 'GC Discovery - GraphSense public tag' if public else 'GC Discovery - Broad public source' if broad else 'GC Discovery - GitHub code mention',
             summary=observation.summary, excerpt=observation.excerpt,
-            source_name='Greedy Collector Label via Discovery' if local else 'ENS / Ethereum via Discovery' if ens else 'Manual analyst capture via Discovery' if manual else 'GraphSense public TagPacks via Discovery' if public else self.registry.sources[source.source_id].display_name+' via Discovery' if broad else 'GitHub via Discovery',
+            source_name='OFAC SDN via local Discovery snapshot' if ofac else 'Greedy Collector Label via Discovery' if local else 'ENS / Ethereum via Discovery' if ens else 'Manual analyst capture via Discovery' if manual else 'GraphSense public TagPacks via Discovery' if public else self.registry.sources[source.source_id].display_name+' via Discovery' if broad else 'GitHub via Discovery',
             source_url=observation.source_url, source_locator='discovery-observation:'+observation.id,
             source_catalog_id=source.source_id, origin='analyst_added' if local or manual else 'public_osint',
             observed_on=observation.observed_on or (observation.observed_at.date() if observation.observed_at else None),
@@ -111,6 +113,9 @@ class PromotionService(AttributionService):
         # Unverified code context is retained only as context. Exact code excerpts
         # allow explicit analyst interpretation; exactness supplies no stance.
         context_only = github and observation.verification not in ('exact_in_excerpt','exact_in_document')
+        if ofac:
+            identifier=observation.source_snapshot['identifier']
+            context_only = (identifier.get('chain'),identifier.get('canonical_address')) != (subject.namespace,subject.canonical_value)
         source_fingerprint = fingerprint({'policy_version':1, 'capture':values,
             'review_id':review.id if review else None, 'eligible':eligible,
             'context_only':context_only, 'retention_policy':policy.retention_policy_id if policy else None})
@@ -147,7 +152,7 @@ class PromotionService(AttributionService):
         link = LinkInput.model_validate(data.link.model_dump()).model_dump()
         if preview['context_only'] and (link['stance'],link['directness']) != ('context','context'):
             raise AttributionError('Unverified search material can only provide contextual evidence')
-        values = preview['evidence']
+        values = apply_evidence_quality(preview['evidence'],data.source_reliability,data.reliability_rationale)
         digest = fingerprint(values)
         evidence = self.db.scalar(select(Evidence).where(Evidence.content_sha256 == digest,
             Evidence.origin_discovery_observation_id == observation_id).order_by(Evidence.id).limit(1))

@@ -99,13 +99,15 @@ def preview_source(source_kind: Literal['label','research'], source_id: str, svc
 @router.post('/claims/{claim_id}/evidence/from-label/{label_id}', response_model=s.LinkResult, status_code=201)
 def handoff_label(claim_id: str, label_id: str, payload: s.SourceHandoff, svc: Handoff):
     return svc.capture_source(claim_id,'label',label_id,payload.link.model_dump(),
-        expected_version=payload.expected_version,expected_source_fingerprint=payload.expected_source_fingerprint)
+        expected_version=payload.expected_version,expected_source_fingerprint=payload.expected_source_fingerprint,
+        source_reliability=payload.source_reliability,reliability_rationale=payload.reliability_rationale)
 
 
 @router.post('/claims/{claim_id}/evidence/from-research/{match_id}', response_model=s.LinkResult, status_code=201)
 def handoff_research(claim_id: str, match_id: str, payload: s.SourceHandoff, svc: Handoff):
     return svc.capture_source(claim_id,'research',match_id,payload.link.model_dump(),
-        expected_version=payload.expected_version,expected_source_fingerprint=payload.expected_source_fingerprint)
+        expected_version=payload.expected_version,expected_source_fingerprint=payload.expected_source_fingerprint,
+        source_reliability=payload.source_reliability,reliability_rationale=payload.reliability_rationale)
 
 
 def page(result, limit, offset):

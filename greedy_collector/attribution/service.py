@@ -4,7 +4,7 @@ from ..chain_types import supported_chain
 
 from pydantic import ValidationError
 
-from sqlalchemy import func, inspect, select, text, update
+from sqlalchemy import exists, func, inspect, or_, select, text, update
 from sqlalchemy.exc import IntegrityError, OperationalError
 
 from ..models import (AttributionEntity as Entity, AttributionClaim as Claim,
@@ -151,7 +151,16 @@ class AttributionService:
         query = select(Entity)
         if not include_archived: query = query.where(Entity.archived_at.is_(None))
         if entity_type: query = query.where(Entity.entity_type == choice(entity_type, ENTITY_TYPES))
-        if search: query = query.where(Entity.name_key.contains(name_key(search), autoescape=True))
+        if search:
+            key = name_key(search)
+            # Aliases keep their literal spelling. Normalize only at query time,
+            # using the same Unicode rules as canonical names and no merge logic.
+            self.db.connection().connection.driver_connection.create_function(
+                'gc_attribution_name_key', 1, name_key, deterministic=True)
+            aliases = func.json_each(Entity.aliases).table_valued('value').alias()
+            alias_match = exists(select(1).select_from(aliases).where(
+                func.gc_attribution_name_key(aliases.c.value).contains(key, autoescape=True)))
+            query = query.where(or_(Entity.name_key.contains(key, autoescape=True), alias_match))
         return self._page(Entity, query.order_by(Entity.created_at, Entity.id), limit=limit, offset=offset)
 
     @atomic

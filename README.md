@@ -439,3 +439,7 @@ See [Broad Wallet Discovery](docs/BROAD_WALLET_DISCOVERY.md) for bounds and free
 Brave Web Search is optional and requires a server-side key plus appropriate storage
 rights. Other Discovery sources remain independently available. No automatic identity
 claims, crawling or recursive searching. See [Broad Wallet Discovery](docs/BROAD_WALLET_DISCOVERY.md).
+
+## Attribution completion (AT-7)
+
+See [Attribution architecture](docs/ATTRIBUTION_ARCHITECTURE.md) and the [analyst guide](docs/ATTRIBUTION_ANALYST_GUIDE.md) for explicit wallet claims, contradictions, version checks, immutable source promotion and historical Case/report pins. AT-7 adds no migration; the head remains 20261012_01_risk_labels_v3.

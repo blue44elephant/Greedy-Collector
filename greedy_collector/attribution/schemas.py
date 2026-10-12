@@ -79,7 +79,11 @@ class LinkUpdate(VersionAction):
     link: LinkFields
 
 
-class SourceHandoff(domain.Input):
+class QualityFields(domain.EvidenceQualityInput):
+    source_reliability: Reliability = 'unassessed'
+
+
+class SourceHandoff(QualityFields):
     expected_version: Version
     expected_source_fingerprint: Annotated[str, Field(pattern=r'^[a-f0-9]{64}$')]
     link: LinkFields

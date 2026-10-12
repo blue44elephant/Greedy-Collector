@@ -17,7 +17,9 @@ export function captureFacts(c){return [
   ['Captured bytes',c.byte_count],['SHA-256',c.body_sha256||'No complete body hash'],
   ['Wallet string found',c.wallet_present_in_capture===true?'Yes':c.wallet_present_in_capture===false?'No':'Not evaluated'],
   ['Changed since previous capture',({CHANGED:'CHANGED',UNCHANGED:'UNCHANGED',FIRST_CAPTURE:'First capture',NOT_COMPARED:'Not compared'})[c.change_state]||'Not compared'],
-  ['Original provider',c.origin?.provider],['Chain',c.origin?.chain],['Wallet',c.origin?.wallet]
+  ['Original provider',c.origin?.provider],['Original observation',c.origin?.observation_id],
+  ['Original result',c.origin?.result_id],['Original run',c.origin?.run_id],
+  ['Chain',c.origin?.chain],['Wallet',c.origin?.wallet]
 ];}
 export function captureProvenance(snapshot){
   const host=element('section');host.append(element('h3','Public source capture provenance'),table(['Field','Captured value'],captureFacts(snapshot.capture)),element('p',`Review: ${snapshot.review?.status} | ${snapshot.review?.note||''}`),element('blockquote',snapshot.selected_excerpt||''),element('p','Captured public text is source material, not proof of ownership.'));

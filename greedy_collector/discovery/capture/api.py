@@ -4,6 +4,7 @@ from pydantic import Field, field_validator
 from ..domain import Input
 from .service import CaptureService
 from . import network
+from ...attribution.schemas import QualityFields
 
 class Confirm(Input):
     confirmed:Literal[True]
@@ -19,7 +20,7 @@ class ReviewInput(Input):
 class ExcerptInput(Input):
     excerpt:str=Field(min_length=1,max_length=8000)
     expected_source_fingerprint:str=Field(pattern=r'^[a-f0-9]{64}$')
-class PromoteInput(ExcerptInput):
+class PromoteInput(ExcerptInput, QualityFields):
     claim_id:str=Field(min_length=1,max_length=36)
     expected_claim_version:int=Field(strict=True,ge=1)
     link:dict

@@ -4,6 +4,41 @@ from .handoff import safe_snapshot
 DISCLAIMER='Attribution assessments are evidence-backed analytic judgments and do not by themselves establish legal ownership or identity.'
 
 
+def provenance_lines(capture):
+    metadata=capture.get('metadata_json') or {}
+    lines=[f"Evidence SHA-256: {capture['content_sha256']}"]
+    for field,title in [('origin_label_id','Original Label'),('origin_match_id','Original Research match'),
+                        ('origin_discovery_observation_id','Original Discovery observation')]:
+        if capture.get(field):lines.append(f"{title}: {capture[field]}")
+    if metadata.get('source_subsystem'):lines.append(f"Source subsystem: {metadata['source_subsystem']}")
+    if metadata.get('discovery_result_id'):
+        lines.extend([f"Discovery result: {metadata['discovery_result_id']}",
+            f"Observation fingerprint: {metadata.get('observation_fingerprint')}",
+            f"Review note: {metadata.get('analyst_review_note') or 'Not supplied'}"])
+    source_capture=metadata.get('capture')
+    if isinstance(source_capture,dict):
+        for key,title in [('id','Public capture ID'),('requested_url','Requested URL'),('final_url','Final URL'),
+                          ('retrieved_at','Source capture time'),('body_sha256','Source body SHA-256'),
+                          ('wallet_present_in_capture','Wallet literal present')]:
+            lines.append(f"{title}: {source_capture.get(key)}")
+        review=metadata.get('review') or {}
+        lines.append(f"Capture review: {review.get('status')} / version {review.get('sequence')}; {review.get('note') or ''}")
+        origin=source_capture.get('origin') or {}
+        lines.append(f"Source search origin: observation {origin.get('observation_id')}; result {origin.get('result_id')}; run {origin.get('run_id')}; provider {origin.get('provider')}")
+    snapshot=(metadata.get('observation') or {}).get('source_snapshot') or {}
+    if snapshot.get('source_id')=='ofac_sdn':
+        entity=snapshot.get('entity') or {};identifier=snapshot.get('identifier') or {}
+        lines.extend([f"OFAC snapshot: {snapshot.get('snapshot_id')}; SHA-256: {snapshot.get('snapshot_sha256')}",
+            f"OFAC source entity: {entity.get('source_entity_id')}; {entity.get('name')}; programs: {', '.join(entity.get('programs') or [])}",
+            f"Raw digital-currency identifier: {identifier.get('raw_value')}; source field: {identifier.get('source_field')}",
+            f"Source association at observation: {snapshot.get('listing_state')} / {snapshot.get('match_type')}",
+            "OFAC association is source evidence; no automatic ownership or control conclusion."])
+    cluster=metadata.get('technical_cluster')
+    if isinstance(cluster,dict):
+        lines.append(f"Analyst contextual cluster reference: {cluster.get('cluster_id')}; version {cluster.get('version')}. Technical grouping does not establish a common owner.")
+    return lines
+
+
 def attribution_lines(material):
     if material is None:return []
     material=safe_snapshot(material)
@@ -45,6 +80,7 @@ def attribution_lines(material):
                         f"Published: {capture['published_on'] or 'Unknown'}; observed: {capture['observed_on'] or 'Unknown'}; captured: {capture['captured_at']}",
                         f"Pinned directness: {link['directness']}; rationale: {link['rationale']}",
                         f"Source reliability: {capture['source_reliability']}; {capture['reliability_rationale']}"]
+                lines+=provenance_lines(capture)
                 if now_link and (now_link['stance']!=link['stance'] or now_link['directness']!=link['directness']):
                     lines+=[f"Current relevance changed: {now_link['stance']} / {now_link['directness']}; historical role retained above."]
     return lines

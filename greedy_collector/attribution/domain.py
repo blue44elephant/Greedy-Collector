@@ -226,6 +226,27 @@ class EvidenceInput(EvidenceContentInput):
         return self
 
 
+class EvidenceQualityInput(Input):
+    """Explicit analyst description at capture time, never inferred from a source."""
+    source_reliability: str = "unassessed"
+    reliability_rationale: str = Field(default="", max_length=8000)
+
+    @model_validator(mode="after")
+    def quality(self):
+        choice(self.source_reliability, enums.RELIABILITIES)
+        if self.source_reliability != "unassessed" and not self.reliability_rationale.strip():
+            raise AttributionError("Assessed source reliability requires a rationale")
+        return self
+
+
+def apply_evidence_quality(values, source_reliability="unassessed", reliability_rationale=""):
+    quality = EvidenceQualityInput.model_validate({
+        "source_reliability": source_reliability,
+        "reliability_rationale": reliability_rationale,
+    }).model_dump()
+    return {**values, **sanitize_research(quality)}
+
+
 def reason_text(value):
     if not isinstance(value, str) or not value.strip() or len(value) > 8000:
         raise AttributionError("A concise nonblank reason is required")

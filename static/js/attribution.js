@@ -102,7 +102,7 @@ export function initAttribution() {
     button('Clear entity filter',async()=>{filterEntity=null;filterTarget.textContent='All entities';claimOffset=0;await loadClaims();}));
   claimsView.append(button('Create claim',()=>openClaimEditor()),claimEditor,claimFilters,claimList,claimDetail);
   const ef=form('attr-entity-filters',[
-    {name:'search',label:'Canonical name contains',maxLength:255},
+    {name:'search',label:'Name or alias contains',maxLength:255},
     {name:'entity_type',label:'Entity type',options:[['','All types'],...options(entityTypes)]},
     {name:'include_archived',label:'Include archived entities',type:'checkbox'},
   ],'Apply entity filters',async()=>{entityOffset=0;await loadEntities();});
@@ -119,7 +119,7 @@ export function initAttribution() {
     const page=await readPage('/claims',filters,offset);
     // Only fetch descriptors referenced on this bounded page, never the full entity database.
     const names=new Map(await Promise.all([...new Set(page.items.map(row=>row.entity_id))].map(async id=>[id,await request(`/entities/${encodeId(id)}`)])));
-    claimList.replaceChildren(element('h2','Claims'),table(['Subject','Chain','Relationship','Attributed entity','Last assessment','Review','Archive state','Updated (UTC)',''],
+    claimList.replaceChildren(element('h2','Claims'),table(['Subject','Chain','Relationship','Claimed entity','Last assessment','Review','Archive state','Updated (UTC)',''],
       page.items.map(row=>[shortValue(row.subject_ref),caption(row.chain),caption(row.relationship),names.get(row.entity_id).canonical_name,
         caption(row.assessment),row.needs_review?'Review required':'Up to date',row.archived_at?'Claim archived':names.get(row.entity_id).archived_at?'Entity archived':'Active',
         dateText(row.updated_at),button('View claim',()=>showClaim(row.id))]),'No attribution claims have been created.'),pager(page,loadClaims));
@@ -133,7 +133,7 @@ export function initAttribution() {
   async function chooseEntity(choose) {
     picker.replaceChildren(element('h2','Choose an existing entity'),element('p','Names are not unique. Inspect the type and identifier before selecting.','muted small'));
     const list=element('div');
-    const search=form('attr-picker-filter',[{name:'search',label:'Canonical name contains',maxLength:255}],'Search entities',()=>load(0));
+    const search=form('attr-picker-filter',[{name:'search',label:'Name or alias contains',maxLength:255}],'Search entities',()=>load(0));
     picker.append(search,list,button('Cancel',()=>picker.close()));
     async function load(offset) {
       const page=await readPage('/entities',{search:search.elements.search.value},offset,10);
@@ -175,8 +175,8 @@ export function initAttribution() {
   function openClaimEditor(entity=null,subject=null) {
     pendingSubject=null;
     targetEntity=entity;claimEditor.replaceChildren(element('h2','Create claim'));
-    const target=element('p',entity?`Attributed entity: ${entity.canonical_name}`:'Choose an entity before creating the claim.');target.id='attr-claim-target';
-    claimEditor.append(target,button('Choose target entity',()=>chooseEntity(row=>{targetEntity=row;target.textContent=`Attributed entity: ${row.canonical_name} · ${row.id}`;})),
+    const target=element('p',entity?`Claimed entity: ${entity.canonical_name}`:'Choose an entity before creating the claim.');target.id='attr-claim-target';
+    claimEditor.append(target,button('Choose target entity',()=>chooseEntity(row=>{targetEntity=row;target.textContent=`Claimed entity: ${row.canonical_name} · ${row.id}`;})),
       button('Create a new entity',async()=>{const node=claimEditor.querySelector('form');pendingSubject={chain:node.elements.chain.value,address:node.elements.subject_ref.value};await switchView('entities');openEntityEditor();}),
       form('attr-claim-form',claimFields(),'Save claim',async data=>{
         if(!targetEntity)throw new UserError('Choose or create the target entity first.');
@@ -192,7 +192,7 @@ export function initAttribution() {
     claimEditor.hidden=true;
     claimDetail.replaceChildren(element('h2','Claim detail'),element('p',row.subject_ref,'full-address'));
     claimDetail.append(metadata([
-      ['Chain',caption(row.chain)],['Normalized subject',row.subject_ref],['Relationship',caption(row.relationship)],['Attributed entity',row.entity.canonical_name],
+      ['Chain',caption(row.chain)],['Normalized subject',row.subject_ref],['Relationship',caption(row.relationship)],['Claimed entity',row.entity.canonical_name],
       ['Entity type',caption(row.entity.entity_type)],['Last assessment',caption(row.assessment)],['Review',row.needs_review?'Review required':'Up to date'],
       ['Version',row.version],['Archive state',row.archived_at?'Claim archived':row.entity_archived?'Entity archived':'Active'],
       ['Created',dateText(row.created_at)],['Updated',dateText(row.updated_at)],['Actor',row.created_by],['Claim ID',row.id],
@@ -202,9 +202,14 @@ export function initAttribution() {
     claimDetail.append(review,element('h3','Scope and rationale'),element('p',row.scope_note,'prose'),element('h3','Assessment rationale'),
       element('p',row.assessment_rationale||'No assessment rationale recorded.','prose'));
     const count=row.active_evidence_counts;
+    if(count.contradicts>0) {
+      const warning=element('p',`${count.contradicts} active contradicting evidence link(s). Contradictions remain part of this claim regardless of its assessment. Review them and record your rationale.`, 'bounded-note');
+      warning.id='attr-contradiction-warning';claimDetail.append(warning);
+    }
     claimDetail.append(element('p',`${count.supports} supporting · ${count.contradicts} contradicting · ${count.context} contextual active links`,'attr-counts'));
     const controls=element('div',undefined,'toolbar'),editor=element('section');editor.id='attr-claim-action';
     controls.append(addToCaseButton('attribution_claim',row.chain,row.id,{expected_version:row.version}));
+    controls.append(button('Investigate wallet',()=>document.dispatchEvent(new CustomEvent('investigate-wallet',{detail:{chain:row.chain,address:row.subject_ref}}))));
     const active=!row.archived_at&&!row.entity_archived;
     if(active)controls.append(button('Capture evidence',()=>captureEditor(editor,row)),button('Link existing evidence',()=>reuseEvidence(editor,row)),
       button('Review assessment',()=>assessmentEditor(editor,row)),button('Revise scope',()=>{

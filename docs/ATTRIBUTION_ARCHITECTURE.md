@@ -1,6 +1,105 @@
 # Greedy Collector attribution architecture
 
-Status: proposed design for review; no attribution implementation or migration. Audit date: 2026-09-12. Repository: `C:\Tools\Inventions\greedy-collector`. Starting application baseline: 242 tests. All table names, APIs, controls, and phases below marked proposed are future work, not currently available functionality.
+Status: implemented V1 contract, audited by AT-7 on 2026-10-12. Repository:
+`C:\Tools\Inventions\greedy-collector`. The current contract below supersedes the
+original 2026-09-12 design retained later in this document as historical context.
+
+## Current V1 contract — AT-7
+
+An **Entity** is an analyst/source-described named subject. A **Claim** is an
+explicit, scoped assertion linking a canonical wallet identity `(chain,address)`
+to an Entity. **Evidence** is immutable captured source material; its relevance
+belongs to a separate ClaimEvidence link. None of these records is an identity
+probability or automatic ownership finding.
+
+The supported relationships are `operated_by` (operational responsibility),
+`controlled_by` (claimed technical control), and `publicly_declared_by` (an explicit
+public wallet declaration by the target). Every relationship needs scope and
+evidence. `owned_by` and vague `associated_with` remain deferred. Claim subjects
+are wallets only; transaction, domain and technical-cluster claim subjects remain
+outside declared V1. A technical cluster's exact ID/version can be retained as
+analyst-entered contextual evidence for a wallet claim. It neither attributes all
+members nor applies to future cluster versions.
+
+Entities allow literal analyst-added aliases, descriptions and types. Name and
+alias search use the same Unicode normalization locally. Duplicate names/aliases
+never merge entities. Entity descriptor changes carry expected_version, actor,
+time, reason and complete before/after descriptors. Removing an alias withdraws
+it from the current descriptor while retaining its historical spelling and event.
+Source-derived alias provenance belongs in Evidence. Independent alias objects,
+fuzzy entity merging and standalone alias archive APIs are deferred.
+
+Assessment states are `unassessed`, `possible`, `supported`, `strongly_supported`
+and `rejected`. There is no Confirmed state. Possible needs active support;
+Supported needs direct support with assessed reliability; Strongly supported needs
+reliable direct support plus source-verification rationale. All current links must
+be reviewed, and all active contradictions explicitly acknowledged with a conflict
+discussion. Analysts retain final judgment; contradictions stay visible after a
+stronger assessment. Rejected preserves assertion, evidence and events. Archive
+is lifecycle state; withdrawal from a claim applies to evidence links. Claim
+withdrawal uses archive plus an explicit reason, not a new unsupported enum.
+
+Evidence corrections create a new capture and withdraw the previous claim link,
+or withdraw/reuse explicitly. Underlying source material, hash, origin, capture
+time and actor never change. Identical server-captured material can be reused
+across claims; each link has its own relevance. Changed excerpts/reliability/source
+review produce distinct captures. Duplicate linkage/promotion returns HTTP 409
+with retained identity where available, so retries create no extra records.
+
+Discovery promotion requires Relevant review of the selected immutable observation,
+exact wallet/chain, source fingerprint, expected claim version and chosen relevance.
+Public Source Capture promotion additionally retains capture ID, requested/final
+URLs, body SHA-256, source timestamp, wallet-present state, literal selected excerpt
+and review history. Analysts may describe source reliability at promotion time;
+it defaults to unassessed and non-unassessed values require rationale. This quality
+description is immutable and does not inherit a Label confidence or provider score.
+
+OFAC promotion uses the existing Discovery observation workflow. Eligibility checks
+the local stored snapshot hash, source entity and raw digital-currency identifier.
+The Evidence retains listing/match state **at observation**, programs and source
+record. Unresolved/other-chain associations are context-only. A direct association
+still supplies no default stance or automatic ownership/control claim. Registry
+sync and later removals do not rewrite Evidence. Discovery candidates, Labels,
+Research, sanctions, technical clusters, risk scores and graph proximity do not
+automatically create entities or claims, change assessments, or modify risk.
+
+SQLite write transactions serialize writers and then check expected versions.
+Entity/claim revisions and link changes are atomic with append-only sequence-ordered
+events. FK/enum/unique constraints and immutable-record triggers reject impossible
+states; there is no ambiguous auto-repair. The actor is honestly `local_analyst`,
+not authenticated identity. Reserved commercial/privileged origins remain blocked
+for ingestion; public/analyst origins are the supported workflow.
+
+Case pins capture Entity/Claim IDs and versions, relationship, assessment, rationale,
+scope, review state, timestamps and the full link inventory/relevance. Evidence
+references resolve immutable captures; later descriptor changes, reassessment,
+withdrawal or recapture do not rewrite the pin. JSON exports retain all provenance.
+Markdown, HTML and PDF also print evidence SHA-256 and structured public-capture /
+OFAC reference details, while distinguishing pinned from current state. Source loss
+does not invalidate retained material, and no availability polling is performed.
+
+No AT-7 migration is needed. The head remains `20261012_01_risk_labels_v3`; AT-1–6
+tables, immutable triggers and versioning are reused. See
+[the pre-change capability matrix](ATTRIBUTION_AT7_AUDIT.md) and
+[the analyst guide](ATTRIBUTION_ANALYST_GUIDE.md).
+
+### Completion corpus and coverage
+
+| Scenario | Executable coverage |
+|---|---|
+| A: wallet without claims | existing Attribution wallet/API empty-state tests; AT-7 browser |
+| B–G: Possible/Supported, contradictions, strong review, rejected/archive | `test_attribution.py`, `test_attribution_api.py`; AT-7 source lifecycle/browser |
+| H: shared evidence with distinct relevance | existing core link-reuse tests; AT-7 capture dedup regression |
+| I: captured public source | AT-7 explicit reliability, preserved hash, recapture/source-loss regression |
+| J: OFAC snapshot | AT-7 explicit local promotion, original snapshot and other-chain context guard |
+| K: unpromoted candidate | existing Discovery boundary tests and AT-7 OFAC pre-promotion state check |
+| L: exact cluster version context | technical-cluster subjects are deferred; contextual reference stays scoped evidence, no member propagation |
+| M: same EVM text across chains | existing multichain claim tests; AT-7 other-chain source rejection |
+| N: Case after reassessment | existing AT-6 tests and AT-7 captured-source Case/browser |
+| O: stale assessment | existing two-session/API concurrency tests and append-only event constraints |
+| P: source loss | AT-7 failed recapture leaves original Evidence and historical Case unchanged |
+
+## Original architecture design (historical)
 
 ## 1. Goals
 

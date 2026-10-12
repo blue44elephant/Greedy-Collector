@@ -4,6 +4,15 @@ import {manualSourceDetail} from './discovery_manual_source.js';
 import {element,table,details,dateText,UserError} from './ui.js';
 import {discoveryRequest as request} from './discovery_api.js';
 
+export function ofacProvenanceFacts(snapshot) {
+  const entity=snapshot.entity||{},identifier=snapshot.identifier||{};
+  return [['Source','OFAC SDN'],['Snapshot',snapshot.snapshot_id],['Snapshot SHA-256',snapshot.snapshot_sha256],
+    ['Source entity',`${entity.source_entity_id || ''} ${entity.name || ''}`],['Programs',(entity.programs||[]).join(', ')],
+    ['Raw identifier',identifier.raw_value],['Source identifier field',identifier.source_field],
+    ['Identifier chain',identifier.chain || 'Unresolved'],['Match type',snapshot.match_type],
+    ['Listing state at observation',snapshot.listing_state]];
+}
+
 export function discoveryProvenance(snapshot) {
   const node=element('section',undefined,'attr-source-provenance');
   const o=snapshot.observation||{},s=o.source_snapshot||{};
@@ -18,6 +27,9 @@ export function discoveryProvenance(snapshot) {
     const r=s.record||{};
     node.append(table(['Underlying Label','Stored annotation'],[['Label',r.label],['Original source',r.source],['Annotation confidence',r.confidence],['Last updated',dateText(r.last_updated)]]),
       element('p','Label confidence is source annotation metadata, not Attribution confidence.','bounded-note'));
+  } else if(snapshot.source_id==='ofac_sdn' && s.source_id==='ofac_sdn') {
+    node.append(table(['OFAC source provenance','Stored value'],ofacProvenanceFacts(s)),
+      element('p','The source associates a digital-currency identifier with a listed record. This retained observation does not automatically establish wallet ownership or control.','bounded-note'));
   } else if(o.kind==='search_result' && ['brave_search','tavily_search'].includes(snapshot.source_id)) {
     node.append(table(['Broad search provenance','Stored value'],[['Provider',s.provider],['Query',s.query],['URL',o.source_url],['Title',s.title],['Source category',s.source_category],['Exact wallet token present',String(s.exact_match)],['Analyst note',snapshot.analyst_review_note]]),element('blockquote',o.excerpt||o.summary),element('p','Search metadata only; GC did not fetch this source or verify its statements.'));
   } else if(o.kind==='analyst_capture' && snapshot.source_id==='manual_source') {

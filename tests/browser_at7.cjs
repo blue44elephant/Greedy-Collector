@@ -1,0 +1,120 @@
+// One consolidated AT-7 smoke; all source and attribution data are test-only.
+const fs=require('node:fs'),os=require('node:os'),path=require('node:path'),net=require('node:net'),assert=require('node:assert/strict');
+const {spawn}=require('node:child_process');
+const work=fs.mkdtempSync(path.join(os.tmpdir(),'gc-at7-browser-'));
+const sleep=ms=>new Promise(resolve=>setTimeout(resolve,ms));
+async function port(){return new Promise(resolve=>{const socket=net.createServer();socket.listen(0,'127.0.0.1',()=>{const value=socket.address().port;socket.close(()=>resolve(value));});});}
+async function until(fn){for(let i=0;i<180;i++){try{const value=await fn();if(value)return value;}catch{}await sleep(100);}throw Error('Timed out waiting for browser fixture');}
+let server,browser,socket,stage='startup';const failures=[];
+(async()=>{
+  const httpPort=await port(),debugPort=await port();
+  const browserPath=process.env.CHROMIUM_PATH||['C:/Program Files/Google/Chrome/Application/chrome.exe','C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe'].find(fs.existsSync);
+  assert.ok(browserPath,'Set CHROMIUM_PATH to Chromium');
+  const log=fs.openSync(path.join(work,'server.log'),'a');
+  server=spawn(process.env.PYTHON||'python',['-B',path.join(__dirname,'browser_at7_server.py'),String(httpPort)],{cwd:work,windowsHide:true,stdio:['ignore',log,log]});
+  await until(async()=>(await fetch(`http://127.0.0.1:${httpPort}/health`)).ok);
+  browser=spawn(browserPath,['--headless=new','--disable-gpu','--no-first-run','--no-default-browser-check','--disable-background-networking',`--remote-debugging-port=${debugPort}`,`--user-data-dir=${path.join(work,'profile')}`,'about:blank'],{windowsHide:true,stdio:'ignore'});
+  const target=await until(async()=>(await(await fetch(`http://127.0.0.1:${debugPort}/json`)).json()).find(item=>item.type==='page'));
+  socket=new WebSocket(target.webSocketDebuggerUrl);
+  await new Promise((resolve,reject)=>{socket.onopen=resolve;socket.onerror=reject;});
+  let serial=0;const pending=new Map();
+  const onmessage=event=>{const data=JSON.parse(event.data);if(data.id){const entry=pending.get(data.id);pending.delete(data.id);if(data.error)entry.reject(Error(data.error.message));else entry.resolve(data.result);}else if(data.method==='Runtime.exceptionThrown')failures.push(data.params.exceptionDetails.exception?.description||data.params.exceptionDetails.text);};
+  socket.onmessage=onmessage;
+  const call=(method,params={})=>new Promise((resolve,reject)=>{const id=++serial;pending.set(id,{resolve,reject});socket.send(JSON.stringify({id,method,params}));});
+  const evaluate=async expression=>{const output=await call('Runtime.evaluate',{expression,awaitPromise:true,returnByValue:true});if(output.exceptionDetails)throw Error(output.exceptionDetails.exception?.description||output.exceptionDetails.text);return output.result.value;};
+  stage='enable';await call('Runtime.enable');await call('Page.enable');
+  stage='navigate';
+  await call('Page.navigate',{url:`http://127.0.0.1:${httpPort}/`}).catch(error=>{
+    if(!/Inspected target navigated or closed/.test(error.message))throw error;
+  });
+  const appTarget=await until(async()=>(await(await fetch(`http://127.0.0.1:${debugPort}/json`)).json()).find(item=>item.type==='page'&&item.url.startsWith(`http://127.0.0.1:${httpPort}/`)));
+  socket.close();socket=new WebSocket(appTarget.webSocketDebuggerUrl);
+  await new Promise((resolve,reject)=>{socket.onopen=resolve;socket.onerror=reject;});
+  socket.onmessage=onmessage;await call('Runtime.enable');
+  stage='wait-for-app';await until(()=>evaluate('!!document.getElementById("sanctions-status") && !!document.querySelector("#chain-hint option[value=ethereum]")'));
+
+  await evaluate(`window.waitFor=async predicate=>{for(let i=0;i<160;i++){if(predicate())return;await new Promise(r=>setTimeout(r,50));}throw Error('Browser condition timed out')};window.go=async name=>{document.querySelector('[data-workspace="'+name+'"]').click();await waitFor(()=>document.getElementById(name+'-workspace').dataset.busy!=='true')};window.button=(scope,label)=>[...document.querySelectorAll(scope+' button')].find(b=>b.textContent===label)`);
+  const prefix='/api/greedy-collector',BTC='1BoatSLRHtKNngkdXEeobR76b53LETtpyT';
+  const state=async()=>await(await fetch(`http://127.0.0.1:${httpPort}/test-at7-state`)).json();
+  const api=async(suffix,method='GET',body)=>{
+    const result=await evaluate(`fetch(${JSON.stringify(prefix+suffix)},{method:${JSON.stringify(method)},headers:{'Content-Type':'application/json'},${body===undefined?'':`body:JSON.stringify(${JSON.stringify(body)}),`}}).then(async r=>({status:r.status,data:await r.json()}))`);
+    assert.ok(result.status<300,JSON.stringify(result));return result.data;
+  };
+  const idle=id=>`waitFor(()=>document.getElementById(${JSON.stringify(id)})?.dataset.busy!=='true')`;
+  const click=(scope,label,host='attribution-workspace')=>evaluate(`button(${JSON.stringify(scope)},${JSON.stringify(label)}).click();${idle(host)}`);
+  const submit=(id,values,host='attribution-workspace')=>evaluate(`(()=>{const f=document.getElementById(${JSON.stringify(id)});for(const [k,v] of Object.entries(${JSON.stringify(values)})){if(f.elements[k].type==='checkbox')f.elements[k].checked=v;else f.elements[k].value=v;}f.requestSubmit()})();${idle(host)}`);
+  const text=selector=>evaluate(`document.querySelector(${JSON.stringify(selector)}).innerText`);
+  stage='wallet-without-claims';
+  await evaluate(`document.getElementById('wallet-address').value=${JSON.stringify(BTC)};document.getElementById('lookup-form').requestSubmit();waitFor(()=>!document.getElementById('results').hidden&&document.getElementById('lookup-form').dataset.busy==='false'&&document.querySelector('#wallet-attribution [data-attribution-summary]').dataset.busy==='false')`);
+  assert.match(await text('#wallet-attribution'),/No attribution claims/);
+  const before=await state();
+  assert.equal(before.counts.attribution_claims,0);assert.equal(before.counts.attribution_entities,0);
+  stage='create-entity-and-claim';
+  await click('#wallet-attribution','Create attribution claim');
+  await click('#attr-claim-editor','Create a new entity');
+  await submit('attr-entity-form',{canonical_name:'AT7 explicit Entity',entity_type:'service',aliases:'AT7 alias',description:'Synthetic fixture entity'});
+  await click('#attr-entity-detail','Create claim for entity');
+  await submit('attr-claim-form',{relationship:'controlled_by',scope_note:'Explicit technical-control assertion; synthetic source evidence required'});
+  let claim=(await api('/attribution/claims')).items[0];
+  assert.equal(claim.relationship,'controlled_by');assert.equal(claim.assessment,'unassessed');
+  stage='promote-captured-source';
+  await evaluate(`document.dispatchEvent(new CustomEvent('open-attribution',{detail:{action:'source_evidence',source_kind:'public_capture',source_id:${JSON.stringify(before.capture_id)},excerpt:${JSON.stringify(BTC)}}}));${idle('attribution-workspace')}`);
+  await click('#attr-source-handoff','Choose claim','attr-source-handoff');
+  await evaluate(`(()=>{const f=document.getElementById('attr-handoff-confirm');f.elements.stance.value='supports';f.elements.directness.value='direct';f.elements.rationale.value='Exact captured primary source interpreted for this scoped claim';f.elements.source_reliability.value='reliable';f.elements.reliability_rationale.value='Analyst checked the primary preserved source';f.elements.confirmed.checked=true;button('#attr-source-handoff','Preview promotion').click()})();${idle('attr-source-handoff')}`);
+  await submit('attr-handoff-confirm',{},'attr-source-handoff');
+  assert.match(await text('#attr-source-handoff'),/Promoted to immutable evidence/);
+  await click('#attr-source-handoff','Open attribution','attr-source-handoff');
+  async function assessment(category){
+    await click('#attr-claim-detail','Review assessment');
+    await evaluate(`document.querySelectorAll('#attr-review-links input').forEach(n=>{n.checked=true;n.dispatchEvent(new Event('change'))})`);
+    await submit('attr-assessment-form',{assessment:category,rationale:'Explicit analyst '+category+' conclusion',conflict_discussion:'Contradicting material retained and its scope discussed',source_verification:'Primary source hash and exact technical identifier checked'});
+  }
+  stage='supported';
+  await assessment('supported');
+  claim=await api('/attribution/claims/'+claim.id);assert.equal(claim.assessment,'supported');
+  stage='add-contradiction';
+  await click('#attr-claim-detail','Capture evidence');
+  await submit('attr-evidence-form',{evidence_type:'public_record',origin:'public_osint',title:'AT7 contrary source',source_name:'Synthetic counter-source',source_locator:'fixture:contrary-source',summary:'Material contradicts the scoped assertion',excerpt:'Contrary literal fixture',source_reliability:'reliable',reliability_rationale:'Counter-source explicitly reviewed',stance:'contradicts',directness:'direct',rationale:'Contradiction requires explicit analyst consideration'});
+  assert.match(await text('#attr-contradiction-warning'),/active contradicting/);
+  assert.match(await text('#attr-evidence-contradicts'),/AT7 contrary source/);
+  stage='strong-review-with-contradiction';
+  await assessment('strongly_supported');
+  assert.match(await text('#attr-contradiction-warning'),/active contradicting/);
+  claim=await api('/attribution/claims/'+claim.id);assert.equal(claim.active_evidence_counts.contradicts,1);
+  stage='case-pin';
+  await evaluate("go('cases')");
+  await submit('case-create',{title:'AT7 historical Case',description:'Pinned explicit assertion'},'cases-workspace');
+  const caseRow=(await api('/cases')).cases[0];
+  await evaluate(`document.dispatchEvent(new CustomEvent('open-attribution',{detail:{action:'open_claim',id:${JSON.stringify(claim.id)}}}));${idle('attribution-workspace')}`);
+  await click('#attr-claim-detail','Add to case','case-picker');
+  await evaluate("waitFor(()=>!!document.querySelector('#case-picker [name=case_id]'))");
+  await evaluate(`document.querySelector('#case-picker [name=case_id]').value=${JSON.stringify(caseRow.id)};document.querySelector('#case-picker form').requestSubmit();${idle('case-picker')}`);
+  const pinned=(await api('/attribution/cases/'+caseRow.id+'/references')).items[0].pinned;
+  assert.equal(pinned.claim.assessment,'strongly_supported');
+  await click('#case-picker','Cancel','case-picker');
+  stage='reject-and-history';
+  await assessment('rejected');
+  await click('#attr-claim-detail','Claim history');
+  assert.match(await text('#attr-claim-history'),/Assessment changed/);
+  assert.match(await text('#attr-evidence-contradicts'),/AT7 contrary source/);
+  await click('#attr-evidence-supports','Inspect capture');
+  assert.match(await text('#attr-evidence-supports'),new RegExp(before.body_sha256));
+  assert.match(await text('#attr-evidence-supports'),/Public source capture provenance/);
+  stage='historical-case-and-report';
+  await evaluate(`document.dispatchEvent(new CustomEvent('open-case',{detail:{id:${JSON.stringify(caseRow.id)}}}));${idle('cases-workspace')};${idle('case-attribution')}`);
+  await evaluate(`waitFor(()=>document.getElementById('case-attribution')?.innerText.includes('Pinned assessment: Strongly supported'))`);
+  assert.match(await text('#case-attribution'),/Pinned assessment: Strongly supported/);
+  assert.match(await text('#case-attribution'),/Current assessment: Rejected/);
+  const reference=(await api('/attribution/cases/'+caseRow.id+'/references')).items[0];
+  assert.deepEqual(reference.pinned,pinned);
+  const report=await evaluate(`fetch(${JSON.stringify(prefix+'/reports/'+caseRow.id+'?format=markdown')}).then(r=>r.text())`);
+  assert.match(report,/Contradicting evidence/);assert.match(report,new RegExp(before.body_sha256));
+  const after=await state();
+  for(const [name,count] of Object.entries(before.counts)){
+    if(!name.startsWith('attribution_')&&!['cases','case_entities'].includes(name))assert.equal(after.counts[name],count,name);
+  }
+  assert.deepEqual(failures,[]);
+  assert.equal(fs.existsSync(path.join(work,'external-request-attempted')),false);
+  console.log('AT-7 consolidated browser passed: empty wallet, explicit Entity/Claim, captured-source reliability and hash, support/contradiction review, rejection, event history, immutable Case/report pin, unchanged risk/Labels/monitoring/clusters/flows.');
+  await call('Browser.close').catch(()=>{});
+})().catch(error=>{console.error('Stage:',stage,error);console.error('Test diagnostics:',work);process.exitCode=1;}).finally(()=>{socket?.close();browser?.kill();server?.kill();});

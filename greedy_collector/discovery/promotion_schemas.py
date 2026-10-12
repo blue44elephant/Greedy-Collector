@@ -4,10 +4,10 @@ from datetime import datetime
 from typing import Literal
 from pydantic import BaseModel, Field
 from .schemas import Input
-from ..attribution.schemas import LinkFields, ClaimRead
+from ..attribution.schemas import LinkFields, ClaimRead, QualityFields
 from ..attribution.domain import EvidenceContentInput
 
-class PromotionInput(Input):
+class PromotionInput(QualityFields):
     result_id: str = Field(min_length=1,max_length=36)
     claim_id: str = Field(min_length=1,max_length=36)
     expected_claim_version: int = Field(strict=True,ge=1)

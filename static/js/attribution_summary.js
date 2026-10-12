@@ -13,6 +13,8 @@ export const evidenceText = claim => {
   const counts=claim.active_evidence_counts;
   return `${counts.supports} supporting / ${counts.contradicts} contradicting / ${counts.context} contextual`;
 };
+export const contradictionText = claim => claim.active_evidence_counts.contradicts>0
+  ? `${claim.active_evidence_counts.contradicts} active contradiction(s) remain for review, regardless of the last assessment.` : '';
 export const currentOverlayClaim = claim => !claim.archived_at&&!claim.entity_archived&&!claim.entity.archived_at&&!claim.needs_review&&['possible','supported','strongly_supported'].includes(claim.assessment);
 
 // A guard, not a competing address validator/normalizer. AT-1 validates all queries.
@@ -50,10 +52,11 @@ export function attributionSummary({chain,address,graph=false,onPage=()=>{}}) {
         graph?'No attribution claims recorded.':'No attribution claims have been recorded for this wallet.','empty'));
       for(const row of visible) {
         const card=element('article',undefined,'attr-summary-card');card.dataset.claimId=row.id;
-        card.append(element('strong',`Attributed entity: ${row.entity.canonical_name}`),element('p',`Entity type: ${caption(row.entity.entity_type)} · Claimed relationship: ${caption(row.relationship)}`,'small'),
+        card.append(element('strong',`Claimed entity: ${row.entity.canonical_name}`),element('p',`Entity type: ${caption(row.entity.entity_type)} · Claimed relationship: ${caption(row.relationship)}`,'small'),
           element('p',`Last assessment: ${assessmentText(row)}`,'small'),element('p',evidenceText(row),'small'),
           element('p',row.archived_at?'Claim archived':row.entity_archived?'Entity archived':row.assessment==='rejected'?'Rejected claim — not an active positive attribution':'Active claim','muted small'),
           btn('Open attribution',()=>openAttribution({action:'open_claim',id:row.id})));
+        if(contradictionText(row))card.append(element('p',contradictionText(row),'bounded-note'));
         list.append(card);
       }
       const prev=btn('Previous claims',()=>{offset=Math.max(0,page.offset-page.limit);load();});prev.disabled=page.offset===0;

@@ -4,7 +4,7 @@ import {discoveryRequest} from './discovery_api.js';
 import {discoveryProvenance} from './discovery_promotion.js';
 import {element, fields, table, details, dateText, run, UserError} from './ui.js';
 import {request, readPage, encodeId, caption, options, relationships} from './attribution_api.js';
-import {linkFields, linkData} from './attribution_forms.js';
+import {linkFields, linkData, qualityFields, qualityData} from './attribution_forms.js';
 
 export function evidenceHandoffButton(kind,id) {
   const button=element('button','Use as attribution evidence','secondary');button.type='button';
@@ -39,7 +39,7 @@ export function initEvidenceHandoff(parent,{createClaim,openClaim}) {
   ]));
   const apply=element('button','Filter claims');apply.type='submit';filters.append(apply);
   const form=element('form',undefined,'attr-form');form.id='attr-handoff-confirm';
-  form.append(fields([...linkFields(),{name:'confirmed',label:'I reviewed the source snapshot and selected claim',type:'checkbox',required:true}]));
+  form.append(fields([...linkFields(),...qualityFields(),{name:'confirmed',label:'I reviewed the source snapshot and selected claim',type:'checkbox',required:true}]));
   const capture=element('button','Confirm capture');capture.type='submit';form.append(capture);form.hidden=true;
   const perform=op=>run(host,op,'Reading or capturing local evidence…');
   function button(label,op) {const b=element('button',label,'secondary');b.type='button';b.addEventListener('click',()=>perform(op));return b;}
@@ -69,7 +69,7 @@ export function initEvidenceHandoff(parent,{createClaim,openClaim}) {
     if(values.subject_ref&&!values.chain)throw new UserError('Select the claim chain when filtering by address.');
     const page=await readPage('/claims',values,offset,10);
     const entities=new Map(await Promise.all([...new Set(page.items.map(row=>row.entity_id))].map(async id=>[id,await request(`/entities/${encodeId(id)}`)])));
-    list.replaceChildren(table(['Wallet','Chain','Relationship','Attributed entity','Last assessment',''],page.items.map(row=>[
+    list.replaceChildren(table(['Wallet','Chain','Relationship','Claimed entity','Last assessment',''],page.items.map(row=>[
       row.subject_ref,caption(row.chain),caption(row.relationship),entities.get(row.entity_id).canonical_name,
       `${caption(row.assessment)}${row.needs_review?' · Review required':''}`,button('Choose claim',()=>chooseClaim(row.id))
     ]),'No claims match. Create a claim explicitly or change the filters.'));
@@ -89,7 +89,8 @@ export function initEvidenceHandoff(parent,{createClaim,openClaim}) {
     // run() disables controls while the request is pending; FormData omits
     // disabled controls. Read the explicit choices directly before validating.
     const choices={stance:form.elements.stance.value,directness:form.elements.directness.value,
-      rationale:form.elements.rationale.value,confirmed:form.elements.confirmed.checked?'on':undefined};
+      rationale:form.elements.rationale.value,confirmed:form.elements.confirmed.checked?'on':undefined,
+      ...qualityData({source_reliability:form.elements.source_reliability.value,reliability_rationale:form.elements.reliability_rationale.value})};
     if(!target||!choices.stance||!choices.directness||!choices.rationale.trim()||!choices.confirmed)throw new UserError('Choose a claim, stance and directness, enter a rationale, and confirm review.');
     await loadSource();
     if(target.chain!==preview.chain||target.subject_ref!==preview.address)throw new UserError('Select a claim for this exact wallet and chain.');
@@ -105,15 +106,15 @@ export function initEvidenceHandoff(parent,{createClaim,openClaim}) {
     perform(async()=>{
       if(!target||!preview||!data.confirmed||!data.stance||!data.directness||!data.rationale.trim())throw new UserError('Choose a claim, stance and directness, enter a rationale, and confirm review.');
       if(['discovery','public_capture'].includes(source.kind)) {
-        if(!promotionConsent||promotionConsent.claim_id!==target.id||['stance','directness','rationale','confirmed'].some(k=>promotionConsent[k]!==data[k]))throw new UserError('Preview the selected promotion before confirming.');
-        const body={claim_id:target.id,expected_claim_version:target.version,expected_source_fingerprint:promotionConsent.source_fingerprint,link:linkData(data),...(source.kind==='public_capture'?{confirmed:true,excerpt:source.excerpt}:{result_id:preview.result_id})};
+        if(!promotionConsent||promotionConsent.claim_id!==target.id||['stance','directness','rationale','confirmed','source_reliability','reliability_rationale'].some(k=>promotionConsent[k]!==data[k]))throw new UserError('Preview the selected promotion before confirming.');
+        const body={claim_id:target.id,expected_claim_version:target.version,expected_source_fingerprint:promotionConsent.source_fingerprint,link:linkData(data),...qualityData(data),...(source.kind==='public_capture'?{confirmed:true,excerpt:source.excerpt}:{result_id:preview.result_id})};
         const saved=await discoveryRequest(`/${source.kind==='public_capture'?'public-captures':'observations'}/${encodeId(source.id)}/promote`,{body});
         target=null;promotionConsent=null;form.hidden=true;
         success.replaceChildren(element('p','Promoted to immutable evidence. Relevance remains separate; claim assessment was not changed and requires review.'),
           button('Open attribution',async()=>{host.hidden=true;source=null;await openClaim(saved.claim.id);}));return;
       }
       const saved=await request(`/claims/${encodeId(target.id)}/evidence/from-${source.kind}/${encodeId(source.id)}`,{method:'POST',body:{
-        expected_version:target.version,expected_source_fingerprint:preview.source_fingerprint,link:linkData(data)
+        expected_version:target.version,expected_source_fingerprint:preview.source_fingerprint,link:linkData(data),...qualityData(data)
       }});
       target=null;form.hidden=true;success.replaceChildren(element('p','Immutable evidence captured and linked. The claim requires review; its assessment was not changed.'),
         button('Open attribution',async()=>{host.hidden=true;source=null;await openClaim(saved.claim.id);}));
