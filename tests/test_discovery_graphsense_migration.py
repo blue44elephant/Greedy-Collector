@@ -27,7 +27,7 @@ def test_clean_upgrade_parity_no_seeds(tmp_path,monkeypatch):
         for table in Base.metadata.tables:
             if table.startswith(('discovery_','attribution_')):assert signature(engine,table)==before_mc1(signature(orm,table)),table
         assert triggers(engine)==triggers(orm) and all(not rows for rows in snapshot(engine).values())
-        assert ScriptDirectory.from_config(cfg).get_heads()==['20261012_01_risk_labels_v3']
+        assert ScriptDirectory.from_config(cfg).get_heads()==['20261012_02_case_history']
         with Session(engine) as db:require_schema(db)
     finally:engine.dispose();orm.dispose()
 
@@ -38,7 +38,7 @@ def test_populated_upgrade_and_guarded_downgrade(tmp_path,monkeypatch):
         with Session(engine) as db:store_ens(DiscoveryService(db,registry=ens_registry()))
         with Session(engine) as db:
             svc=ManualSourceService(db);p=svc.preview(data());svc.capture({'capture':data(),'expected_preview_fingerprint':p['preview_fingerprint']})
-        before=snapshot(engine);protected=triggers(engine);schemas={t:signature(engine,t) for t in Base.metadata.tables if not t.startswith('sanctions_')}
+        before=snapshot(engine);protected=triggers(engine);schemas={t:signature(engine,t) for t in Base.metadata.tables if not t.startswith('sanctions_') and t not in ('case_events','case_reports')}
         command.upgrade(cfg,HEAD)
         assert snapshot(engine)==before and triggers(engine)==protected
         for table,old in schemas.items():

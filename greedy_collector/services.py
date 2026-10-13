@@ -382,69 +382,15 @@ class GreedyCollectorService:
         return {"imported": count}
 
     def case_detail(self, db: Session, case_id: str) -> dict | None:
-        case = db.get(Case, case_id)
-        if not case:
+        from .cases import detail
+        if not db.get(Case, case_id):
             return None
-        return {
-            **row_dict(case),
-            "entities": [
-                row_dict(row)
-                for row in db.scalars(
-                    select(CaseEntity).where(CaseEntity.case_id == case_id)
-                ).all()
-            ],
-            "notes": [
-                row_dict(row)
-                for row in db.scalars(
-                    select(AnalystNote).where(AnalystNote.case_id == case_id)
-                ).all()
-            ],
-            "alerts": [
-                row_dict(row)
-                for row in db.scalars(
-                    select(WalletAlert).where(WalletAlert.case_id == case_id)
-                ).all()
-            ],
-        }
+        return detail(db, case_id)
 
     def case_report(self, db: Session, case_id: str, format_name: str) -> tuple[str | bytes, str]:
-        # Pin/current/evidence reads belong to one SQLite snapshot, without writes.
-        connection = db.connection()
-        if connection.dialect.name == 'sqlite' and not connection.connection.driver_connection.in_transaction:
-            connection.exec_driver_sql('BEGIN')
-        case = db.get(Case, case_id)
-        if not case:
-            raise KeyError(case_id)
-        entities = [
-            row_dict(row)
-            for row in db.scalars(
-                select(CaseEntity).where(CaseEntity.case_id == case_id)
-            ).all()
-        ]
-        alerts = [
-            row_dict(row)
-            for row in db.scalars(
-                select(WalletAlert).where(WalletAlert.case_id == case_id)
-            ).all()
-        ]
-        notes = [
-            row_dict(row)
-            for row in db.scalars(
-                select(AnalystNote).where(AnalystNote.case_id == case_id)
-            ).all()
-        ]
-        from .attribution.cases import report_attribution, KINDS
-        attribution = report_attribution(db,case_id)
-        # Attribution pins have their own typed report section, not raw legacy metadata.
-        entities = [row for row in entities if row['entity_type'] not in KINDS]
-        args = (row_dict(case), entities, alerts, notes, attribution)
-        if format_name == "pdf":
-            return case_pdf(*args), "application/pdf"
-        if format_name == "html":
-            return case_html(*args), "text/html"
-        if format_name == "json":
-            return case_json(*args), "application/json"
-        return case_markdown(*args), "text/markdown"
+        from .cases import generate_report, MEDIA
+        row = generate_report(db, case_id, format_name)
+        return row.content, MEDIA[format_name]
 
     def _labels_for_transactions(
         self, db: Session, transactions: list[NormalizedTransaction], chain: str | None = None, address: str | None = None

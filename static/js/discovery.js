@@ -7,7 +7,7 @@ import {promotionDetail} from './discovery_promotion.js';
 import {initDiscoveryGraph} from './discovery_graph.js';
 import {api} from './api.js';
 import {walletContext,returnFromDiscovery} from './discovery_handoff.js';
-import {byId, element, panel, table, fields, details, dateText, UserError} from './ui.js';
+import {byId, element, panel, table, fields, details, dateText, UserError, makeForm} from './ui.js';
 import {discoveryRequest as request, activeRun, createRunPoller} from './discovery_api.js';
 
 const costNames = {FREE_LOCAL:'Free local', FREE_REMOTE:'Free remote', LIMITED_FREE:'Limited free', PAID:'Paid'};
@@ -229,6 +229,11 @@ export function initDiscovery() {
     return perform(async () => {
       const incoming = pendingHandoff; pendingHandoff = null;
       await setResultView(false);
+      if(incoming?.action==='open_run'){
+        await capabilities();await selectRun(incoming.run_id);
+        subject={chain:current.subject.namespace,address:current.subject.canonical_value};
+        form.elements.address.value=subject.address;entry=null;renderEntry();invalidate();return;
+      }
       if(incoming?.action==='open_observation'){
         await capabilities();await selectRun(incoming.run_id);
         subject={chain:current.subject.namespace,address:current.subject.canonical_value};
@@ -260,6 +265,14 @@ export function initDiscovery() {
     const summary=runSummary(current);
     currentPanel.append(element('p',`${summary.requested} transforms requested | ${summary.executed} executed/attempted | ${summary.unavailable} unavailable | ${summary.results} results | ${summary.partial} partial/incomplete sources | ${summary.cached} cached | ${summary.manual} manual links generated. ${summary.refresh?'Explicit refresh requested; cache bypassed.':'Compatible cache reuse allowed.'}`,'discovery-run-summary'));
     currentPanel.append(button('Refresh run', () => selectRun(current.id)));
+    if(!activeRun(current))currentPanel.append(button('Pin historical run to Case',async()=>{
+      const {listCases,caseRequest,casePath}=await import('./case_actions.js');
+      const rows=await listCases();if(!rows.length)throw new UserError('Create a Case first.');
+      const picker=makeForm([{name:'case_id',label:'Case',options:rows.map(r=>[r.id,r.title])}],'Confirm Discovery pin',async data=>{
+        await caseRequest(casePath(data.case_id)+'/discovery-pins',{method:'POST',body:{run_id:current.id}});
+        picker.replaceChildren(element('p','Historical run/results and review states pinned.'));
+      });currentPanel.append(picker);
+    }));
     if (activeRun(current)) {
       currentPanel.append(button('Cancel', async () => {
         // Worker progress can advance the optimistic version between polls.

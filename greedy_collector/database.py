@@ -64,7 +64,8 @@ SessionLocal = sessionmaker(bind=engine, autoflush=False, expire_on_commit=False
 def initialize_database() -> None:
     # Existing workspaces retain their startup behavior; both new families are migration-only.
     legacy_tables = [table for table in Base.metadata.tables.values()
-                     if not table.name.startswith(("attribution_", "discovery_", "sanctions_"))]
+                     if not table.name.startswith(("attribution_", "discovery_", "sanctions_"))
+                     and table.name not in ("case_reports", "case_events")]
     Base.metadata.create_all(bind=engine, tables=legacy_tables)
 
 

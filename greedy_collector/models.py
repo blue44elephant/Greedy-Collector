@@ -8,6 +8,7 @@ from sqlalchemy import (
     Float,
     ForeignKey,
     Integer,
+    LargeBinary,
     Index,
     JSON,
     String,
@@ -152,6 +153,10 @@ class Case(Base):
     status: Mapped[str] = mapped_column(String(16), default="Open")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    version: Mapped[int] = mapped_column(Integer, default=1, server_default="1")
+    archived_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    summary: Mapped[dict] = mapped_column(JSON, default=dict, server_default="{}")
+    __mapper_args__ = {"version_id_col": version}
 
 
 class CaseEntity(Base):
@@ -161,6 +166,7 @@ class CaseEntity(Base):
     entity_type: Mapped[str] = mapped_column(String(32))
     entity_ref: Mapped[str] = mapped_column(String(255))
     metadata_json: Mapped[dict] = mapped_column(JSON, default=dict)
+    added_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), default=utcnow)
 
 
 class AnalystNote(Base):
@@ -170,6 +176,34 @@ class AnalystNote(Base):
     body: Mapped[str] = mapped_column(Text)
     author: Mapped[str] = mapped_column(String(128), default="analyst")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    updated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), default=utcnow)
+    version: Mapped[int] = mapped_column(Integer, default=1, server_default="1")
+    archived_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    __mapper_args__ = {"version_id_col": version}
+
+
+class CaseEvent(Base):
+    __tablename__ = "case_events"
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    case_id: Mapped[str] = mapped_column(ForeignKey("cases.id"), index=True)
+    kind: Mapped[str] = mapped_column(String(64))
+    reference_id: Mapped[str | None] = mapped_column(String(255))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    record: Mapped[dict] = mapped_column(JSON, default=dict)
+
+
+class CaseReport(Base):
+    __tablename__ = "case_reports"
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    case_id: Mapped[str] = mapped_column(ForeignKey("cases.id"), index=True)
+    format: Mapped[str] = mapped_column(String(16))
+    generated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    sha256: Mapped[str] = mapped_column(String(64))
+    state_fingerprint: Mapped[str] = mapped_column(String(64))
+    generator_version: Mapped[str] = mapped_column(String(32))
+    schema_version: Mapped[int] = mapped_column(Integer)
+    state: Mapped[dict] = mapped_column(JSON)
+    content: Mapped[bytes] = mapped_column(LargeBinary)
 
 
 class MonitoringRun(Base):
@@ -762,3 +796,8 @@ class SanctionsCasePin(Base):
     case_id: Mapped[str] = mapped_column(String(36), ForeignKey("cases.id"), nullable=False, index=True)
     captured_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utcnow)
     record: Mapped[dict] = mapped_column(JSON, nullable=False)
+
+
+# Install Case history only after all model definitions are available.
+if __package__:
+    from . import case_history as _case_history

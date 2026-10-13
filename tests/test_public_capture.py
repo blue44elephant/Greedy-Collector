@@ -146,6 +146,6 @@ def test_capture_migration_empty_roundtrip_and_foreign_keys(env):
     e=env
     with e.engine.connect() as db:
         assert db.exec_driver_sql('PRAGMA foreign_key_check').all()==[]
-        assert db.exec_driver_sql('SELECT version_num FROM alembic_version').scalar_one()=='20261012_01_risk_labels_v3'
+        assert db.exec_driver_sql('SELECT version_num FROM alembic_version').scalar_one()=='20261012_02_case_history'
     command.downgrade(e.cfg,'20260928_01');command.upgrade(e.cfg,'head')
     with e.engine.connect() as db:assert db.exec_driver_sql('SELECT COUNT(*) FROM discovery_public_captures').scalar_one()==0

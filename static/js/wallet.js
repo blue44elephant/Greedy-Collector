@@ -279,7 +279,16 @@ function renderTransaction(tx) {
     host.append(row);
   }
   }
-  host.append(addToCaseButton("transaction", tx.chain, tx.tx_hash));
+  for(const record of (tx.events||[tx])) {
+    host.append(element('p',`Case event: ${record.event_key||'tx'} · ${record.value_native??''} ${record.token_symbol||''}`,'muted small'));
+    host.append(addToCaseButton("transaction", record.chain||tx.chain, record.tx_hash||tx.tx_hash, {
+      chain:record.chain||tx.chain, tx_hash:record.tx_hash||tx.tx_hash,
+      event_key:record.event_key||'tx',event_index:record.event_index,
+      from_address:record.from_address,to_address:record.to_address,
+      value_native:record.value_native,token_symbol:record.token_symbol,
+      asset_contract:record.asset_contract,timestamp:record.timestamp,source_api:record.source_api
+    }));
+  }
   host.append(element("p", "This is the provider's normalized transaction record. Bitcoin sender/recipient endpoints are representative. Transaction lookup does not automatically persist a wallet graph; investigate a wallet to collect its records.", "bounded-note"));
   host.hidden = false; heading.focus();
 }

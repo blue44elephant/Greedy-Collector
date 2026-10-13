@@ -452,7 +452,12 @@ def test_openapi_explicit_models_enums_and_exact_surface(api):
         '/capabilities', '/path', '/neighborhood', '/runs/{run_id}', '/cases/{case_id}/pin',
     }
     assert API+'/chains' in legacy_paths
-    assert len(paths) == 25 and len(legacy_paths - {API+'/chains'}) == 64
+    case2_paths = {API + suffix for suffix in (
+        '/cases/{case_id}/notes/{note_id}', '/cases/{case_id}/risk-pins',
+        '/cases/{case_id}/discovery-pins', '/cases/{case_id}/attachments/{attachment_id}',
+        '/cases/{case_id}/reports', '/cases/{case_id}/reports/{report_id}')}
+    assert case2_paths <= legacy_paths
+    assert len(paths) == 25 and len(legacy_paths - {API+'/chains'} - case2_paths) == 64
     assert API+'/risk/observation/{chain}/{address}' in legacy_paths
     assert API+'/labels/{label_id}/state' in legacy_paths
     assert sum(len(methods) for methods in paths.values()) == 31

@@ -159,7 +159,12 @@ def test_case_association_is_explicit_idempotent_and_independent(env):
     with env[1]() as db:
         links=db.scalars(select(CaseEntity)).all();assert len(links)==1
         assert links[0].entity_type=='discovery_observation' and links[0].entity_ref==row['observation_id']
-        db.delete(links[0]);db.flush();db.delete(db.get(Case,case_id));db.commit()
+        with pytest.raises(ValueError,match='immutable'):
+            db.delete(links[0]);db.flush()
+        db.rollback()
+        from greedy_collector.models import utcnow
+        db.get(Case,case_id).archived_at=utcnow();db.commit()
+        assert db.scalars(select(CaseEntity)).all()[0].entity_ref==row['observation_id']
     assert env[0].get(P+'/observations/'+row['observation_id']).status_code==200
 
 def test_two_wallets_same_source_no_cluster(env):

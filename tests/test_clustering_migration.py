@@ -67,7 +67,7 @@ def test_history_update_delete_forbidden(migrated,table):
             connection.rollback()
 
 def test_case_pin_and_cluster_identity_immutable(migrated):
-    cfg,engine=migrated;command.upgrade(cfg,'20260927_01')
+    cfg,engine=migrated;command.upgrade(cfg,'head')
     with Session(engine) as db:
         store(db,[address(1),address(2)]);snap=ClusteringService(db).analyze('bitcoin')['clusters'][0]
         db.add(Case(id='case',title='Test'));db.commit()

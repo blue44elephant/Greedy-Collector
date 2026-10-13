@@ -182,11 +182,11 @@ def test_migration_preserves_legacy_rows_case_references_and_sqlite_structure(tm
             _insert_legacy(connection, row_id=ids["tron-native"][0], chain="tron", tx_hash=ids["tron-native"][1], sender="T-source", recipient="T-target", value="1", symbol="TRX", source="trongrid", payload={"_event_id": "native:" + "a" * 64})
             _insert_legacy(connection, row_id=ids["tron-token"][0], chain="tron", tx_hash=ids["tron-token"][1], sender="T-source", recipient="T-target", value="1.25", symbol="SAME", source="trongrid_trc20", payload={"_event_id": "trc20:" + "b" * 64, "_public": {"token_contract": "T-contract"}, "provider": {"event_index": "7"}})
             _insert_legacy(connection, row_id=ids["legacy-token"][0], chain="ethereum", tx_hash=ids["legacy-token"][1], sender=ADDR, recipient=TO, value="1.25", symbol="SAME", source="etherscan_token", payload={"hash": ids["legacy-token"][1], "from": ADDR, "to": TO, "value": "1250000", "tokenSymbol": "SAME", "contractAddress": CONTRACT})
-        with Session(engine) as db:
-            case = Case(id="case-event", title="Event migration", description="")
-            db.add(case); db.flush()
-            db.add(CaseEntity(case_id=case.id, entity_type="transaction", entity_ref=ids["eth-token"][1], metadata_json={"chain": "ethereum"}))
-            db.commit()
+        # Seed the historical physical schema, not today's versioned Case model.
+        with engine.begin() as connection:
+            connection.execute(text("INSERT INTO cases (id,title,description,status,created_at,updated_at) VALUES ('case-event','Event migration','','Open',CURRENT_TIMESTAMP,CURRENT_TIMESTAMP)"))
+            connection.execute(text("INSERT INTO case_entities (id,case_id,entity_type,entity_ref,metadata_json) VALUES ('case-reference','case-event','transaction',:reference,:metadata)"),
+                {"reference": ids["eth-token"][1], "metadata": json.dumps({"chain":"ethereum"})})
         old_triggers = _triggers(engine)
         command.upgrade(cfg, "20260923_02")
         with Session(engine) as db:
@@ -200,7 +200,8 @@ def test_migration_preserves_legacy_rows_case_references_and_sqlite_structure(tm
             assert rows[ids["tron-token"][0]].event_key == "provider:trc20:" + "b" * 64
             assert rows[ids["tron-token"][0]].event_index == "7" and rows[ids["tron-token"][0]].asset_contract == "T-contract"
             assert rows[ids["legacy-token"][0]].event_key.startswith("legacy:")
-            assert db.scalar(select(CaseEntity).where(CaseEntity.entity_ref == ids["eth-token"][1])).case_id == "case-event"
+            assert db.scalar(text("SELECT case_id FROM case_entities WHERE entity_ref=:reference"),
+                {"reference": ids["eth-token"][1]}) == "case-event"
             assert db.scalar(select(Transaction).where(Transaction.tx_hash == ids["eth-token"][1])).id == ids["eth-token"][0]
             btc = NormalizedTransaction(tx_hash=ids["btc"][1], chain="bitcoin", from_address="from-btc",
                 to_address="to-btc", value_native="1", token_symbol="BTC", source_api="blockstream")

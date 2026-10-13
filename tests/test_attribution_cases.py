@@ -74,11 +74,12 @@ def test_historical_pin_survives_rejection_and_withdrawal(api,material):
     assert current['current']['changed'] and current['current']['claim']['needs_review']
     later=report(client,c['id'],'json').json()['attribution']['references'][0]
     assert later['pinned']==original
-    assert next(x for x in later['evidence'] if x['pinned_link']['id']==link['id'])['current_link']['withdrawn_at']
-    assert historical['current']['claim']['assessment']=='supported' # Previously downloaded representation unchanged.
+    assert next(x for x in later['evidence'] if x['pinned_link']['id']==link['id'])['pinned_link']['withdrawn_at'] is None
+    assert all('current_link' not in x for x in later['evidence'])
+    assert 'current' not in historical # Reports export only historical Case material.
     text=report(client,c['id'],'markdown').text
-    assert 'Pinned assessment: supported' in text and 'Current assessment: rejected' in text
-    assert 'Withdrawn / historical' in text and 'Contradicting evidence' in text
+    assert 'Pinned assessment: supported' in text and 'Current assessment: rejected' not in text
+    assert 'Active at pin' in text and 'Contradicting evidence' in text
 
 
 @pytest.mark.parametrize('fmt',['markdown','html','json','pdf'])
@@ -159,7 +160,7 @@ def test_case_pin_pagination_and_entity_descriptor_change(api,material):
     ok(client.patch(P+'/entities/'+e['id'],json={'expected_version':e['version'],'reason':'Revised descriptor','descriptor':{'canonical_name':'Changed descriptor','entity_type':'service'}}))
     for item in refs(client,c['id'])['items']:
         assert item['current']['changed'];assert item['pinned']['entity']['canonical_name']!='Changed descriptor'
-    assert 'Changed descriptor' in report(client,c['id'],'markdown').text
+    assert 'Changed descriptor' not in report(client,c['id'],'markdown').text
 
 
 def test_report_reapplies_secret_sanitization(api,material,monkeypatch):
@@ -196,10 +197,10 @@ def test_every_format_keeps_pin_after_rejection(api,material,fmt,monkeypatch):
     response=report(client,c['id'],fmt);assert response.status_code==200
     if fmt=='json':
         item=response.json()['attribution']['references'][0]
-        assert item['pinned']['claim']['assessment']=='supported' and item['current']['claim']['assessment']=='rejected'
+        assert item['pinned']['claim']['assessment']=='supported' and 'current' not in item
     else:
         text='\n'.join(paragraphs) if fmt=='pdf' else response.text
-        assert 'Pinned assessment: supported' in text and 'Current assessment: rejected' in text and 'Contradicting evidence' in text
+        assert 'Pinned assessment: supported' in text and 'Current assessment: rejected' not in text and 'Contradicting evidence' in text
 
 
 def test_no_hidden_first_page_limit_on_pinned_contradictions(api):
@@ -217,7 +218,12 @@ def test_no_hidden_first_page_limit_on_pinned_contradictions(api):
 
 def test_malformed_pin_report_error_is_safe(api,material):
     client,engine=api;c,row=material;saved=ok(pin(client,c['id'],row),201)
-    with Session(engine) as db:db.get(CaseEntity,saved['id']).metadata_json={'attribution_pin':{'private':'SQL private-path-canary'}};db.commit()
+    with Session(engine) as db:
+        # A malformed legacy/imported pin is rejected explicitly. Existing pins
+        # are now protected against ORM and SQL replacement as well as API edits.
+        db.add(CaseEntity(case_id=c['id'],entity_type='attribution_claim',entity_ref='malformed',
+            metadata_json={'attribution_pin':{'private':'SQL private-path-canary'}}))
+        db.commit()
     response=report(client,c['id'],'json');assert response.status_code==422
     assert 'private-path-canary' not in response.text and 'SQL' not in response.text
 
@@ -227,7 +233,7 @@ def test_entity_archival_does_not_rewrite_pin(api,material):
     ok(client.post(P+'/entities/'+e['id']+'/archive',json={'expected_version':e['version'],'reason':'Later archival'}))
     current=refs(client,c['id'])['items'][0]
     assert current['pinned']==saved['pinned'] and current['current']['entity']['archived_at']
-    assert 'Current entity:' in report(client,c['id'],'markdown').text
+    assert 'Current entity:' not in report(client,c['id'],'markdown').text
 
 
 def test_pin_does_not_expose_removal_or_attribution_delete(api,material):

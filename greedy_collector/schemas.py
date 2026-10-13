@@ -65,6 +65,55 @@ class CaseCreate(BaseModel):
     title: str = Field(min_length=1, max_length=255)
     description: str = ""
 
+    @field_validator("title")
+    @classmethod
+    def nonblank(cls, value):
+        if not value.strip():
+            raise ValueError("Case title must not be blank")
+        return value.strip()
+
+
+class CaseSummary(BaseModel):
+    scope: str = Field(default="", max_length=20000)
+    key_findings: str = Field(default="", max_length=20000)
+    unresolved_questions: str = Field(default="", max_length=20000)
+    limitations: str = Field(default="", max_length=20000)
+    next_actions: str = Field(default="", max_length=20000)
+
+
+class CaseUpdate(BaseModel):
+    expected_version: int = Field(ge=1)
+    title: str | None = Field(default=None, min_length=1, max_length=255)
+    description: str | None = None
+    status: Literal["Open", "Paused", "Closed"] | None = None
+    archived: bool | None = None
+    summary: CaseSummary | None = None
+
+    @model_validator(mode="after")
+    def values(self):
+        if self.title is not None and not self.title.strip():
+            raise ValueError("Case title must not be blank")
+        if any(getattr(self, k) is None for k in self.model_fields_set if k != "expected_version"):
+            raise ValueError("Case update fields cannot be null")
+        if self.title is not None:
+            self.title = self.title.strip()
+        return self
+
+
+class NoteUpdate(BaseModel):
+    expected_version: int = Field(ge=1)
+    body: str | None = Field(default=None, min_length=1, max_length=100000)
+    archived: bool | None = None
+
+
+class CaseRiskPin(BaseModel):
+    chain: ChainName
+    address: str
+
+
+class CaseDiscoveryPin(BaseModel):
+    run_id: str = Field(min_length=1, max_length=36)
+
 
 class CaseEntityCreate(BaseModel):
     entity_type: Literal["wallet", "transaction", "label", "graph_snapshot", "attachment"]

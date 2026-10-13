@@ -10,12 +10,14 @@ export async function caseRequest(path, options) {
     if (error instanceof ApiError) {
       if (error.status === 404) throw new UserError("This case no longer exists. Refresh the case list.");
       if (error.status === 422) throw new UserError("The case operation was not accepted. Check the reference, fields, file, or report format.");
+      if (error.status === 409) throw new UserError("The Case or note changed, or this reference already exists. Reload before saving.");
+      if (error.status === 413) throw new UserError("The attachment exceeds the 20 MiB limit.");
     }
     throw new UserError("The case operation could not be completed. Refresh and try again.");
   }
 }
-export async function listCases() {
-  const data = await caseRequest("/cases");
+export async function listCases(query = "") {
+  const data = await caseRequest("/cases"+query);
   if (!Array.isArray(data?.cases) || !data.cases.every(row => typeof row.id === "string" && typeof row.title === "string")) {
     throw new UserError("The server returned an unexpected case list. Refresh and try again.");
   }

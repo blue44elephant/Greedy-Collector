@@ -27,7 +27,8 @@ def test_cases_navigation_and_integrations(ui_client):
     for module in ['wallet', 'graph']:
         assert 'addToCaseButton(' in client.get(f'/static/js/{module}.js').text
     wallet = client.get('/static/js/wallet.js').text
-    assert 'addToCaseButton("transaction", tx.chain, tx.tx_hash)' in wallet
+    assert 'addToCaseButton("transaction", record.chain||tx.chain' in wallet
+    assert "event_key:record.event_key" in wallet
     assert 'listCases()' in client.get('/static/js/monitoring.js').text
     assert 'openCase(alert.case_id)' in client.get('/static/js/alerts.js').text
 
@@ -38,7 +39,9 @@ def test_case_empty_create_list_detail(ui_client):
     assert row['created_at'] and row['updated_at'] and row['status'] == 'Open'
     assert client.get(PREFIX+'/cases').json()['cases'] == [row]
     detail = client.get(PREFIX+'/cases/'+row['id']).json()
-    assert detail == {**row,'entities':[],'notes':[],'alerts':[]}
+    assert {k: detail[k] for k in row} == row
+    assert detail['entities'] == detail['notes'] == detail['alerts'] == detail['reports'] == detail['sanctions_pins'] == []
+    assert [e['kind'] for e in detail['timeline']] == ['case_created']
 
 @pytest.mark.parametrize('kind,reference,chain', [('wallet',ADDRESS,'bitcoin'), ('transaction','0x'+'b'*64,'ethereum')])
 def test_case_entity_references_are_persisted_without_collection(ui_client, kind, reference, chain):
@@ -48,7 +51,9 @@ def test_case_entity_references_are_persisted_without_collection(ui_client, kind
     result = client.post(PREFIX+f"/cases/{row['id']}/entities", json={'entity_type':kind,'entity_ref':reference,'metadata':metadata})
     assert result.status_code == 200
     entity = result.json()
-    assert entity['entity_ref'] == reference and entity['metadata_json'] == metadata
+    assert entity['entity_ref'] == reference
+    assert all(entity['metadata_json'][key] == value for key, value in metadata.items())
+    assert entity['metadata_json']['display_address' if kind == 'wallet' else 'display_tx_hash'] == reference
     assert client.get(PREFIX+f"/cases/{row['id']}").json()['entities'] == [entity]
 
 def test_case_note_and_exact_alert_association(ui_client):
@@ -75,7 +80,10 @@ def test_case_upload_metadata_and_isolated_storage(ui_client, tmp_path, monkeypa
     assert response.status_code == 200
     entity = response.json()
     assert entity['entity_type'] == 'attachment'
-    assert entity['metadata_json'] == {'filename':'unique-prefix-note.txt','content_type':'text/plain'}
+    assert entity['metadata_json']['filename'] == 'unique-prefix-note.txt'
+    assert entity['metadata_json']['original_filename'] == 'unique-prefix-note.txt'
+    assert entity['metadata_json']['content_type'] == 'text/plain'
+    assert entity['metadata_json']['size'] == 24 and len(entity['metadata_json']['sha256']) == 64
     assert (tmp_path/'data'/entity['entity_ref']).read_bytes() == b'Harmless test attachment'
     assert client.get(PREFIX+f"/cases/{row['id']}").json()['entities'] == [entity]
     assert str(tmp_path) not in response.text
@@ -116,9 +124,9 @@ def test_case_invalid_fields_and_missing_records(ui_client):
 def test_case_openapi_matches_reused_routes(ui_client):
     client,_=ui_client
     paths=client.get('/openapi.json').json()['paths']
-    for route, methods in {'/cases':{'get','post'},'/cases/{case_id}':{'get'},'/cases/{case_id}/entities':{'post'},
+    for route, methods in {'/cases':{'get','post'},'/cases/{case_id}':{'get','patch'},'/cases/{case_id}/entities':{'post'},
         '/cases/{case_id}/notes':{'post'},'/cases/{case_id}/attachments':{'post'},'/reports/{case_id}':{'get'}}.items():
         assert set(paths[PREFIX+route]) == methods
     source=client.get('/static/js/cases.js').text
-    assert 'innerHTML' not in source and 'crypto.randomUUID()' in source
+    assert 'innerHTML' not in source and 'const filename=data.file.name' in source
     assert 'link.download=' in source

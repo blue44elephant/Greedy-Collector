@@ -61,10 +61,20 @@ class CaseAttributionService(AttributionService):
         page['items']=self._summaries(rows)
         return page
 
-    def report_references(self,case_id):
+    def report_references(self,case_id,*,historical=False):
         rows=list(self.db.scalars(select(CaseEntity).where(CaseEntity.case_id==case_id,CaseEntity.entity_type.in_(KINDS)).order_by(CaseEntity.id).limit(1001)))
         if len(rows)>1000:raise AttributionError('Case exceeds the report limit of 1000 attribution references')
-        summaries=self._summaries(rows)
+        if historical:
+            summaries=[]
+            for row in rows:
+                try:pin=s.CaseAttributionPin.model_validate(row.metadata_json['attribution_pin']).model_dump(mode='json')
+                except (KeyError,TypeError,ValidationError):raise AttributionError('Case attribution pin is unavailable or incompatible') from None
+                if pin['entity']['version'] < 1 or (pin['claim'] and pin['claim']['version'] < 1):
+                    raise AttributionError('Case attribution pin has an impossible version')
+                summaries.append({'id':row.id,'case_id':row.case_id,'pinned':pin,
+                    'pinned_evidence_counts':{stance:sum(link['stance']==stance and not link['withdrawn_at'] for link in pin['links']) for stance in ('supports','contradicts','context')}})
+        else:
+            summaries=self._summaries(rows)
         ids={link['evidence_id'] for item in summaries for link in item['pinned']['links']}
         link_ids={link['id'] for item in summaries for link in item['pinned']['links']}
         # Bounded batches avoid per-claim/per-evidence/history request amplification.
@@ -73,18 +83,19 @@ class CaseAttributionService(AttributionService):
             for start in range(0,len(ordered),200):
                 result.update({row.id:row_data(row) for row in self.db.scalars(select(model).where(model.id.in_(ordered[start:start+200])))})
             return result
-        captures=fetch(Evidence,ids);current_links=fetch(Link,link_ids)
+        captures=fetch(Evidence,ids);current_links=fetch(Link,link_ids) if not historical else {}
         for item in summaries:
             item['evidence']=[]
             for link in item['pinned']['links']:
                 if link['evidence_id'] not in captures:raise AttributionError('Pinned evidence is unavailable')
                 if captures[link['evidence_id']]['origin'] not in ('public_osint','analyst_added'):
                     raise AttributionError('Restricted-origin evidence cannot be exported by this report workflow')
-                item['evidence'].append({'pinned_link':link,'current_link':current_links.get(link['id']),'capture':safe_snapshot(captures[link['evidence_id']])})
+                item['evidence'].append({'pinned_link':link,'capture':safe_snapshot(captures[link['evidence_id']]),
+                    **({} if historical else {'current_link':current_links.get(link['id'])})})
         return {'status':'ready','generated_at':json_safe(utcnow()),'references':summaries}
 
 
-def report_attribution(db,case_id):
-    try:return CaseAttributionService(db).report_references(case_id)
+def report_attribution(db,case_id,*,historical=False):
+    try:return CaseAttributionService(db).report_references(case_id,historical=historical)
     except SchemaUnavailable:
         return {'status':'unavailable','generated_at':json_safe(utcnow()),'references':[]}

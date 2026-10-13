@@ -45,7 +45,7 @@ def discovery_schema(engine):
 def test_clean_upgrade_equivalence_and_successor_services(tmp_path,monkeypatch):
     url='sqlite:///'+(tmp_path/'migrated.db').as_posix();cfg=config(url,monkeypatch)
     command.upgrade(cfg,REVISION);command.current(cfg);command.heads(cfg)
-    assert cfg.stdout.getvalue().splitlines()==[REVISION,'20261012_01_risk_labels_v3 (head)']
+    assert cfg.stdout.getvalue().splitlines()==[REVISION,'20261012_02_case_history (head)']
     migrated=create_fk_enabled_engine(url)
     metadata=create_fk_enabled_engine('sqlite:///'+(tmp_path/'metadata.db').as_posix())
     try:
