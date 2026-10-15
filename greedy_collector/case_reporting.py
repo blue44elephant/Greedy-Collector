@@ -29,6 +29,9 @@ def methodology_limitations(state):
         result.append("OFAC screening state is historical as observed in the pinned snapshot, not a current rescreen or ownership conclusion.")
     if state["attribution"].get("references"):
         result.append("Attribution assessments are scoped analytic judgments, not established legal ownership or identity.")
+    if state.get("narcotics_profile") or any(r["metadata_json"].get("narcotics_pin") for r in entities):
+        from .narcotics.domain import DISCLAIMER as narcotics_disclaimer
+        result.append(narcotics_disclaimer)
     return result
 
 def sections(state, metadata):
@@ -86,6 +89,15 @@ def sections(state, metadata):
         result.append(("Analyst notes / decisions", [
             f"Note {n['id']}; version {n['version']}; author {n['author']}; created {n['created_at']}; updated {n['updated_at']}\n{n['body']}" for n in notes]))
     group("Attachments / integrity", ("attachment",))
+    if state.get("narcotics_profile"):
+        result.append(("Narcotics Profile", ["Analyst-controlled facts; a source reference does not automatically verify an assertion.", pretty(state["narcotics_profile"])]))
+    for kind, title in (("mo_fingerprint", "Modus Operandi"), ("case_comparison", "Related Cases / cross-Case comparison"),
+                        ("reviewed_link", "Reviewed cross-Case links"), ("nexus", "Narcotics Nexus Graph summary"),
+                        ("priority", "Network Priority findings")):
+        pins = [r["metadata_json"]["narcotics_pin"] for r in entities if r["metadata_json"].get("narcotics_pin", {}).get("kind") == kind]
+        if pins:
+            from .narcotics.domain import DISCLAIMER as narcotics_disclaimer
+            result.append((title, [narcotics_disclaimer, pretty(pins)]))
     if state["alerts"]:
         result.append(("Associated alerts at report generation", [pretty(state["alerts"])]))
     limitations = methodology_limitations(state)

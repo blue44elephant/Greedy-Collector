@@ -85,8 +85,8 @@ def test_clean_upgrade_discovery_attribution_parity_and_no_seeds(tmp_path,monkey
             assert c.exec_driver_sql('PRAGMA foreign_keys').scalar_one()==1
             assert c.exec_driver_sql('PRAGMA foreign_key_check').all()==[]
         scripts=ScriptDirectory.from_config(cfg)
-        assert scripts.get_heads()==['20261012_02_case_history']
-        assert [r.revision for r in scripts.walk_revisions()]==['20261012_02_case_history','20261012_01_risk_labels_v3','20261011_01_authoritative_sanctions_registry','20260929_01_public_source_capture', '20260928_01', '20260927_02','20260927_01','20260923_02','20260923_01','20260922_02','20260922_01',REVISION,PARENT,'20260913_01','20260912_01','20260630_01']
+        assert scripts.get_heads()==['20261013_01_narcotics_network_intelligence']
+        assert [r.revision for r in scripts.walk_revisions()]==['20261013_01_narcotics_network_intelligence','20261012_02_case_history','20261012_01_risk_labels_v3','20261011_01_authoritative_sanctions_registry','20260929_01_public_source_capture', '20260928_01', '20260927_02','20260927_01','20260923_02','20260923_01','20260922_02','20260922_01',REVISION,PARENT,'20260913_01','20260912_01','20260630_01']
     finally:engine.dispose();orm.dispose()
 
 

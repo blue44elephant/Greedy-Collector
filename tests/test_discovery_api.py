@@ -55,7 +55,7 @@ def result(client,row):return ok(client.get(PREFIX+'/runs/'+row['id']+'/results'
 @pytest.mark.parametrize('route',['/','/health','/docs','/openapi.json','/static/js/app.js','/static/app.css'])
 def test_existing_routes(api,route):
     client,_=api;assert client.get(route).status_code==200
-    assert client.get('/').text.count('data-workspace=')==12
+    assert client.get('/').text.count('data-workspace=')==13
     assert 'data-workspace="discovery"' in client.get('/').text
 
 def test_capabilities_safe_and_no_execution(api,monkeypatch):

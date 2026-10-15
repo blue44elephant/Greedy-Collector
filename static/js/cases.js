@@ -81,6 +81,7 @@ export function initCases() {
   function render(row) {
     const additions=completionSections(row,{editor,button,reload:loadDetail,refresh});
     const overview = panel(row.title); overview.id="case-overview";
+    overview.append(action('Narcotics intelligence',()=>document.dispatchEvent(new CustomEvent('open-narcotics',{detail:{case_id:row.id}}))));
     overview.append(element("p", row.description, "prose"), element("p", `Case ID: ${row.id}`, "full-address"),
       element("p", `Status: ${row.status} · Created: ${dateText(row.created_at)} · Updated: ${dateText(row.updated_at)}`, "muted small"),
       element("p", "Live references open current stored objects. Pinned historical snapshots retain their exact earlier state. Case references do not establish identity or ownership.", "bounded-note"),

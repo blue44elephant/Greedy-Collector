@@ -10,6 +10,7 @@ import {initGraph} from "./graph.js";
 import {initMonitoring} from "./monitoring.js";
 import {initAlerts} from "./alerts.js";
 import {initCases} from "./cases.js";
+import {initNarcotics} from './narcotics.js';
 import {initLabels} from "./labels.js";
 import {initResearch} from "./research.js";
 
@@ -26,6 +27,7 @@ function navigate(name, id, restore = false) {
   if (name === "monitoring") loadMonitoring();
   if (name === "alerts") loadAlerts(id);
   if (name === "cases") loadCases(id);
+  if (name === "narcotics") loadNarcotics(id);
   if (name === "labels") loadLabels(id);
   if (name === "sanctions") sanctions.load();
   if (name === "research") loadResearch();
@@ -45,6 +47,7 @@ initGraph();
 const loadMonitoring = initMonitoring();
 const loadAlerts = initAlerts(navigate);
 const loadCases = initCases();
+const loadNarcotics = initNarcotics();
 const loadLabels = initLabels();
 const sanctions = initSanctions();
 const loadResearch = initResearch();
@@ -63,6 +66,7 @@ document.addEventListener("open-label-address", event => {
   navigate("labels");
 });
 document.addEventListener("open-case", event => navigate("cases", event.detail.id));
+document.addEventListener('open-narcotics',event=>navigate('narcotics',event.detail.case_id));
 document.addEventListener("open-alert", event => navigate("alerts", event.detail.id));
 document.querySelectorAll("[data-workspace]").forEach(button => button.addEventListener("click", () => navigate(button.dataset.workspace)));
 navigate("wallet");

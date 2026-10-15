@@ -455,3 +455,15 @@ a byte hash and a state fingerprint. Live navigation remains distinct from pins.
 See [Case analyst guide](docs/CASE_ANALYST_GUIDE.md) and
 [Case architecture](docs/CASE_ARCHITECTURE.md). CASE-2 requires the explicit
 `20261012_02_case_history` migration; startup does not migrate existing databases.
+
+
+## Narcotics Network Intelligence
+
+Open Cases -> Narcotics intelligence to add an optional, versioned narcotics profile,
+compare related Cases, review typed links, build a selected cross-domain Nexus Graph,
+and calculate Network Priority from real stored Case data. Pin analyses to Cases for
+immutable reporting. MO similarity is not an identity probability; Network Priority
+is not Risk, guilt or leadership probability. No providers are queried automatically.
+See [NARC-1 documentation](docs/NARCOTICS_NETWORK_INTELLIGENCE.md) for provenance,
+weights, graph bounds, review workflow and privacy limitations. Requires the explicit
+20261013_01_narcotics_network_intelligence migration; no automatic startup migration.

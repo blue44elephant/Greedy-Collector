@@ -296,3 +296,19 @@ input[type="checkbox"] { width:20px; height:20px; min-height:20px; }
 #sanctions-results .toolbar { flex-wrap:wrap; }
 #sanctions-pin-dialog { border:1px solid #bdc8d4; border-radius:10px; padding:24px; max-width:min(560px,95vw); }
 #sanctions-pin-dialog::backdrop { background:#182331a8; }
+/* NARC-1: entity graph and optional Case profile */
+.narcotics-case-choice{display:inline-flex;gap:.5rem;margin:.4rem 1rem .4rem 0;align-items:center}
+.narcotics-case-choice input{width:auto}
+.narcotics-canvas{width:100%;height:560px;background:var(--panel,#f5f7fa);border:1px solid #8b97a5;border-radius:8px;touch-action:none}
+.narcotics-node{cursor:grab;outline:none}
+.narcotics-node rect{fill:#edf2f7;stroke:#738295;stroke-width:1.5}
+.narcotics-node.case rect{fill:#d9e8f7;stroke:#315c8c;stroke-width:3}
+.narcotics-node text{fill:#18283b;font:13px system-ui;pointer-events:none}
+.narcotics-node .kind{font-size:11px;fill:#43566d}
+.narcotics-node.selected rect,.narcotics-node:focus rect{stroke:#9c580f;stroke-width:4}
+.narcotics-node.is-pinned rect{stroke-dasharray:6 3}
+.narcotics-edge path{stroke:#7e8fa1;stroke-width:1.6;fill:none}
+.narcotics-edge path.hit{stroke:transparent;stroke-width:14;cursor:pointer}
+.narcotics-edge.selected path:not(.hit),.narcotics-edge:focus path:not(.hit){stroke:#9c580f;stroke-width:3.5}
+.narcotics-inspector{overflow-wrap:anywhere}
+#narcotics-profile textarea{min-height:4rem}

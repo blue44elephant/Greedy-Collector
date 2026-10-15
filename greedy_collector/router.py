@@ -554,3 +554,6 @@ router.include_router(fund_flow_router)
 
 from .sanctions.router import router as sanctions_router
 router.include_router(sanctions_router)
+
+from .narcotics.router import router as narcotics_router
+router.include_router(narcotics_router)

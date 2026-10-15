@@ -263,6 +263,10 @@ def validate_state(state):
         kind, metadata = row["entity_type"], row["metadata_json"] or {}
         if not isinstance(metadata, dict):
             raise HTTPException(422, "Case reference metadata is incompatible.")
+        if kind.startswith("narcotics_"):
+            pin = metadata.get("narcotics_pin")
+            if not isinstance(pin, dict) or not pin.get("snapshot") or digest(pin["snapshot"]) != pin.get("snapshot_fingerprint"):
+                raise HTTPException(422, "Case contains an incompatible narcotics intelligence pin.")
         if kind == "attachment":
             target = attachment_path(state["case"]["id"], row["entity_ref"])
             if metadata.get("sha256") and (not target.is_file() or sha256(target.read_bytes()).hexdigest() != metadata["sha256"]):
@@ -300,6 +304,8 @@ def generate_report(db, identifier, format):
         raise HTTPException(422, "Unsupported report format.")
     locked(db)
     current = detail(db, identifier)
+    from .narcotics.service import profile_snapshot
+    narcotics_profile = profile_snapshot(db, identifier)
     from .attribution.cases import report_attribution
     attribution = report_attribution(db, identifier, historical=True)
     from .attribution.reporting import DISCLAIMER as attribution_disclaimer
@@ -314,6 +320,8 @@ def generate_report(db, identifier, format):
         ("entities", "notes", "alerts", "reports", "timeline", "counts", "sanctions_pins")},
         "entities": current["entities"], "notes": current["notes"], "alerts": current["alerts"],
         "sanctions_pins": current["sanctions_pins"], "attribution": attribution})
+    if narcotics_profile:
+        state["narcotics_profile"] = safe_snapshot(narcotics_profile)
     validate_state(state)
     report = CaseReport(id=str(uuid4()), case_id=identifier, format=format, generated_at=utcnow(),
         generator_version=GENERATOR_VERSION, schema_version=SCHEMA_VERSION, state_fingerprint=digest(state), state=state)

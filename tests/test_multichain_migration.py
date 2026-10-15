@@ -55,7 +55,7 @@ def test_mc1_head_matches_models(tmp_path,monkeypatch):
         for table in Base.metadata.tables:
             if table.startswith(('attribution_','discovery_')):assert signature(engine,table)==signature(orm,table),table
         assert triggers(engine)==triggers(orm)
-        assert ScriptDirectory.from_config(cfg).get_heads()==['20261012_02_case_history']
+        assert ScriptDirectory.from_config(cfg).get_heads()==['20261013_01_narcotics_network_intelligence']
     finally:engine.dispose();orm.dispose()
 
 @pytest.mark.parametrize('chain',['test_chain','a','chain_123'])

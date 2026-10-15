@@ -16,7 +16,7 @@ def test_attribution_assets_load(ui_client,name):
 def test_attribution_navigation_and_views(ui_client):
     client,_=ui_client
     html=client.get('/').text
-    assert html.count('data-workspace=')==12
+    assert html.count('data-workspace=')==13
     assert 'data-workspace="attribution"' in html and 'id="attribution-workspace"' in html
     app=client.get('/static/js/app.js').text
     assert 'initAttribution' in app and 'loadAttribution(id)' in app

@@ -46,7 +46,7 @@ def test_clean_upgrade_schema_equivalence_and_foreign_keys(tmp_path,monkeypatch)
     url='sqlite:///'+(tmp_path/'migrated.db').as_posix()
     cfg=config(url,monkeypatch)
     command.upgrade(cfg,'head'); command.current(cfg); command.heads(cfg)
-    assert '20261012_02_case_history' in cfg.stdout.getvalue()
+    assert '20261013_01_narcotics_network_intelligence' in cfg.stdout.getvalue()
     migrated=create_fk_enabled_engine(url)
     metadata=create_fk_enabled_engine('sqlite:///'+(tmp_path/'metadata.db').as_posix())
     Base.metadata.create_all(metadata)
@@ -54,8 +54,9 @@ def test_clean_upgrade_schema_equivalence_and_foreign_keys(tmp_path,monkeypatch)
         assert schema(migrated)==schema(metadata)
         with migrated.connect() as connection:
             assert connection.execute(text('PRAGMA foreign_key_check')).all()==[]
-            assert connection.execute(text('SELECT version_num FROM alembic_version')).scalar_one()=='20261012_02_case_history'
-            assert len(connection.execute(text("SELECT name FROM sqlite_master WHERE type='trigger'")).all())==71
+            assert connection.execute(text('SELECT version_num FROM alembic_version')).scalar_one()=='20261013_01_narcotics_network_intelligence'
+            assert len(connection.execute(text("SELECT name FROM sqlite_master WHERE type='trigger' AND name NOT LIKE 'narc1_%'")).all())==71
+            assert len(connection.execute(text("SELECT name FROM sqlite_master WHERE type='trigger' AND name LIKE 'narc1_%'")).all())==30
         with Session(migrated) as db:
             svc=AttributionService(db)
             assert svc.list_entities()['total']==0
@@ -109,7 +110,10 @@ with patch.object(httpx.AsyncClient,'request',side_effect=AssertionError('No ext
         for route in ['/','/health','/docs','/openapi.json']:
             assert client.get(route).status_code==200
         html=client.get('/').text
-        assert html.count('data-workspace=')==12
+        assert html.count('data-workspace=')==13
+        assert 'data-workspace="narcotics"' in html
+        assert client.get('/api/greedy-collector/narcotics/cases/missing/profile').status_code==503
+        assert not any(t.startswith('narcotics_') for t in inspect(engine).get_table_names())
         assert 'data-workspace="attribution"' in html
         paths=client.get('/openapi.json').json()['paths']
         assert '/api/greedy-collector/attribution/entities' in paths
